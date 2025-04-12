@@ -96,6 +96,12 @@ export default function ProductsPage() {
   const [activeTab, setActiveTab] = useState("general");
   const [conversionRates, setConversionRates] = useState<Array<{unit: string, factor: number}>>([]);
   const [barcodesList, setBarcodesList] = useState<string[]>([]);
+  const [componentsList, setComponentsList] = useState<Array<{
+    productId: number;
+    productName: string;
+    quantity: string;
+    unit: string;
+  }>>([]);
 
   // Get products
   const { data: products, isLoading } = useQuery({
@@ -129,12 +135,6 @@ export default function ProductsPage() {
   };
 
   // Form definition
-  const [componentsList, setComponentsList] = useState<Array<{
-    productId: number;
-    productName: string;
-    quantity: number;
-    unit: string;
-  }>>([]);
   
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productFormSchema),
@@ -540,6 +540,14 @@ export default function ProductsPage() {
                               )}
                               {product.isBulk && (
                                 <Badge variant="outline">A granel</Badge>
+                              )}
+                              {product.isComposite && (
+                                <Badge variant="default">Combo</Badge>
+                              )}
+                              {product.category && (
+                                <Badge variant="outline" className="bg-primary/10">
+                                  {product.category}
+                                </Badge>
                               )}
                             </div>
                           </TableCell>
@@ -1059,6 +1067,209 @@ export default function ProductsPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => removeConversionRate(index)}
+                              >
+                                <X size={16} className="text-destructive" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+                
+                <TabsContent value="attributes" className="space-y-6">
+                  <div className="flex flex-col space-y-4">
+                    <h3 className="text-lg font-medium">Atributos del Producto</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Configure atributos adicionales como categoría, código de proveedor y más.
+                    </p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="category"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Categoría</FormLabel>
+                            <FormControl>
+                              <Input 
+                                placeholder="Ej: Panadería, Chocolates, etc." 
+                                {...field} 
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Categoría a la que pertenece este producto
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name="supplierCode"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Código de Proveedor</FormLabel>
+                            <FormControl>
+                              <Input 
+                                placeholder="Código usado por el proveedor" 
+                                {...field} 
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Útil para actualización masiva de precios
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name="imageUrl"
+                        render={({ field }) => (
+                          <FormItem className="col-span-2">
+                            <FormLabel>URL de Imagen</FormLabel>
+                            <FormControl>
+                              <Input 
+                                placeholder="https://ejemplo.com/imagen.jpg" 
+                                {...field} 
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              URL de la imagen del producto (opcional)
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    
+                    <div className="mt-4">
+                      <FormField
+                        control={form.control}
+                        name="isComposite"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value}
+                                onCheckedChange={(checked) => {
+                                  field.onChange(checked);
+                                  if (!checked) {
+                                    // Si se desmarca, limpiamos los componentes
+                                    setComponentsList([]);
+                                    form.setValue("components", []);
+                                    
+                                    // Si estamos en la pestaña de componentes, cambiar a general
+                                    if (activeTab === "components") {
+                                      setActiveTab("attributes");
+                                    }
+                                  }
+                                }}
+                              />
+                            </FormControl>
+                            <div className="space-y-1 leading-none">
+                              <FormLabel className="flex items-center gap-2">
+                                <Package size={16} className="text-primary" />
+                                Producto Compuesto / Combo
+                              </FormLabel>
+                              <FormDescription>
+                                Marque si este producto se compone de otros productos
+                              </FormDescription>
+                            </div>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+                </TabsContent>
+                
+                <TabsContent value="components" className="space-y-6">
+                  <div className="flex flex-col space-y-4">
+                    <h3 className="text-lg font-medium">Componentes del Producto</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Configure los productos que componen este combo o producto compuesto
+                    </p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="md:col-span-2">
+                        <FormField
+                          control={form.control}
+                          name="componentProductId"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Producto</FormLabel>
+                              <Select 
+                                value={field.value?.toString()} 
+                                onValueChange={(value) => field.onChange(value !== "none" ? parseInt(value) : undefined)}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Seleccionar producto" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {products?.filter((p: any) => !p.isComposite && (!editingProductId || p.id !== editingProductId)).map((product: any) => (
+                                    <SelectItem key={product.id} value={product.id.toString()}>
+                                      {product.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      
+                      <FormField
+                        control={form.control}
+                        name="componentQuantity"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Cantidad</FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="number" 
+                                step="0.01" 
+                                {...field} 
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <div className="flex items-end">
+                        <Button
+                          type="button"
+                          onClick={addComponent}
+                          className="w-full"
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          Agregar
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    {/* Lista de componentes agregados */}
+                    {componentsList.length > 0 && (
+                      <div className="mt-4 border rounded-md p-4">
+                        <h4 className="text-sm font-medium mb-2">Componentes agregados:</h4>
+                        <div className="space-y-2">
+                          {componentsList.map((component, index) => (
+                            <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                              <span>
+                                {component.productName} - {component.quantity} {component.unit}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeComponent(index)}
                               >
                                 <X size={16} className="text-destructive" />
                               </Button>
