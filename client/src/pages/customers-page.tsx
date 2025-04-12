@@ -463,6 +463,64 @@ export default function CustomersPage() {
 
                 <FormField
                   control={form.control}
+                  name="province"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Provincia</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccione una provincia" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Buenos Aires">Buenos Aires</SelectItem>
+                          <SelectItem value="CABA">Ciudad Autónoma de Buenos Aires</SelectItem>
+                          <SelectItem value="Catamarca">Catamarca</SelectItem>
+                          <SelectItem value="Chaco">Chaco</SelectItem>
+                          <SelectItem value="Chubut">Chubut</SelectItem>
+                          <SelectItem value="Córdoba">Córdoba</SelectItem>
+                          <SelectItem value="Corrientes">Corrientes</SelectItem>
+                          <SelectItem value="Entre Ríos">Entre Ríos</SelectItem>
+                          <SelectItem value="Formosa">Formosa</SelectItem>
+                          <SelectItem value="Jujuy">Jujuy</SelectItem>
+                          <SelectItem value="La Pampa">La Pampa</SelectItem>
+                          <SelectItem value="La Rioja">La Rioja</SelectItem>
+                          <SelectItem value="Mendoza">Mendoza</SelectItem>
+                          <SelectItem value="Misiones">Misiones</SelectItem>
+                          <SelectItem value="Neuquén">Neuquén</SelectItem>
+                          <SelectItem value="Río Negro">Río Negro</SelectItem>
+                          <SelectItem value="Salta">Salta</SelectItem>
+                          <SelectItem value="San Juan">San Juan</SelectItem>
+                          <SelectItem value="San Luis">San Luis</SelectItem>
+                          <SelectItem value="Santa Cruz">Santa Cruz</SelectItem>
+                          <SelectItem value="Santa Fe">Santa Fe</SelectItem>
+                          <SelectItem value="Santiago del Estero">Santiago del Estero</SelectItem>
+                          <SelectItem value="Tierra del Fuego">Tierra del Fuego</SelectItem>
+                          <SelectItem value="Tucumán">Tucumán</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="city"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Localidad</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ingrese la localidad" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
                   name="address"
                   render={({ field }) => (
                     <FormItem>

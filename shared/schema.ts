@@ -49,6 +49,8 @@ export const customers = pgTable("customers", {
   phone: text("phone"),
   email: text("email"),
   address: text("address"),
+  province: text("province"),
+  city: text("city"),
   notes: text("notes"),
   hasAccount: boolean("has_account").default(false),
 });
