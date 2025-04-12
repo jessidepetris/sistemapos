@@ -213,6 +213,79 @@ export default function ProductsPage() {
     form.setValue("conversionRates", newConversionRates);
   };
   
+  // Función para agregar un componente al producto compuesto
+  const addComponent = () => {
+    const productId = form.getValues("componentProductId");
+    const quantity = form.getValues("componentQuantity");
+    const unit = form.getValues("componentUnit");
+    
+    if (!productId || !quantity || !unit) {
+      toast({
+        title: "Datos incompletos",
+        description: "Debe seleccionar un producto, cantidad y unidad",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Buscar el producto en la lista de productos
+    const selectedProduct = products?.find((p: any) => p.id === productId);
+    if (!selectedProduct) {
+      toast({
+        title: "Producto no encontrado",
+        description: "El producto seleccionado no existe",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Verificar que no se esté agregando el mismo producto como componente
+    if (editingProductId && editingProductId === productId) {
+      toast({
+        title: "Operación inválida",
+        description: "No puede agregar el mismo producto como componente",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Verificar que el componente no exista ya
+    const exists = componentsList.some(c => c.productId === productId);
+    if (exists) {
+      toast({
+        title: "Componente duplicado",
+        description: "Este producto ya ha sido agregado como componente",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Añadir a la lista de componentes
+    const newComponent = {
+      productId,
+      productName: selectedProduct.name,
+      quantity,
+      unit
+    };
+    const newComponentsList = [...componentsList, newComponent];
+    setComponentsList(newComponentsList);
+    
+    // Actualizar el valor en el formulario
+    form.setValue("components", newComponentsList);
+    
+    // Limpiar los campos
+    form.setValue("componentProductId", undefined);
+    form.setValue("componentQuantity", 0);
+    form.setValue("componentUnit", "unidad");
+  };
+  
+  // Remover un componente
+  const removeComponent = (indexToRemove: number) => {
+    const newComponentsList = componentsList.filter((_, index) => index !== indexToRemove);
+    setComponentsList(newComponentsList);
+    form.setValue("components", newComponentsList);
+  };
+  
   // Create product mutation
   const createProductMutation = useMutation({
     mutationFn: async (data: ProductFormValues) => {
@@ -525,18 +598,26 @@ export default function ProductsPage() {
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               
               <Tabs defaultValue="general" value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid grid-cols-3 mb-4">
+                <TabsList className="grid grid-cols-5 mb-4">
                   <TabsTrigger value="general" className="flex items-center gap-2">
                     <Package size={16} />
-                    Información General
+                    General
+                  </TabsTrigger>
+                  <TabsTrigger value="attributes" className="flex items-center gap-2">
+                    <BarChart size={16} />
+                    Atributos
                   </TabsTrigger>
                   <TabsTrigger value="barcodes" className="flex items-center gap-2">
                     <BarChart size={16} />
-                    Códigos de Barras
+                    Códigos
                   </TabsTrigger>
                   <TabsTrigger value="conversions" className="flex items-center gap-2" disabled={!watchIsBulk}>
                     <Scale size={16} />
-                    Conversiones de Unidades
+                    Conversiones
+                  </TabsTrigger>
+                  <TabsTrigger value="components" className="flex items-center gap-2" disabled={!form.watch("isComposite")}>
+                    <Package size={16} />
+                    Componentes
                   </TabsTrigger>
                 </TabsList>
                 
