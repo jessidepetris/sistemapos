@@ -36,6 +36,14 @@ const conversionRateSchema = z.object({
   factor: z.coerce.number().positive("El factor debe ser mayor que 0"),
 });
 
+// Define schema for component products
+const componentSchema = z.object({
+  productId: z.number(),
+  quantity: z.coerce.number().positive("La cantidad debe ser mayor que 0"),
+  unit: z.string(),
+  productName: z.string().optional(), // Solo para mostrar en la UI
+});
+
 // Extend the product schema to include a better structure for conversions
 const productFormSchema = insertProductSchema.extend({
   // Transform comma-separated string to array for barcodes
@@ -47,6 +55,11 @@ const productFormSchema = insertProductSchema.extend({
   cost: z.coerce.number().min(0, "El costo debe ser mayor o igual a 0").optional(),
   stock: z.coerce.number().min(0, "El stock debe ser mayor o igual a 0"),
   stockAlert: z.coerce.number().min(0, "La alerta de stock debe ser mayor o igual a 0").optional(),
+  
+  // Nuevos campos
+  category: z.string().optional(),
+  imageUrl: z.string().optional(),
+  supplierCode: z.string().optional(),
   
   // Campos para cálculo automático del precio
   iva: z.coerce.number().min(0).default(21),
@@ -63,6 +76,14 @@ const productFormSchema = insertProductSchema.extend({
   // Fields to add individual conversion rates via the form
   conversionUnit: z.string().optional(),
   conversionFactor: z.coerce.number().optional(),
+  
+  // Para productos compuestos
+  components: z.array(componentSchema).optional(),
+  
+  // Campos para agregar un componente individual via formulario
+  componentProductId: z.number().optional(),
+  componentQuantity: z.coerce.number().optional(),
+  componentUnit: z.string().optional(),
 });
 
 type ProductFormValues = z.infer<typeof productFormSchema>;
@@ -108,6 +129,13 @@ export default function ProductsPage() {
   };
 
   // Form definition
+  const [componentsList, setComponentsList] = useState<Array<{
+    productId: number;
+    productName: string;
+    quantity: number;
+    unit: string;
+  }>>([]);
+  
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productFormSchema),
     defaultValues: {
@@ -124,9 +152,17 @@ export default function ProductsPage() {
       profit: 30,      // 30% por defecto
       isRefrigerated: false,
       isBulk: false,
+      isComposite: false,
+      category: "",
+      imageUrl: "",
+      supplierCode: "",
       conversionRates: [],
       conversionUnit: "",
       conversionFactor: 0,
+      components: [],
+      componentProductId: undefined,
+      componentQuantity: 0,
+      componentUnit: "unidad",
     },
   });
   
@@ -274,6 +310,17 @@ export default function ProductsPage() {
     const productBarcodes = product.barcodes || [];
     setBarcodesList(productBarcodes);
     
+    // Inicializar la lista de componentes para productos compuestos
+    let productComponents: any[] = [];
+    if (product.isComposite && product.components) {
+      const components = typeof product.components === 'string'
+        ? JSON.parse(product.components)
+        : product.components;
+      
+      productComponents = components;
+      setComponentsList(components);
+    }
+    
     // Format data for form
     form.reset({
       name: product.name,
@@ -288,11 +335,19 @@ export default function ProductsPage() {
       stock: parseFloat(product.stock),
       stockAlert: product.stockAlert ? parseFloat(product.stockAlert) : 0,
       supplierId: product.supplierId,
+      supplierCode: product.supplierCode || "",
+      category: product.category || "",
+      imageUrl: product.imageUrl || "",
       isRefrigerated: product.isRefrigerated,
       isBulk: product.isBulk,
+      isComposite: product.isComposite || false,
       conversionRates: productConversions,
       conversionUnit: "",
       conversionFactor: 0,
+      components: productComponents,
+      componentProductId: undefined,
+      componentQuantity: 0,
+      componentUnit: "unidad",
     });
     
     setIsDialogOpen(true);
@@ -305,6 +360,7 @@ export default function ProductsPage() {
     // Limpiar variables de estado
     setConversionRates([]);
     setBarcodesList([]);
+    setComponentsList([]);
     setActiveTab("general");
     
     // Reiniciar el formulario
@@ -317,11 +373,22 @@ export default function ProductsPage() {
       cost: 0,
       stock: 0,
       stockAlert: 0,
+      iva: 21,        // 21% por defecto
+      shipping: 0,     // 0% por defecto
+      profit: 30,      // 30% por defecto
       isRefrigerated: false,
       isBulk: false,
+      isComposite: false,
+      category: "",
+      imageUrl: "",
+      supplierCode: "",
       conversionRates: [],
       conversionUnit: "",
       conversionFactor: 0,
+      components: [],
+      componentProductId: undefined,
+      componentQuantity: 0,
+      componentUnit: "unidad",
     });
     setIsDialogOpen(true);
   };
