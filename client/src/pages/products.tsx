@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import Sidebar from "@/components/layout/sidebar";
@@ -22,21 +22,42 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { insertProductSchema } from "@shared/schema";
-import { Package, Plus, RefreshCw, Search } from "lucide-react";
+import { Package, Plus, RefreshCw, Search, X, BarChart, Thermometer, Scale } from "lucide-react";
 
+// Define a schema for unit conversions
+const conversionRateSchema = z.object({
+  unit: z.string(),
+  factor: z.coerce.number().positive("El factor debe ser mayor que 0"),
+});
+
+// Extend the product schema to include a better structure for conversions
 const productFormSchema = insertProductSchema.extend({
+  // Transform comma-separated string to array for barcodes
   barcodes: z.string().optional().transform(val => 
-    val ? val.split(',').map(b => b.trim()) : []
+    val ? val.split(',').map(b => b.trim()).filter(Boolean) : []
   ),
+  // Form validation for numeric fields
   price: z.coerce.number().min(0, "El precio debe ser mayor o igual a 0"),
   cost: z.coerce.number().min(0, "El costo debe ser mayor o igual a 0").optional(),
   stock: z.coerce.number().min(0, "El stock debe ser mayor o igual a 0"),
   stockAlert: z.coerce.number().min(0, "La alerta de stock debe ser mayor o igual a 0").optional(),
+  
+  // For bulk products, we need to manage conversion rates
+  // This will be transformed before submission
+  conversionRates: z.preprocess(
+    (val) => typeof val === 'string' ? JSON.parse(val || '[]') : val,
+    z.array(conversionRateSchema).optional()
+  ),
+  
+  // Fields to add individual conversion rates via the form
+  conversionUnit: z.string().optional(),
+  conversionFactor: z.coerce.number().optional(),
 });
 
 type ProductFormValues = z.infer<typeof productFormSchema>;
@@ -46,7 +67,10 @@ export default function ProductsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [editingProductId, setEditingProductId] = useState<number | null>(null);
-  
+  const [activeTab, setActiveTab] = useState("general");
+  const [conversionRates, setConversionRates] = useState<Array<{unit: string, factor: number}>>([]);
+  const [barcodesList, setBarcodesList] = useState<string[]>([]);
+
   // Get products
   const { data: products, isLoading } = useQuery({
     queryKey: ["/api/products"],
@@ -73,8 +97,58 @@ export default function ProductsPage() {
       stockAlert: 0,
       isRefrigerated: false,
       isBulk: false,
+      conversionRates: [],
+      conversionUnit: "",
+      conversionFactor: 0,
     },
   });
+  
+  // Handle changes to isBulk to show/hide conversion rates fields
+  const watchIsBulk = form.watch("isBulk");
+  
+  // Add a new conversion rate
+  const addConversionRate = () => {
+    const unit = form.getValues("conversionUnit");
+    const factor = form.getValues("conversionFactor");
+    
+    if (!unit || !factor) {
+      toast({
+        title: "Datos incompletos",
+        description: "Debe ingresar la unidad y el factor de conversión",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Check if unit already exists
+    const exists = conversionRates.some(cr => cr.unit.toLowerCase() === unit.toLowerCase());
+    if (exists) {
+      toast({
+        title: "Unidad duplicada",
+        description: "Ya existe una conversión para esta unidad",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Add to conversions array
+    const newConversionRates = [...conversionRates, { unit, factor }];
+    setConversionRates(newConversionRates);
+    
+    // Update form value
+    form.setValue("conversionRates", newConversionRates);
+    
+    // Clear input fields
+    form.setValue("conversionUnit", "");
+    form.setValue("conversionFactor", 0);
+  };
+  
+  // Remove a conversion rate
+  const removeConversionRate = (indexToRemove: number) => {
+    const newConversionRates = conversionRates.filter((_, index) => index !== indexToRemove);
+    setConversionRates(newConversionRates);
+    form.setValue("conversionRates", newConversionRates);
+  };
   
   // Create product mutation
   const createProductMutation = useMutation({
