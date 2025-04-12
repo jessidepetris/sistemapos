@@ -28,7 +28,7 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { insertProductSchema } from "@shared/schema";
-import { Package, Plus, RefreshCw, Search, X, BarChart, Thermometer, Scale } from "lucide-react";
+import { Package, Plus, RefreshCw, Search, X, BarChart, Thermometer, Scale, Calculator } from "lucide-react";
 
 // Define a schema for unit conversions
 const conversionRateSchema = z.object({
@@ -47,6 +47,11 @@ const productFormSchema = insertProductSchema.extend({
   cost: z.coerce.number().min(0, "El costo debe ser mayor o igual a 0").optional(),
   stock: z.coerce.number().min(0, "El stock debe ser mayor o igual a 0"),
   stockAlert: z.coerce.number().min(0, "La alerta de stock debe ser mayor o igual a 0").optional(),
+  
+  // Campos para cálculo automático del precio
+  iva: z.coerce.number().min(0).default(21),
+  shipping: z.coerce.number().min(0).default(0),
+  profit: z.coerce.number().min(0).default(30),
   
   // For bulk products, we need to manage conversion rates
   // This will be transformed before submission
@@ -83,6 +88,25 @@ export default function ProductsPage() {
     retry: false,
   });
   
+  // Función para calcular el precio de venta basado en costo, IVA, flete y ganancia
+  const calculateSellingPrice = () => {
+    const cost = form.getValues("cost") || 0;
+    const ivaRate = form.getValues("iva") || 0;
+    const shippingRate = form.getValues("shipping") || 0;
+    const profitRate = form.getValues("profit") || 0;
+    
+    // Cálculo del precio
+    const costWithIva = cost * (1 + (ivaRate / 100));
+    const costWithShipping = costWithIva * (1 + (shippingRate / 100));
+    const finalPrice = costWithShipping * (1 + (profitRate / 100));
+    
+    // Redondeo a 2 decimales
+    const roundedPrice = Math.round(finalPrice * 100) / 100;
+    
+    // Actualizar el formulario
+    form.setValue("price", roundedPrice);
+  };
+
   // Form definition
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productFormSchema),
@@ -95,6 +119,9 @@ export default function ProductsPage() {
       cost: 0,
       stock: 0,
       stockAlert: 0,
+      iva: 21,        // 21% por defecto
+      shipping: 0,     // 0% por defecto
+      profit: 30,      // 30% por defecto
       isRefrigerated: false,
       isBulk: false,
       conversionRates: [],
@@ -255,6 +282,9 @@ export default function ProductsPage() {
       barcodes: product.barcodes ? product.barcodes.join(", ") : "",
       price: parseFloat(product.price),
       cost: product.cost ? parseFloat(product.cost) : 0,
+      iva: product.iva || 21,
+      shipping: product.shipping || 0,
+      profit: product.profit || 30,
       stock: parseFloat(product.stock),
       stockAlert: product.stockAlert ? parseFloat(product.stockAlert) : 0,
       supplierId: product.supplierId,
@@ -506,21 +536,7 @@ export default function ProductsPage() {
                     </div>
                     
                     <div className="space-y-6">
-                      <div className="grid grid-cols-2 gap-4">
-                        <FormField
-                          control={form.control}
-                          name="price"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Precio de Venta</FormLabel>
-                              <FormControl>
-                                <Input type="number" step="0.01" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        
+                      <div className="space-y-4">
                         <FormField
                           control={form.control}
                           name="cost"
@@ -528,8 +544,127 @@ export default function ProductsPage() {
                             <FormItem>
                               <FormLabel>Costo</FormLabel>
                               <FormControl>
-                                <Input type="number" step="0.01" {...field} />
+                                <Input 
+                                  type="number" 
+                                  step="0.01" 
+                                  {...field} 
+                                  onChange={(e) => {
+                                    field.onChange(e);
+                                    calculateSellingPrice();
+                                  }}
+                                />
                               </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <div className="grid grid-cols-3 gap-4">
+                          <FormField
+                            control={form.control}
+                            name="iva"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>IVA</FormLabel>
+                                <Select 
+                                  value={field.value?.toString()} 
+                                  onValueChange={(value) => {
+                                    field.onChange(parseFloat(value));
+                                    calculateSellingPrice();
+                                  }}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Seleccionar tasa" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="0">0%</SelectItem>
+                                    <SelectItem value="10.5">10.5%</SelectItem>
+                                    <SelectItem value="21">21%</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name="shipping"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Flete (%)</FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    type="number" 
+                                    step="0.01" 
+                                    placeholder="0" 
+                                    {...field} 
+                                    onChange={(e) => {
+                                      field.onChange(e);
+                                      calculateSellingPrice();
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name="profit"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Ganancia (%)</FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    type="number" 
+                                    step="0.01" 
+                                    placeholder="30" 
+                                    {...field} 
+                                    onChange={(e) => {
+                                      field.onChange(e);
+                                      calculateSellingPrice();
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        
+                        <FormField
+                          control={form.control}
+                          name="price"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="flex items-center justify-between">
+                                <span>Precio de Venta Final</span>
+                                <Button 
+                                  type="button" 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={calculateSellingPrice}
+                                  className="h-8"
+                                >
+                                  <Calculator className="h-4 w-4 mr-2" />
+                                  Recalcular
+                                </Button>
+                              </FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  step="0.01" 
+                                  {...field} 
+                                  className="text-lg font-semibold" 
+                                />
+                              </FormControl>
+                              <FormDescription>
+                                Precio calculado en base a costo, impuestos y ganancia
+                              </FormDescription>
                               <FormMessage />
                             </FormItem>
                           )}

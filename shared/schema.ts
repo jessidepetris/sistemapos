@@ -28,6 +28,8 @@ export const suppliers = pgTable("suppliers", {
   email: text("email"),
   address: text("address"),
   notes: text("notes"),
+  // Campo para la fecha de última actualización de precios
+  lastPriceUpdate: timestamp("last_price_update"),
 });
 
 export const insertSupplierSchema = createInsertSchema(suppliers).pick({
@@ -37,6 +39,7 @@ export const insertSupplierSchema = createInsertSchema(suppliers).pick({
   email: true,
   address: true,
   notes: true,
+  lastPriceUpdate: true,
 });
 
 // Customers table
@@ -71,9 +74,17 @@ export const products = pgTable("products", {
   stock: numeric("stock", { precision: 10, scale: 2 }).notNull().default("0"),
   stockAlert: numeric("stock_alert", { precision: 10, scale: 2 }),
   supplierId: integer("supplier_id").references(() => suppliers.id),
+  // Código de proveedor para facilitar la actualización de precios
+  supplierCode: text("supplier_code"),
   isRefrigerated: boolean("is_refrigerated").default(false),
   isBulk: boolean("is_bulk").default(false),
+  // Indicar si es un producto compuesto (combo)
+  isComposite: boolean("is_composite").default(false),
   conversionRates: json("conversion_rates"),
+  // Categoría del producto
+  category: text("category"),
+  // Ruta de la imagen del producto
+  imageUrl: text("image_url"),
 });
 
 export const insertProductSchema = createInsertSchema(products).pick({
@@ -86,9 +97,13 @@ export const insertProductSchema = createInsertSchema(products).pick({
   stock: true,
   stockAlert: true,
   supplierId: true,
+  supplierCode: true,
   isRefrigerated: true,
   isBulk: true,
+  isComposite: true,
   conversionRates: true,
+  category: true,
+  imageUrl: true,
 });
 
 // Accounts table (for customer current accounts)
@@ -234,6 +249,22 @@ export const insertAccountTransactionSchema = createInsertSchema(accountTransact
   relatedNoteId: true,
   description: true,
   userId: true,
+});
+
+// Tabla para los componentes de productos compuestos (combos)
+export const productComponents = pgTable("product_components", {
+  id: serial("id").primaryKey(),
+  compositeProductId: integer("composite_product_id").notNull().references(() => products.id),
+  componentProductId: integer("component_product_id").notNull().references(() => products.id),
+  quantity: numeric("quantity", { precision: 10, scale: 2 }).notNull(),
+  unit: text("unit").notNull(),
+});
+
+export const insertProductComponentSchema = createInsertSchema(productComponents).pick({
+  compositeProductId: true,
+  componentProductId: true,
+  quantity: true,
+  unit: true,
 });
 
 // Type exports
