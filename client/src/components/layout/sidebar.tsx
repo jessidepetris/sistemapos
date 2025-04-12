@@ -33,9 +33,9 @@ const SidebarLink = ({ href, icon, children, currentPath, onClick }: SidebarLink
   
   return (
     <Link href={href}>
-      <a
+      <div
         className={cn(
-          "flex items-center gap-3 px-4 py-2 text-sm hover:bg-slate-50 transition-colors pl-6",
+          "flex items-center gap-3 px-4 py-2 text-sm hover:bg-slate-50 transition-colors pl-6 cursor-pointer",
           isActive && "bg-primary/10 text-primary border-l-3 border-primary"
         )}
         onClick={onClick}
@@ -44,7 +44,7 @@ const SidebarLink = ({ href, icon, children, currentPath, onClick }: SidebarLink
           {icon}
         </span>
         <span>{children}</span>
-      </a>
+      </div>
     </Link>
   );
 };
