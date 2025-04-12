@@ -483,7 +483,7 @@ export default function ProductsPage() {
                             <FormLabel>Proveedor</FormLabel>
                             <Select 
                               value={field.value?.toString()} 
-                              onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)}
+                              onValueChange={(value) => field.onChange(value !== "none" ? parseInt(value) : undefined)}
                             >
                               <FormControl>
                                 <SelectTrigger>
@@ -491,7 +491,7 @@ export default function ProductsPage() {
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                <SelectItem value="">Sin proveedor</SelectItem>
+                                <SelectItem value="none">Sin proveedor</SelectItem>
                                 {suppliers?.map((supplier: any) => (
                                   <SelectItem key={supplier.id} value={supplier.id.toString()}>
                                     {supplier.name}
