@@ -85,6 +85,12 @@ export const products = pgTable("products", {
   category: text("category"),
   // Ruta de la imagen del producto
   imageUrl: text("image_url"),
+  // Valores relacionados con el cálculo de precios
+  iva: numeric("iva", { precision: 5, scale: 2 }).default("21"),
+  shipping: numeric("shipping", { precision: 5, scale: 2 }).default("0"),
+  profit: numeric("profit", { precision: 5, scale: 2 }).default("30"),
+  // Componentes para productos compuestos (almacenados como JSON)
+  components: json("components"),
 });
 
 export const insertProductSchema = createInsertSchema(products).pick({
@@ -104,6 +110,10 @@ export const insertProductSchema = createInsertSchema(products).pick({
   conversionRates: true,
   category: true,
   imageUrl: true,
+  iva: true,
+  shipping: true,
+  profit: true,
+  components: true,
 });
 
 // Accounts table (for customer current accounts)
