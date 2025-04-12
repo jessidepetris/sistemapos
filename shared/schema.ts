@@ -1,214 +1,271 @@
-import { pgTable, text, serial, integer, boolean, date, numeric, jsonb, timestamp, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, numeric, json, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// User schema
+// Users table
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   fullName: text("full_name").notNull(),
-  email: text("email").notNull(),
   role: text("role").notNull().default("employee"),
-  isActive: boolean("is_active").notNull().default(true),
-  lastLogin: timestamp("last_login"),
+  active: boolean("active").notNull().default(true),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
   fullName: true,
-  email: true,
   role: true,
 });
 
-// Product schema
-export const products = pgTable("products", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  description: text("description"),
-  sku: text("sku").notNull().unique(),
-  price: numeric("price", { precision: 10, scale: 2 }).notNull(),
-  cost: numeric("cost", { precision: 10, scale: 2 }),
-  stock: numeric("stock", { precision: 10, scale: 3 }).notNull().default("0"),
-  minStock: numeric("min_stock", { precision: 10, scale: 3 }).default("0"),
-  unit: text("unit").notNull().default("unidad"),
-  isRefrigerated: boolean("is_refrigerated").notNull().default(false),
-  isBulk: boolean("is_bulk").notNull().default(false),
-  barcodes: text("barcodes").array(),
-  categoryId: integer("category_id").references(() => categories.id),
-  supplierId: integer("supplier_id").references(() => suppliers.id),
-  conversionFactor: numeric("conversion_factor", { precision: 10, scale: 3 }),
-  secondaryUnit: text("secondary_unit"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
-
-export const insertProductSchema = createInsertSchema(products).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-// Categories schema
-export const categories = pgTable("categories", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull().unique(),
-  description: text("description"),
-});
-
-export const insertCategorySchema = createInsertSchema(categories).omit({
-  id: true,
-});
-
-// Customers schema
-export const customers = pgTable("customers", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  email: text("email"),
-  phone: text("phone"),
-  address: text("address"),
-  documentId: text("document_id"),
-  hasCurrentAccount: boolean("has_current_account").notNull().default(false),
-  currentBalance: numeric("current_balance", { precision: 10, scale: 2 }).notNull().default("0"),
-  notes: text("notes"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
-export const insertCustomerSchema = createInsertSchema(customers).omit({
-  id: true,
-  createdAt: true,
-});
-
-// Suppliers schema
+// Suppliers table
 export const suppliers = pgTable("suppliers", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   contactName: text("contact_name"),
+  phone: text("phone"),
   email: text("email"),
-  phone: text("phone").notNull(),
   address: text("address"),
   notes: text("notes"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const insertSupplierSchema = createInsertSchema(suppliers).omit({
-  id: true,
-  createdAt: true,
+export const insertSupplierSchema = createInsertSchema(suppliers).pick({
+  name: true,
+  contactName: true,
+  phone: true,
+  email: true,
+  address: true,
+  notes: true,
 });
 
-// Sales schema
+// Customers table
+export const customers = pgTable("customers", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  email: text("email"),
+  address: text("address"),
+  notes: text("notes"),
+  hasAccount: boolean("has_account").default(false),
+});
+
+export const insertCustomerSchema = createInsertSchema(customers).pick({
+  name: true,
+  phone: true,
+  email: true,
+  address: true,
+  notes: true,
+  hasAccount: true,
+});
+
+// Products table
+export const products = pgTable("products", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  baseUnit: text("base_unit").notNull(),
+  barcodes: text("barcodes").array(),
+  price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+  cost: numeric("cost", { precision: 10, scale: 2 }),
+  stock: numeric("stock", { precision: 10, scale: 2 }).notNull().default("0"),
+  stockAlert: numeric("stock_alert", { precision: 10, scale: 2 }),
+  supplierId: integer("supplier_id").references(() => suppliers.id),
+  isRefrigerated: boolean("is_refrigerated").default(false),
+  isBulk: boolean("is_bulk").default(false),
+  conversionRates: json("conversion_rates"),
+});
+
+export const insertProductSchema = createInsertSchema(products).pick({
+  name: true,
+  description: true,
+  baseUnit: true,
+  barcodes: true,
+  price: true,
+  cost: true,
+  stock: true,
+  stockAlert: true,
+  supplierId: true,
+  isRefrigerated: true,
+  isBulk: true,
+  conversionRates: true,
+});
+
+// Accounts table (for customer current accounts)
+export const accounts = pgTable("accounts", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id").notNull().references(() => customers.id),
+  balance: numeric("balance", { precision: 10, scale: 2 }).notNull().default("0"),
+  creditLimit: numeric("credit_limit", { precision: 10, scale: 2 }),
+  lastUpdated: timestamp("last_updated").defaultNow(),
+});
+
+export const insertAccountSchema = createInsertSchema(accounts).pick({
+  customerId: true,
+  balance: true,
+  creditLimit: true,
+});
+
+// Sales table
 export const sales = pgTable("sales", {
   id: serial("id").primaryKey(),
+  timestamp: timestamp("timestamp").defaultNow(),
   customerId: integer("customer_id").references(() => customers.id),
-  userId: integer("user_id").references(() => users.id).notNull(),
+  userId: integer("user_id").notNull().references(() => users.id),
   total: numeric("total", { precision: 10, scale: 2 }).notNull(),
-  discount: numeric("discount", { precision: 10, scale: 2 }).default("0"),
   paymentMethod: text("payment_method").notNull(),
-  receiptNumber: text("receipt_number"),
-  receiptType: text("receipt_type").notNull().default("X"),
   status: text("status").notNull().default("completed"),
   notes: text("notes"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const insertSaleSchema = createInsertSchema(sales).omit({
-  id: true,
-  createdAt: true,
+export const insertSaleSchema = createInsertSchema(sales).pick({
+  customerId: true,
+  userId: true,
+  total: true,
+  paymentMethod: true,
+  status: true,
+  notes: true,
 });
 
-// Sale details schema
-export const saleDetails = pgTable("sale_details", {
+// Sale items table
+export const saleItems = pgTable("sale_items", {
   id: serial("id").primaryKey(),
-  saleId: integer("sale_id").references(() => sales.id).notNull(),
-  productId: integer("product_id").references(() => products.id).notNull(),
-  quantity: numeric("quantity", { precision: 10, scale: 3 }).notNull(),
-  unitPrice: numeric("unit_price", { precision: 10, scale: 2 }).notNull(),
-  subtotal: numeric("subtotal", { precision: 10, scale: 2 }).notNull(),
+  saleId: integer("sale_id").notNull().references(() => sales.id),
+  productId: integer("product_id").notNull().references(() => products.id),
+  quantity: numeric("quantity", { precision: 10, scale: 2 }).notNull(),
   unit: text("unit").notNull(),
+  price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+  discount: numeric("discount", { precision: 10, scale: 2 }).default("0"),
+  total: numeric("total", { precision: 10, scale: 2 }).notNull(),
 });
 
-export const insertSaleDetailSchema = createInsertSchema(saleDetails).omit({
-  id: true,
+export const insertSaleItemSchema = createInsertSchema(saleItems).pick({
+  saleId: true,
+  productId: true,
+  quantity: true,
+  unit: true,
+  price: true,
+  discount: true,
+  total: true,
 });
 
-// Orders schema
+// Orders table (for customer orders)
 export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
-  supplierId: integer("supplier_id").references(() => suppliers.id).notNull(),
-  userId: integer("user_id").references(() => users.id).notNull(),
+  timestamp: timestamp("timestamp").defaultNow(),
+  customerId: integer("customer_id").references(() => customers.id),
+  userId: integer("user_id").notNull().references(() => users.id),
+  total: numeric("total", { precision: 10, scale: 2 }).notNull(),
   status: text("status").notNull().default("pending"),
-  total: numeric("total", { precision: 10, scale: 2 }),
   notes: text("notes"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  deliveryDate: timestamp("delivery_date"),
 });
 
-export const insertOrderSchema = createInsertSchema(orders).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
+export const insertOrderSchema = createInsertSchema(orders).pick({
+  customerId: true,
+  userId: true,
+  total: true,
+  status: true,
+  notes: true,
+  deliveryDate: true,
 });
 
-// Order details schema
-export const orderDetails = pgTable("order_details", {
+// Order items table
+export const orderItems = pgTable("order_items", {
   id: serial("id").primaryKey(),
-  orderId: integer("order_id").references(() => orders.id).notNull(),
-  productId: integer("product_id").references(() => products.id).notNull(),
-  quantity: numeric("quantity", { precision: 10, scale: 3 }).notNull(),
-  unitPrice: numeric("unit_price", { precision: 10, scale: 2 }),
-  notes: text("notes"),
+  orderId: integer("order_id").notNull().references(() => orders.id),
+  productId: integer("product_id").notNull().references(() => products.id),
+  quantity: numeric("quantity", { precision: 10, scale: 2 }).notNull(),
+  unit: text("unit").notNull(),
+  price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+  total: numeric("total", { precision: 10, scale: 2 }).notNull(),
 });
 
-export const insertOrderDetailSchema = createInsertSchema(orderDetails).omit({
-  id: true,
+export const insertOrderItemSchema = createInsertSchema(orderItems).pick({
+  orderId: true,
+  productId: true,
+  quantity: true,
+  unit: true,
+  price: true,
+  total: true,
 });
 
-// Credit/Debit notes schema
+// Credit/Debit Notes table
 export const notes = pgTable("notes", {
   id: serial("id").primaryKey(),
-  type: text("type").notNull(), // "credit" or "debit"
-  number: text("number").notNull(),
-  relatedSaleId: integer("related_sale_id").references(() => sales.id),
+  timestamp: timestamp("timestamp").defaultNow(),
   customerId: integer("customer_id").references(() => customers.id),
-  userId: integer("user_id").references(() => users.id).notNull(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  type: text("type").notNull(), // 'credit' or 'debit'
+  relatedSaleId: integer("related_sale_id").references(() => sales.id),
   amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
   reason: text("reason").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  notes: text("notes"),
 });
 
-export const insertNoteSchema = createInsertSchema(notes).omit({
-  id: true,
-  createdAt: true,
+export const insertNoteSchema = createInsertSchema(notes).pick({
+  customerId: true,
+  userId: true,
+  type: true,
+  relatedSaleId: true,
+  amount: true,
+  reason: true,
+  notes: true,
 });
 
-// Types exports
-export type InsertUser = z.infer<typeof insertUserSchema>;
+// Account transactions table
+export const accountTransactions = pgTable("account_transactions", {
+  id: serial("id").primaryKey(),
+  timestamp: timestamp("timestamp").defaultNow(),
+  accountId: integer("account_id").notNull().references(() => accounts.id),
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+  type: text("type").notNull(), // 'debit', 'credit', 'payment'
+  relatedSaleId: integer("related_sale_id").references(() => sales.id),
+  relatedNoteId: integer("related_note_id").references(() => notes.id),
+  description: text("description").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id),
+});
+
+export const insertAccountTransactionSchema = createInsertSchema(accountTransactions).pick({
+  accountId: true,
+  amount: true,
+  type: true,
+  relatedSaleId: true,
+  relatedNoteId: true,
+  description: true,
+  userId: true,
+});
+
+// Type exports
 export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
 
-export type InsertProduct = z.infer<typeof insertProductSchema>;
-export type Product = typeof products.$inferSelect;
-
-export type InsertCategory = z.infer<typeof insertCategorySchema>;
-export type Category = typeof categories.$inferSelect;
-
-export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
-export type Customer = typeof customers.$inferSelect;
-
-export type InsertSupplier = z.infer<typeof insertSupplierSchema>;
 export type Supplier = typeof suppliers.$inferSelect;
+export type InsertSupplier = z.infer<typeof insertSupplierSchema>;
 
-export type InsertSale = z.infer<typeof insertSaleSchema>;
+export type Customer = typeof customers.$inferSelect;
+export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
+
+export type Product = typeof products.$inferSelect;
+export type InsertProduct = z.infer<typeof insertProductSchema>;
+
+export type Account = typeof accounts.$inferSelect;
+export type InsertAccount = z.infer<typeof insertAccountSchema>;
+
 export type Sale = typeof sales.$inferSelect;
+export type InsertSale = z.infer<typeof insertSaleSchema>;
 
-export type InsertSaleDetail = z.infer<typeof insertSaleDetailSchema>;
-export type SaleDetail = typeof saleDetails.$inferSelect;
+export type SaleItem = typeof saleItems.$inferSelect;
+export type InsertSaleItem = z.infer<typeof insertSaleItemSchema>;
 
-export type InsertOrder = z.infer<typeof insertOrderSchema>;
 export type Order = typeof orders.$inferSelect;
+export type InsertOrder = z.infer<typeof insertOrderSchema>;
 
-export type InsertOrderDetail = z.infer<typeof insertOrderDetailSchema>;
-export type OrderDetail = typeof orderDetails.$inferSelect;
+export type OrderItem = typeof orderItems.$inferSelect;
+export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
 
-export type InsertNote = z.infer<typeof insertNoteSchema>;
 export type Note = typeof notes.$inferSelect;
+export type InsertNote = z.infer<typeof insertNoteSchema>;
+
+export type AccountTransaction = typeof accountTransactions.$inferSelect;
+export type InsertAccountTransaction = z.infer<typeof insertAccountTransactionSchema>;

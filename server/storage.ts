@@ -1,670 +1,530 @@
-import { 
-  User, InsertUser, 
-  Product, InsertProduct, 
-  Category, InsertCategory,
-  Customer, InsertCustomer,
-  Supplier, InsertSupplier,
-  Sale, InsertSale,
-  SaleDetail, InsertSaleDetail,
-  Order, InsertOrder,
-  OrderDetail, InsertOrderDetail,
-  Note, InsertNote
-} from "@shared/schema";
-import createMemoryStore from "memorystore";
+import { users, User, InsertUser, Supplier, InsertSupplier, Customer, InsertCustomer, Product, InsertProduct, Account, InsertAccount, Sale, InsertSale, SaleItem, InsertSaleItem, Order, InsertOrder, OrderItem, InsertOrderItem, Note, InsertNote, AccountTransaction, InsertAccountTransaction } from "@shared/schema";
 import session from "express-session";
+import createMemoryStore from "memorystore";
 
 const MemoryStore = createMemoryStore(session);
 
 export interface IStorage {
-  // User operations
+  // Users
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  updateUser(id: number, user: Partial<User>): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
+  updateUser(id: number, user: Partial<User>): Promise<User>;
+  deleteUser(id: number): Promise<void>;
   
-  // Product operations
-  getProduct(id: number): Promise<Product | undefined>;
-  getProductBySku(sku: string): Promise<Product | undefined>;
-  getProductByBarcode(barcode: string): Promise<Product | undefined>;
-  createProduct(product: InsertProduct): Promise<Product>;
-  updateProduct(id: number, product: Partial<Product>): Promise<Product | undefined>;
-  deleteProduct(id: number): Promise<boolean>;
-  getAllProducts(): Promise<Product[]>;
-  getLowStockProducts(): Promise<Product[]>;
-  updateProductsPrice(supplierId: number, percentage: number): Promise<number>;
-  
-  // Category operations
-  getCategory(id: number): Promise<Category | undefined>;
-  createCategory(category: InsertCategory): Promise<Category>;
-  updateCategory(id: number, category: Partial<Category>): Promise<Category | undefined>;
-  getAllCategories(): Promise<Category[]>;
-  
-  // Customer operations
-  getCustomer(id: number): Promise<Customer | undefined>;
-  createCustomer(customer: InsertCustomer): Promise<Customer>;
-  updateCustomer(id: number, customer: Partial<Customer>): Promise<Customer | undefined>;
-  getAllCustomers(): Promise<Customer[]>;
-  updateCustomerBalance(id: number, amount: number): Promise<Customer | undefined>;
-  
-  // Supplier operations
+  // Suppliers
   getSupplier(id: number): Promise<Supplier | undefined>;
-  createSupplier(supplier: InsertSupplier): Promise<Supplier>;
-  updateSupplier(id: number, supplier: Partial<Supplier>): Promise<Supplier | undefined>;
   getAllSuppliers(): Promise<Supplier[]>;
+  createSupplier(supplier: InsertSupplier): Promise<Supplier>;
+  updateSupplier(id: number, supplier: Partial<Supplier>): Promise<Supplier>;
+  deleteSupplier(id: number): Promise<void>;
   
-  // Sales operations
+  // Customers
+  getCustomer(id: number): Promise<Customer | undefined>;
+  getAllCustomers(): Promise<Customer[]>;
+  createCustomer(customer: InsertCustomer): Promise<Customer>;
+  updateCustomer(id: number, customer: Partial<Customer>): Promise<Customer>;
+  deleteCustomer(id: number): Promise<void>;
+  
+  // Products
+  getProduct(id: number): Promise<Product | undefined>;
+  getAllProducts(): Promise<Product[]>;
+  createProduct(product: InsertProduct): Promise<Product>;
+  updateProduct(id: number, product: Partial<Product>): Promise<Product>;
+  deleteProduct(id: number): Promise<void>;
+  
+  // Accounts
+  getAccount(id: number): Promise<Account | undefined>;
+  getAccountByCustomerId(customerId: number): Promise<Account | undefined>;
+  getAllAccounts(): Promise<Account[]>;
+  createAccount(account: InsertAccount): Promise<Account>;
+  updateAccount(id: number, account: Partial<Account>): Promise<Account>;
+  deleteAccount(id: number): Promise<void>;
+  
+  // Account Transactions
+  getAccountTransaction(id: number): Promise<AccountTransaction | undefined>;
+  getAccountTransactions(accountId: number): Promise<AccountTransaction[]>;
+  createAccountTransaction(transaction: any): Promise<AccountTransaction>;
+  
+  // Sales
   getSale(id: number): Promise<Sale | undefined>;
-  createSale(sale: InsertSale, saleDetails: InsertSaleDetail[]): Promise<Sale>;
-  getSaleWithDetails(id: number): Promise<{sale: Sale, details: SaleDetail[]}>;
-  getRecentSales(limit: number): Promise<Sale[]>;
+  getAllSales(): Promise<Sale[]>;
+  createSale(sale: InsertSale): Promise<Sale>;
+  updateSale(id: number, sale: Partial<Sale>): Promise<Sale>;
+  deleteSale(id: number): Promise<void>;
   
-  // Order operations
+  // Sale Items
+  getSaleItem(id: number): Promise<SaleItem | undefined>;
+  getSaleItemsBySaleId(saleId: number): Promise<SaleItem[]>;
+  createSaleItem(item: InsertSaleItem): Promise<SaleItem>;
+  
+  // Orders
   getOrder(id: number): Promise<Order | undefined>;
-  createOrder(order: InsertOrder, orderDetails: InsertOrderDetail[]): Promise<Order>;
-  updateOrderStatus(id: number, status: string): Promise<Order | undefined>;
-  getOrderWithDetails(id: number): Promise<{order: Order, details: OrderDetail[]}>;
   getAllOrders(): Promise<Order[]>;
+  createOrder(order: InsertOrder): Promise<Order>;
+  updateOrder(id: number, order: Partial<Order>): Promise<Order>;
+  deleteOrder(id: number): Promise<void>;
   
-  // Note operations
+  // Order Items
+  getOrderItem(id: number): Promise<OrderItem | undefined>;
+  getOrderItemsByOrderId(orderId: number): Promise<OrderItem[]>;
+  createOrderItem(item: InsertOrderItem): Promise<OrderItem>;
+  
+  // Notes (Credit/Debit)
   getNote(id: number): Promise<Note | undefined>;
-  createNote(note: InsertNote): Promise<Note>;
   getAllNotes(): Promise<Note[]>;
-
+  createNote(note: InsertNote): Promise<Note>;
+  updateNote(id: number, note: Partial<Note>): Promise<Note>;
+  deleteNote(id: number): Promise<void>;
+  
   // Session store
   sessionStore: session.SessionStore;
 }
 
 export class MemStorage implements IStorage {
   private users: Map<number, User>;
-  private products: Map<number, Product>;
-  private categories: Map<number, Category>;
-  private customers: Map<number, Customer>;
   private suppliers: Map<number, Supplier>;
+  private customers: Map<number, Customer>;
+  private products: Map<number, Product>;
+  private accounts: Map<number, Account>;
+  private accountTransactions: Map<number, AccountTransaction>;
   private sales: Map<number, Sale>;
-  private saleDetails: Map<number, SaleDetail[]>;
+  private saleItems: Map<number, SaleItem>;
   private orders: Map<number, Order>;
-  private orderDetails: Map<number, OrderDetail[]>;
+  private orderItems: Map<number, OrderItem>;
   private notes: Map<number, Note>;
   
-  sessionStore: session.SessionStore;
+  private userIdCounter: number;
+  private supplierIdCounter: number;
+  private customerIdCounter: number;
+  private productIdCounter: number;
+  private accountIdCounter: number;
+  private accountTransactionIdCounter: number;
+  private saleIdCounter: number;
+  private saleItemIdCounter: number;
+  private orderIdCounter: number;
+  private orderItemIdCounter: number;
+  private noteIdCounter: number;
   
-  // Auto-increment IDs
-  private userId: number;
-  private productId: number;
-  private categoryId: number;
-  private customerId: number;
-  private supplierId: number;
-  private saleId: number;
-  private saleDetailId: number;
-  private orderId: number;
-  private orderDetailId: number;
-  private noteId: number;
+  sessionStore: session.SessionStore;
 
   constructor() {
     this.users = new Map();
-    this.products = new Map();
-    this.categories = new Map();
-    this.customers = new Map();
     this.suppliers = new Map();
+    this.customers = new Map();
+    this.products = new Map();
+    this.accounts = new Map();
+    this.accountTransactions = new Map();
     this.sales = new Map();
-    this.saleDetails = new Map();
+    this.saleItems = new Map();
     this.orders = new Map();
-    this.orderDetails = new Map();
+    this.orderItems = new Map();
     this.notes = new Map();
     
-    this.userId = 1;
-    this.productId = 1;
-    this.categoryId = 1;
-    this.customerId = 1;
-    this.supplierId = 1;
-    this.saleId = 1;
-    this.saleDetailId = 1;
-    this.orderId = 1;
-    this.orderDetailId = 1;
-    this.noteId = 1;
+    this.userIdCounter = 1;
+    this.supplierIdCounter = 1;
+    this.customerIdCounter = 1;
+    this.productIdCounter = 1;
+    this.accountIdCounter = 1;
+    this.accountTransactionIdCounter = 1;
+    this.saleIdCounter = 1;
+    this.saleItemIdCounter = 1;
+    this.orderIdCounter = 1;
+    this.orderItemIdCounter = 1;
+    this.noteIdCounter = 1;
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000 // prune expired entries every 24h
     });
-    
-    // Initialize with demo data
-    this.initializeDemoData();
   }
 
-  // User methods
+  // Users
   async getUser(id: number): Promise<User | undefined> {
     return this.users.get(id);
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     return Array.from(this.users.values()).find(
-      (user) => user.username.toLowerCase() === username.toLowerCase(),
+      (user) => user.username === username
     );
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.userId++;
-    const timestamp = new Date();
-    const user: User = { 
-      ...insertUser, 
-      id, 
-      isActive: true,
-      lastLogin: timestamp
-    };
+    const id = this.userIdCounter++;
+    const user: User = { ...insertUser, id };
     this.users.set(id, user);
     return user;
   }
   
-  async updateUser(id: number, userData: Partial<User>): Promise<User | undefined> {
+  async getAllUsers(): Promise<User[]> {
+    return Array.from(this.users.values());
+  }
+  
+  async updateUser(id: number, userData: Partial<User>): Promise<User> {
     const user = await this.getUser(id);
-    if (!user) return undefined;
+    if (!user) {
+      throw new Error(`Usuario con ID ${id} no encontrado`);
+    }
     
     const updatedUser = { ...user, ...userData };
     this.users.set(id, updatedUser);
     return updatedUser;
   }
   
-  async getAllUsers(): Promise<User[]> {
-    return Array.from(this.users.values());
-  }
-
-  // Product methods
-  async getProduct(id: number): Promise<Product | undefined> {
-    return this.products.get(id);
-  }
-  
-  async getProductBySku(sku: string): Promise<Product | undefined> {
-    return Array.from(this.products.values()).find(
-      (product) => product.sku === sku,
-    );
-  }
-  
-  async getProductByBarcode(barcode: string): Promise<Product | undefined> {
-    return Array.from(this.products.values()).find(
-      (product) => product.barcodes?.includes(barcode),
-    );
-  }
-  
-  async createProduct(product: InsertProduct): Promise<Product> {
-    const id = this.productId++;
-    const timestamp = new Date();
-    const newProduct: Product = {
-      ...product,
-      id,
-      createdAt: timestamp,
-      updatedAt: timestamp
-    };
-    this.products.set(id, newProduct);
-    return newProduct;
-  }
-  
-  async updateProduct(id: number, productData: Partial<Product>): Promise<Product | undefined> {
-    const product = await this.getProduct(id);
-    if (!product) return undefined;
-    
-    const updatedProduct = { 
-      ...product, 
-      ...productData,
-      updatedAt: new Date()
-    };
-    this.products.set(id, updatedProduct);
-    return updatedProduct;
-  }
-  
-  async deleteProduct(id: number): Promise<boolean> {
-    return this.products.delete(id);
-  }
-  
-  async getAllProducts(): Promise<Product[]> {
-    return Array.from(this.products.values());
-  }
-  
-  async getLowStockProducts(): Promise<Product[]> {
-    return Array.from(this.products.values()).filter(
-      (product) => product.stock < product.minStock
-    );
-  }
-  
-  async updateProductsPrice(supplierId: number, percentage: number): Promise<number> {
-    let updatedCount = 0;
-    const products = Array.from(this.products.values()).filter(
-      (product) => product.supplierId === supplierId
-    );
-    
-    for (const product of products) {
-      const newPrice = Number(product.price) * (1 + (percentage / 100));
-      await this.updateProduct(product.id, { 
-        price: newPrice.toString(), 
-        updatedAt: new Date() 
-      });
-      updatedCount++;
+  async deleteUser(id: number): Promise<void> {
+    const exists = this.users.has(id);
+    if (!exists) {
+      throw new Error(`Usuario con ID ${id} no encontrado`);
     }
     
-    return updatedCount;
+    this.users.delete(id);
   }
   
-  // Category methods
-  async getCategory(id: number): Promise<Category | undefined> {
-    return this.categories.get(id);
-  }
-  
-  async createCategory(category: InsertCategory): Promise<Category> {
-    const id = this.categoryId++;
-    const newCategory: Category = { ...category, id };
-    this.categories.set(id, newCategory);
-    return newCategory;
-  }
-  
-  async updateCategory(id: number, categoryData: Partial<Category>): Promise<Category | undefined> {
-    const category = await this.getCategory(id);
-    if (!category) return undefined;
-    
-    const updatedCategory = { ...category, ...categoryData };
-    this.categories.set(id, updatedCategory);
-    return updatedCategory;
-  }
-  
-  async getAllCategories(): Promise<Category[]> {
-    return Array.from(this.categories.values());
-  }
-  
-  // Customer methods
-  async getCustomer(id: number): Promise<Customer | undefined> {
-    return this.customers.get(id);
-  }
-  
-  async createCustomer(customer: InsertCustomer): Promise<Customer> {
-    const id = this.customerId++;
-    const timestamp = new Date();
-    const newCustomer: Customer = { 
-      ...customer, 
-      id,
-      createdAt: timestamp
-    };
-    this.customers.set(id, newCustomer);
-    return newCustomer;
-  }
-  
-  async updateCustomer(id: number, customerData: Partial<Customer>): Promise<Customer | undefined> {
-    const customer = await this.getCustomer(id);
-    if (!customer) return undefined;
-    
-    const updatedCustomer = { ...customer, ...customerData };
-    this.customers.set(id, updatedCustomer);
-    return updatedCustomer;
-  }
-  
-  async getAllCustomers(): Promise<Customer[]> {
-    return Array.from(this.customers.values());
-  }
-  
-  async updateCustomerBalance(id: number, amount: number): Promise<Customer | undefined> {
-    const customer = await this.getCustomer(id);
-    if (!customer) return undefined;
-    
-    const currentBalance = Number(customer.currentBalance);
-    const newBalance = currentBalance + amount;
-    
-    return this.updateCustomer(id, { currentBalance: newBalance.toString() });
-  }
-  
-  // Supplier methods
+  // Suppliers
   async getSupplier(id: number): Promise<Supplier | undefined> {
     return this.suppliers.get(id);
-  }
-  
-  async createSupplier(supplier: InsertSupplier): Promise<Supplier> {
-    const id = this.supplierId++;
-    const timestamp = new Date();
-    const newSupplier: Supplier = { 
-      ...supplier, 
-      id,
-      createdAt: timestamp
-    };
-    this.suppliers.set(id, newSupplier);
-    return newSupplier;
-  }
-  
-  async updateSupplier(id: number, supplierData: Partial<Supplier>): Promise<Supplier | undefined> {
-    const supplier = await this.getSupplier(id);
-    if (!supplier) return undefined;
-    
-    const updatedSupplier = { ...supplier, ...supplierData };
-    this.suppliers.set(id, updatedSupplier);
-    return updatedSupplier;
   }
   
   async getAllSuppliers(): Promise<Supplier[]> {
     return Array.from(this.suppliers.values());
   }
   
-  // Sales methods
+  async createSupplier(insertSupplier: InsertSupplier): Promise<Supplier> {
+    const id = this.supplierIdCounter++;
+    const supplier: Supplier = { ...insertSupplier, id };
+    this.suppliers.set(id, supplier);
+    return supplier;
+  }
+  
+  async updateSupplier(id: number, supplierData: Partial<Supplier>): Promise<Supplier> {
+    const supplier = await this.getSupplier(id);
+    if (!supplier) {
+      throw new Error(`Proveedor con ID ${id} no encontrado`);
+    }
+    
+    const updatedSupplier = { ...supplier, ...supplierData };
+    this.suppliers.set(id, updatedSupplier);
+    return updatedSupplier;
+  }
+  
+  async deleteSupplier(id: number): Promise<void> {
+    const exists = this.suppliers.has(id);
+    if (!exists) {
+      throw new Error(`Proveedor con ID ${id} no encontrado`);
+    }
+    
+    this.suppliers.delete(id);
+  }
+  
+  // Customers
+  async getCustomer(id: number): Promise<Customer | undefined> {
+    return this.customers.get(id);
+  }
+  
+  async getAllCustomers(): Promise<Customer[]> {
+    return Array.from(this.customers.values());
+  }
+  
+  async createCustomer(insertCustomer: InsertCustomer): Promise<Customer> {
+    const id = this.customerIdCounter++;
+    const customer: Customer = { ...insertCustomer, id };
+    this.customers.set(id, customer);
+    return customer;
+  }
+  
+  async updateCustomer(id: number, customerData: Partial<Customer>): Promise<Customer> {
+    const customer = await this.getCustomer(id);
+    if (!customer) {
+      throw new Error(`Cliente con ID ${id} no encontrado`);
+    }
+    
+    const updatedCustomer = { ...customer, ...customerData };
+    this.customers.set(id, updatedCustomer);
+    return updatedCustomer;
+  }
+  
+  async deleteCustomer(id: number): Promise<void> {
+    const exists = this.customers.has(id);
+    if (!exists) {
+      throw new Error(`Cliente con ID ${id} no encontrado`);
+    }
+    
+    this.customers.delete(id);
+  }
+  
+  // Products
+  async getProduct(id: number): Promise<Product | undefined> {
+    return this.products.get(id);
+  }
+  
+  async getAllProducts(): Promise<Product[]> {
+    return Array.from(this.products.values());
+  }
+  
+  async createProduct(insertProduct: InsertProduct): Promise<Product> {
+    const id = this.productIdCounter++;
+    const product: Product = { ...insertProduct, id };
+    this.products.set(id, product);
+    return product;
+  }
+  
+  async updateProduct(id: number, productData: Partial<Product>): Promise<Product> {
+    const product = await this.getProduct(id);
+    if (!product) {
+      throw new Error(`Producto con ID ${id} no encontrado`);
+    }
+    
+    const updatedProduct = { ...product, ...productData };
+    this.products.set(id, updatedProduct);
+    return updatedProduct;
+  }
+  
+  async deleteProduct(id: number): Promise<void> {
+    const exists = this.products.has(id);
+    if (!exists) {
+      throw new Error(`Producto con ID ${id} no encontrado`);
+    }
+    
+    this.products.delete(id);
+  }
+  
+  // Accounts
+  async getAccount(id: number): Promise<Account | undefined> {
+    return this.accounts.get(id);
+  }
+  
+  async getAccountByCustomerId(customerId: number): Promise<Account | undefined> {
+    return Array.from(this.accounts.values()).find(
+      (account) => account.customerId === customerId
+    );
+  }
+  
+  async getAllAccounts(): Promise<Account[]> {
+    return Array.from(this.accounts.values());
+  }
+  
+  async createAccount(insertAccount: InsertAccount): Promise<Account> {
+    const id = this.accountIdCounter++;
+    const account: Account = { 
+      ...insertAccount, 
+      id,
+      balance: insertAccount.balance || 0,
+      lastUpdated: new Date() 
+    };
+    this.accounts.set(id, account);
+    return account;
+  }
+  
+  async updateAccount(id: number, accountData: Partial<Account>): Promise<Account> {
+    const account = await this.getAccount(id);
+    if (!account) {
+      throw new Error(`Cuenta con ID ${id} no encontrada`);
+    }
+    
+    const updatedAccount = { ...account, ...accountData };
+    this.accounts.set(id, updatedAccount);
+    return updatedAccount;
+  }
+  
+  async deleteAccount(id: number): Promise<void> {
+    const exists = this.accounts.has(id);
+    if (!exists) {
+      throw new Error(`Cuenta con ID ${id} no encontrada`);
+    }
+    
+    this.accounts.delete(id);
+  }
+  
+  // Account Transactions
+  async getAccountTransaction(id: number): Promise<AccountTransaction | undefined> {
+    return this.accountTransactions.get(id);
+  }
+  
+  async getAccountTransactions(accountId: number): Promise<AccountTransaction[]> {
+    return Array.from(this.accountTransactions.values())
+      .filter(transaction => transaction.accountId === accountId)
+      .sort((a, b) => {
+        // Sort by timestamp in descending order (newest first)
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      });
+  }
+  
+  async createAccountTransaction(insertTransaction: any): Promise<AccountTransaction> {
+    const id = this.accountTransactionIdCounter++;
+    const transaction: AccountTransaction = { 
+      ...insertTransaction, 
+      id,
+      timestamp: new Date() 
+    };
+    this.accountTransactions.set(id, transaction);
+    return transaction;
+  }
+  
+  // Sales
   async getSale(id: number): Promise<Sale | undefined> {
     return this.sales.get(id);
   }
   
-  async createSale(sale: InsertSale, details: InsertSaleDetail[]): Promise<Sale> {
-    const id = this.saleId++;
-    const timestamp = new Date();
-    const newSale: Sale = { 
-      ...sale, 
+  async getAllSales(): Promise<Sale[]> {
+    return Array.from(this.sales.values())
+      .sort((a, b) => {
+        // Sort by timestamp in descending order (newest first)
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      });
+  }
+  
+  async createSale(insertSale: InsertSale): Promise<Sale> {
+    const id = this.saleIdCounter++;
+    const sale: Sale = { 
+      ...insertSale, 
       id,
-      createdAt: timestamp
+      timestamp: insertSale.timestamp || new Date() 
     };
-    this.sales.set(id, newSale);
-    
-    // Create sale details
-    const saleDetails: SaleDetail[] = [];
-    for (const detail of details) {
-      const detailId = this.saleDetailId++;
-      const newDetail: SaleDetail = {
-        ...detail,
-        id: detailId,
-        saleId: id
-      };
-      saleDetails.push(newDetail);
-      
-      // Update product stock
-      const product = await this.getProduct(detail.productId);
-      if (product) {
-        const currentStock = Number(product.stock);
-        const newStock = currentStock - Number(detail.quantity);
-        await this.updateProduct(product.id, { stock: newStock.toString() });
-      }
-    }
-    this.saleDetails.set(id, saleDetails);
-    
-    // Update customer balance if needed
-    if (sale.customerId && sale.status === 'completed') {
-      await this.updateCustomerBalance(sale.customerId, Number(sale.total));
-    }
-    
-    return newSale;
+    this.sales.set(id, sale);
+    return sale;
   }
   
-  async getSaleWithDetails(id: number): Promise<{sale: Sale, details: SaleDetail[]}> {
+  async updateSale(id: number, saleData: Partial<Sale>): Promise<Sale> {
     const sale = await this.getSale(id);
-    if (!sale) throw new Error(`Sale with id ${id} not found`);
+    if (!sale) {
+      throw new Error(`Venta con ID ${id} no encontrada`);
+    }
     
-    const details = this.saleDetails.get(id) || [];
-    return { sale, details };
+    const updatedSale = { ...sale, ...saleData };
+    this.sales.set(id, updatedSale);
+    return updatedSale;
   }
   
-  async getRecentSales(limit: number): Promise<Sale[]> {
-    const allSales = Array.from(this.sales.values())
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  async deleteSale(id: number): Promise<void> {
+    const exists = this.sales.has(id);
+    if (!exists) {
+      throw new Error(`Venta con ID ${id} no encontrada`);
+    }
     
-    return allSales.slice(0, limit);
+    this.sales.delete(id);
   }
   
-  // Order methods
+  // Sale Items
+  async getSaleItem(id: number): Promise<SaleItem | undefined> {
+    return this.saleItems.get(id);
+  }
+  
+  async getSaleItemsBySaleId(saleId: number): Promise<SaleItem[]> {
+    return Array.from(this.saleItems.values())
+      .filter(item => item.saleId === saleId);
+  }
+  
+  async createSaleItem(insertItem: InsertSaleItem): Promise<SaleItem> {
+    const id = this.saleItemIdCounter++;
+    const item: SaleItem = { ...insertItem, id };
+    this.saleItems.set(id, item);
+    return item;
+  }
+  
+  // Orders
   async getOrder(id: number): Promise<Order | undefined> {
     return this.orders.get(id);
   }
   
-  async createOrder(order: InsertOrder, details: InsertOrderDetail[]): Promise<Order> {
-    const id = this.orderId++;
-    const timestamp = new Date();
-    const newOrder: Order = { 
-      ...order, 
-      id,
-      createdAt: timestamp,
-      updatedAt: timestamp
-    };
-    this.orders.set(id, newOrder);
-    
-    // Create order details
-    const orderDetails: OrderDetail[] = [];
-    for (const detail of details) {
-      const detailId = this.orderDetailId++;
-      const newDetail: OrderDetail = {
-        ...detail,
-        id: detailId,
-        orderId: id
-      };
-      orderDetails.push(newDetail);
-    }
-    this.orderDetails.set(id, orderDetails);
-    
-    return newOrder;
+  async getAllOrders(): Promise<Order[]> {
+    return Array.from(this.orders.values())
+      .sort((a, b) => {
+        // Sort by timestamp in descending order (newest first)
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      });
   }
   
-  async updateOrderStatus(id: number, status: string): Promise<Order | undefined> {
-    const order = await this.getOrder(id);
-    if (!order) return undefined;
-    
-    const updatedOrder = { 
-      ...order, 
-      status,
-      updatedAt: new Date()
+  async createOrder(insertOrder: InsertOrder): Promise<Order> {
+    const id = this.orderIdCounter++;
+    const order: Order = { 
+      ...insertOrder, 
+      id,
+      timestamp: insertOrder.timestamp || new Date() 
     };
-    this.orders.set(id, updatedOrder);
-    
-    // If status is 'received', update product stock
-    if (status === 'received') {
-      const details = this.orderDetails.get(id) || [];
-      for (const detail of details) {
-        const product = await this.getProduct(detail.productId);
-        if (product) {
-          const currentStock = Number(product.stock);
-          const newStock = currentStock + Number(detail.quantity);
-          await this.updateProduct(product.id, { stock: newStock.toString() });
-        }
-      }
+    this.orders.set(id, order);
+    return order;
+  }
+  
+  async updateOrder(id: number, orderData: Partial<Order>): Promise<Order> {
+    const order = await this.getOrder(id);
+    if (!order) {
+      throw new Error(`Pedido con ID ${id} no encontrado`);
     }
     
+    const updatedOrder = { ...order, ...orderData };
+    this.orders.set(id, updatedOrder);
     return updatedOrder;
   }
   
-  async getOrderWithDetails(id: number): Promise<{order: Order, details: OrderDetail[]}> {
-    const order = await this.getOrder(id);
-    if (!order) throw new Error(`Order with id ${id} not found`);
+  async deleteOrder(id: number): Promise<void> {
+    const exists = this.orders.has(id);
+    if (!exists) {
+      throw new Error(`Pedido con ID ${id} no encontrado`);
+    }
     
-    const details = this.orderDetails.get(id) || [];
-    return { order, details };
+    this.orders.delete(id);
   }
   
-  async getAllOrders(): Promise<Order[]> {
-    return Array.from(this.orders.values());
+  // Order Items
+  async getOrderItem(id: number): Promise<OrderItem | undefined> {
+    return this.orderItems.get(id);
   }
   
-  // Note methods
+  async getOrderItemsByOrderId(orderId: number): Promise<OrderItem[]> {
+    return Array.from(this.orderItems.values())
+      .filter(item => item.orderId === orderId);
+  }
+  
+  async createOrderItem(insertItem: InsertOrderItem): Promise<OrderItem> {
+    const id = this.orderItemIdCounter++;
+    const item: OrderItem = { ...insertItem, id };
+    this.orderItems.set(id, item);
+    return item;
+  }
+  
+  // Notes (Credit/Debit)
   async getNote(id: number): Promise<Note | undefined> {
     return this.notes.get(id);
   }
   
-  async createNote(note: InsertNote): Promise<Note> {
-    const id = this.noteId++;
-    const timestamp = new Date();
-    const newNote: Note = { 
-      ...note, 
+  async getAllNotes(): Promise<Note[]> {
+    return Array.from(this.notes.values())
+      .sort((a, b) => {
+        // Sort by timestamp in descending order (newest first)
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      });
+  }
+  
+  async createNote(insertNote: InsertNote): Promise<Note> {
+    const id = this.noteIdCounter++;
+    const note: Note = { 
+      ...insertNote, 
       id,
-      createdAt: timestamp
+      timestamp: insertNote.timestamp || new Date() 
     };
-    this.notes.set(id, newNote);
-    
-    // Update customer balance if applicable
-    if (note.customerId) {
-      const amount = note.type === 'credit' ? -Number(note.amount) : Number(note.amount);
-      await this.updateCustomerBalance(note.customerId, amount);
+    this.notes.set(id, note);
+    return note;
+  }
+  
+  async updateNote(id: number, noteData: Partial<Note>): Promise<Note> {
+    const note = await this.getNote(id);
+    if (!note) {
+      throw new Error(`Nota con ID ${id} no encontrada`);
     }
     
-    return newNote;
+    const updatedNote = { ...note, ...noteData };
+    this.notes.set(id, updatedNote);
+    return updatedNote;
   }
   
-  async getAllNotes(): Promise<Note[]> {
-    return Array.from(this.notes.values());
-  }
-  
-  // Initialize demo data
-  private async initializeDemoData() {
-    // Create admin user
-    await this.createUser({
-      username: "admin",
-      password: "$2b$10$WEwYPMnAamOA6dzyOxvM1.c13XGX76iEbdaRk0OlK6yYUXZfpZYz.", // "password" hashed
-      fullName: "Administrador",
-      email: "admin@puntopastelero.com",
-      role: "admin"
-    });
+  async deleteNote(id: number): Promise<void> {
+    const exists = this.notes.has(id);
+    if (!exists) {
+      throw new Error(`Nota con ID ${id} no encontrada`);
+    }
     
-    // Create categories
-    const lacteos = await this.createCategory({
-      name: "Lácteos",
-      description: "Productos lácteos y derivados"
-    });
-    
-    const secos = await this.createCategory({
-      name: "Productos secos",
-      description: "Harinas, azúcar, y otros productos secos"
-    });
-    
-    // Create suppliers
-    const supplier1 = await this.createSupplier({
-      name: "Distribuidora Láctea S.A.",
-      contactName: "Juan Pérez",
-      email: "juan@lacteos.com",
-      phone: "123456789",
-      address: "Calle Principal 123"
-    });
-    
-    const supplier2 = await this.createSupplier({
-      name: "Harinera Nacional",
-      contactName: "María López",
-      email: "maria@harinera.com",
-      phone: "987654321",
-      address: "Avenida Central 456"
-    });
-    
-    // Create products
-    await this.createProduct({
-      name: "Leche Entera 1L",
-      sku: "LECH001",
-      description: "Leche entera pasteurizada",
-      price: "150",
-      cost: "100",
-      stock: "15",
-      minStock: "10",
-      unit: "unidad",
-      isRefrigerated: true,
-      isBulk: false,
-      barcodes: ["7790123456789"],
-      categoryId: lacteos.id,
-      supplierId: supplier1.id
-    });
-    
-    await this.createProduct({
-      name: "Harina 000 1kg",
-      sku: "HAR001",
-      description: "Harina triple cero para pastelería",
-      price: "120",
-      cost: "80",
-      stock: "25",
-      minStock: "15",
-      unit: "unidad",
-      isRefrigerated: false,
-      isBulk: false,
-      barcodes: ["7790987654321"],
-      categoryId: secos.id,
-      supplierId: supplier2.id
-    });
-    
-    await this.createProduct({
-      name: "Azúcar 1kg",
-      sku: "AZU001",
-      description: "Azúcar refinada",
-      price: "95",
-      cost: "65",
-      stock: "4",
-      minStock: "10",
-      unit: "unidad",
-      isRefrigerated: false,
-      isBulk: false,
-      barcodes: ["7790123454321"],
-      categoryId: secos.id,
-      supplierId: supplier2.id
-    });
-    
-    // Create a bulk product with conversion
-    await this.createProduct({
-      name: "Harina a granel",
-      sku: "HAR002",
-      description: "Harina para pastelería a granel",
-      price: "100",
-      cost: "70",
-      stock: "50.5",
-      minStock: "20",
-      unit: "kg",
-      isRefrigerated: false,
-      isBulk: true,
-      barcodes: [],
-      categoryId: secos.id,
-      supplierId: supplier2.id,
-      conversionFactor: "0.1",
-      secondaryUnit: "g"
-    });
-    
-    // Create customer
-    const customer = await this.createCustomer({
-      name: "María González",
-      email: "maria@gmail.com",
-      phone: "123987456",
-      address: "Calle Secundaria 789",
-      documentId: "28456123",
-      hasCurrentAccount: true
-    });
-    
-    // Create a sale
-    const sale: InsertSale = {
-      customerId: customer.id,
-      userId: 1,
-      total: "270",
-      paymentMethod: "efectivo",
-      receiptNumber: "0001-00000001",
-      receiptType: "X",
-      status: "completed"
-    };
-    
-    const saleDetails: InsertSaleDetail[] = [
-      {
-        productId: 1,
-        quantity: "1",
-        unitPrice: "150",
-        subtotal: "150",
-        unit: "unidad",
-        saleId: 0 // placeholder, overwritten in createSale
-      },
-      {
-        productId: 2,
-        quantity: "1",
-        unitPrice: "120",
-        subtotal: "120",
-        unit: "unidad",
-        saleId: 0 // placeholder, overwritten in createSale
-      }
-    ];
-    
-    await this.createSale(sale, saleDetails);
-    
-    // Create an order
-    const order: InsertOrder = {
-      supplierId: supplier1.id,
-      userId: 1,
-      status: "pending",
-      total: "1000",
-      notes: "Pedido urgente"
-    };
-    
-    const orderDetails: InsertOrderDetail[] = [
-      {
-        productId: 1,
-        quantity: "10",
-        unitPrice: "100",
-        orderId: 0 // placeholder, overwritten in createOrder
-      }
-    ];
-    
-    await this.createOrder(order, orderDetails);
+    this.notes.delete(id);
   }
 }
 

@@ -1,37 +1,41 @@
-import { z } from "zod";
-import { useState, useEffect } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useAuth } from "@/hooks/use-auth";
-import { Redirect } from "wouter";
+import { useEffect } from "react";
+import { useLocation } from "wouter";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Store } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useAuth } from "@/hooks/use-auth";
+import { ShoppingBag, User, Package, BarChart, Users } from "lucide-react";
 
 const loginSchema = z.object({
-  username: z.string().min(1, { message: "El nombre de usuario es requerido" }),
-  password: z.string().min(1, { message: "La contraseña es requerida" }),
+  username: z.string().min(1, "El nombre de usuario es requerido"),
+  password: z.string().min(1, "La contraseña es requerida"),
 });
 
 const registerSchema = z.object({
-  username: z.string().min(3, { message: "El nombre de usuario debe tener al menos 3 caracteres" }),
-  password: z.string().min(6, { message: "La contraseña debe tener al menos 6 caracteres" }),
-  fullName: z.string().min(1, { message: "El nombre completo es requerido" }),
-  email: z.string().email({ message: "Ingrese un email válido" }),
-  role: z.string().default("employee"),
+  username: z.string().min(3, "El nombre de usuario debe tener al menos 3 caracteres"),
+  password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
+  fullName: z.string().min(1, "El nombre completo es requerido"),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
 export default function AuthPage() {
-  const [activeTab, setActiveTab] = useState<string>("login");
   const { user, isLoading, loginMutation, registerMutation } = useAuth();
-  
-  // Login form
+  const [, navigate] = useLocation();
+
+  // Redirect to dashboard if already logged in
+  useEffect(() => {
+    if (user && !isLoading) {
+      navigate("/");
+    }
+  }, [user, isLoading, navigate]);
+
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -39,50 +43,45 @@ export default function AuthPage() {
       password: "",
     },
   });
-  
-  // Register form
+
   const registerForm = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
       username: "",
       password: "",
       fullName: "",
-      email: "",
-      role: "employee",
     },
   });
-  
-  const onLoginSubmit = (data: LoginFormValues) => {
-    loginMutation.mutate(data);
+
+  const onLoginSubmit = async (data: LoginFormValues) => {
+    try {
+      await loginMutation.mutateAsync(data);
+    } catch (error) {
+      console.error("Login error", error);
+    }
   };
-  
-  const onRegisterSubmit = (data: RegisterFormValues) => {
-    registerMutation.mutate(data);
+
+  const onRegisterSubmit = async (data: RegisterFormValues) => {
+    try {
+      await registerMutation.mutateAsync({ ...data, role: "employee" });
+    } catch (error) {
+      console.error("Register error", error);
+    }
   };
-  
-  // Redirect if user is already logged in
-  if (user) {
-    return <Redirect to="/" />;
-  }
-  
+
   return (
-    <div className="min-h-screen bg-neutral-50 flex flex-col sm:flex-row items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <Card className="shadow-lg">
-          <CardHeader className="space-y-1">
-            <div className="flex items-center justify-center mb-4">
-              <Store className="h-12 w-12 text-primary" />
-            </div>
-            <CardTitle className="text-2xl text-center font-bold">Punto Pastelero</CardTitle>
-            <CardDescription className="text-center">
-              Sistema de gestión integral
-            </CardDescription>
+    <div className="min-h-screen flex flex-col md:flex-row bg-slate-100">
+      <div className="w-full md:w-1/2 p-8 flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardHeader className="space-y-1 text-center">
+            <CardTitle className="text-2xl font-bold">Punto Pastelero</CardTitle>
+            <CardDescription>Ingrese a su cuenta para acceder al sistema</CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="login" value={activeTab} onValueChange={setActiveTab}>
+            <Tabs defaultValue="login" className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-4">
                 <TabsTrigger value="login">Iniciar Sesión</TabsTrigger>
-                <TabsTrigger value="register">Registrarse</TabsTrigger>
+                <TabsTrigger value="register">Crear Cuenta</TabsTrigger>
               </TabsList>
               
               <TabsContent value="login">
@@ -101,6 +100,7 @@ export default function AuthPage() {
                         </FormItem>
                       )}
                     />
+                    
                     <FormField
                       control={loginForm.control}
                       name="password"
@@ -114,33 +114,16 @@ export default function AuthPage() {
                         </FormItem>
                       )}
                     />
+                    
                     <Button 
                       type="submit" 
                       className="w-full" 
                       disabled={loginMutation.isPending}
                     >
-                      {loginMutation.isPending ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Iniciando sesión...
-                        </>
-                      ) : (
-                        "Iniciar Sesión"
-                      )}
+                      {loginMutation.isPending ? "Iniciando sesión..." : "Iniciar Sesión"}
                     </Button>
                   </form>
                 </Form>
-                <div className="mt-4 text-center text-sm">
-                  <p>¿No tienes una cuenta?{" "}
-                    <Button 
-                      variant="link" 
-                      className="p-0" 
-                      onClick={() => setActiveTab("register")}
-                    >
-                      Regístrate
-                    </Button>
-                  </p>
-                </div>
               </TabsContent>
               
               <TabsContent value="register">
@@ -159,19 +142,7 @@ export default function AuthPage() {
                         </FormItem>
                       )}
                     />
-                    <FormField
-                      control={registerForm.control}
-                      name="email"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Correo Electrónico</FormLabel>
-                          <FormControl>
-                            <Input placeholder="correo@ejemplo.com" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    
                     <FormField
                       control={registerForm.control}
                       name="username"
@@ -185,6 +156,7 @@ export default function AuthPage() {
                         </FormItem>
                       )}
                     />
+                    
                     <FormField
                       control={registerForm.control}
                       name="password"
@@ -198,80 +170,56 @@ export default function AuthPage() {
                         </FormItem>
                       )}
                     />
+                    
                     <Button 
                       type="submit" 
                       className="w-full" 
                       disabled={registerMutation.isPending}
                     >
-                      {registerMutation.isPending ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Registrando...
-                        </>
-                      ) : (
-                        "Registrarse"
-                      )}
+                      {registerMutation.isPending ? "Creando cuenta..." : "Crear Cuenta"}
                     </Button>
                   </form>
                 </Form>
-                <div className="mt-4 text-center text-sm">
-                  <p>¿Ya tienes una cuenta?{" "}
-                    <Button 
-                      variant="link" 
-                      className="p-0" 
-                      onClick={() => setActiveTab("login")}
-                    >
-                      Inicia sesión
-                    </Button>
-                  </p>
-                </div>
               </TabsContent>
             </Tabs>
           </CardContent>
-          <CardFooter className="flex flex-col space-y-2">
-            <p className="text-xs text-center text-gray-500 mt-4">
-              © 2023 Punto Pastelero - Sistema de Gestión Integral
+          <CardFooter className="flex flex-col items-center justify-center">
+            <p className="px-8 text-center text-sm text-muted-foreground">
+              Sistema de gestión para Punto Pastelero
             </p>
           </CardFooter>
         </Card>
       </div>
       
-      {/* Hero section */}
-      <div className="hidden md:block w-full max-w-md p-8">
-        <h1 className="text-3xl font-bold text-primary-700 mb-4">Sistema de Gestión Integral</h1>
-        <p className="text-gray-600 mb-6">
-          Un software completo para la gestión de tu negocio de pastelería, con funciones de punto de venta, 
-          gestión de inventario, clientes, proveedores y mucho más.
-        </p>
-        
-        <div className="space-y-4">
-          <div className="flex items-start">
-            <div className="bg-primary-100 p-2 rounded-full mr-3">
-              <Store className="h-5 w-5 text-primary-600" />
-            </div>
-            <div>
-              <h3 className="font-medium text-gray-800">Punto de Venta Intuitivo</h3>
-              <p className="text-sm text-gray-600">Realiza ventas de manera rápida y sencilla</p>
-            </div>
-          </div>
+      <div className="w-full md:w-1/2 bg-primary p-8 text-white hidden md:flex flex-col justify-center items-center">
+        <div className="max-w-md text-center">
+          <ShoppingBag className="h-16 w-16 mx-auto mb-6" />
+          <h1 className="text-3xl font-bold mb-3">Sistema de Gestión Integral</h1>
+          <p className="text-lg mb-6">Punto de venta, gestión de productos, clientes y proveedores</p>
           
-          <div className="flex items-start">
-            <div className="bg-primary-100 p-2 rounded-full mr-3">
-              <Store className="h-5 w-5 text-primary-600" />
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="p-4 bg-white/10 rounded-lg flex flex-col items-center">
+              <ShoppingBag className="h-8 w-8 mb-2" />
+              <h3 className="font-medium">Punto de Venta</h3>
+              <p className="text-sm">Gestión rápida y eficiente de ventas</p>
             </div>
-            <div>
-              <h3 className="font-medium text-gray-800">Gestión de Productos</h3>
-              <p className="text-sm text-gray-600">Control completo de tu inventario con múltiples códigos de barra</p>
+            
+            <div className="p-4 bg-white/10 rounded-lg flex flex-col items-center">
+              <Package className="h-8 w-8 mb-2" />
+              <h3 className="font-medium">Inventario</h3>
+              <p className="text-sm">Control de stock y productos</p>
             </div>
-          </div>
-          
-          <div className="flex items-start">
-            <div className="bg-primary-100 p-2 rounded-full mr-3">
-              <Store className="h-5 w-5 text-primary-600" />
+            
+            <div className="p-4 bg-white/10 rounded-lg flex flex-col items-center">
+              <Users className="h-8 w-8 mb-2" />
+              <h3 className="font-medium">Clientes</h3>
+              <p className="text-sm">Gestión de datos y cuentas corrientes</p>
             </div>
-            <div>
-              <h3 className="font-medium text-gray-800">Clientes y Proveedores</h3>
-              <p className="text-sm text-gray-600">Administra toda la información de tus clientes y proveedores</p>
+            
+            <div className="p-4 bg-white/10 rounded-lg flex flex-col items-center">
+              <BarChart className="h-8 w-8 mb-2" />
+              <h3 className="font-medium">Reportes</h3>
+              <p className="text-sm">Estadísticas y análisis de ventas</p>
             </div>
           </div>
         </div>

@@ -26,29 +26,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     data: user,
     error,
     isLoading,
-  } = useQuery<SelectUser | null, Error>({
+  } = useQuery<SelectUser | undefined, Error>({
     queryKey: ["/api/user"],
-    queryFn: async ({ queryKey }) => {
-      try {
-        const res = await fetch(queryKey[0] as string, {
-          credentials: "include",
-        });
-        
-        if (res.status === 401) {
-          return null;
-        }
-        
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(`${res.status}: ${text || res.statusText}`);
-        }
-        
-        return await res.json();
-      } catch (error) {
-        console.error("Auth fetch error:", error);
-        return null;
-      }
-    },
+    queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
   const loginMutation = useMutation({
@@ -65,8 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     onError: (error: Error) => {
       toast({
-        title: "Error al iniciar sesión",
-        description: error.message,
+        title: "Error de inicio de sesión",
+        description: error.message || "Nombre de usuario o contraseña incorrectos",
         variant: "destructive",
       });
     },
@@ -86,8 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     onError: (error: Error) => {
       toast({
-        title: "Error al registrarse",
-        description: error.message,
+        title: "Error de registro",
+        description: error.message || "No se pudo crear la cuenta",
         variant: "destructive",
       });
     },

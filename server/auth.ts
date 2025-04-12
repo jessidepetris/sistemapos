@@ -30,12 +30,13 @@ async function comparePasswords(supplied: string, stored: string) {
 
 export function setupAuth(app: Express) {
   const sessionSettings: session.SessionOptions = {
-    secret: process.env.SESSION_SECRET || "punto-pastelero-secret-key",
+    secret: process.env.SESSION_SECRET || "punto-pastelero-secret",
     resave: false,
     saveUninitialized: false,
     store: storage.sessionStore,
-    cookie: {
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    cookie: { 
+      maxAge: 1000 * 60 * 60 * 24, // 1 day
+      secure: process.env.NODE_ENV === "production"
     }
   };
 
@@ -48,37 +49,15 @@ export function setupAuth(app: Express) {
     new LocalStrategy(async (username, password, done) => {
       try {
         const user = await storage.getUserByUsername(username);
-        
-        // If no user found or user is inactive
-        if (!user || !user.isActive) {
-          return done(null, false, { message: "Usuario o contraseña inválidos" });
+        if (!user || !(await comparePasswords(password, user.password))) {
+          return done(null, false);
         }
         
-        // If using bcrypt in the future
-        if (password === "password" && username === "admin") {
-          // Update last login time
-          await storage.updateUser(user.id, { lastLogin: new Date() });
-          return done(null, user);
+        if (!user.active) {
+          return done(null, false, { message: "This account is inactive" });
         }
         
-        // For hashed passwords when implemented
-        if (user.password.includes(".")) {
-          const isValid = await comparePasswords(password, user.password);
-          if (!isValid) {
-            return done(null, false, { message: "Usuario o contraseña inválidos" });
-          }
-          // Update last login time
-          await storage.updateUser(user.id, { lastLogin: new Date() });
-          return done(null, user);
-        } else {
-          // For direct comparison (demo only)
-          if (user.password !== password) {
-            return done(null, false, { message: "Usuario o contraseña inválidos" });
-          }
-          // Update last login time
-          await storage.updateUser(user.id, { lastLogin: new Date() });
-          return done(null, user);
-        }
+        return done(null, user);
       } catch (error) {
         return done(error);
       }
@@ -86,7 +65,6 @@ export function setupAuth(app: Express) {
   );
 
   passport.serializeUser((user, done) => done(null, user.id));
-  
   passport.deserializeUser(async (id: number, done) => {
     try {
       const user = await storage.getUser(id);
@@ -100,24 +78,26 @@ export function setupAuth(app: Express) {
     try {
       const existingUser = await storage.getUserByUsername(req.body.username);
       if (existingUser) {
-        return res.status(400).send("El nombre de usuario ya existe");
+        return res.status(400).send("Username already exists");
       }
 
-      // Hash password for production
-      const hashedPassword = await hashPassword(req.body.password);
-      
+      // If no users exist yet, make the first user an admin
+      const allUsers = await storage.getAllUsers();
+      const role = allUsers.length === 0 ? "admin" : (req.body.role || "employee");
+
       const user = await storage.createUser({
         ...req.body,
-        password: hashedPassword
+        password: await hashPassword(req.body.password),
+        role,
+        active: true
       });
 
       // Remove password from response
-      const userResponse = { ...user };
-      delete userResponse.password;
+      const { password, ...userWithoutPassword } = user;
 
       req.login(user, (err) => {
         if (err) return next(err);
-        res.status(201).json(userResponse);
+        res.status(201).json(userWithoutPassword);
       });
     } catch (error) {
       next(error);
@@ -126,20 +106,16 @@ export function setupAuth(app: Express) {
 
   app.post("/api/login", (req, res, next) => {
     passport.authenticate("local", (err, user, info) => {
-      if (err) {
-        return next(err);
-      }
+      if (err) return next(err);
       if (!user) {
-        return res.status(401).json({ message: info?.message || "Autenticación fallida" });
+        return res.status(401).json({ message: "Invalid username or password" });
       }
       req.login(user, (err) => {
-        if (err) {
-          return next(err);
-        }
+        if (err) return next(err);
+        
         // Remove password from response
-        const userResponse = { ...user };
-        delete userResponse.password;
-        return res.status(200).json(userResponse);
+        const { password, ...userWithoutPassword } = user;
+        res.status(200).json(userWithoutPassword);
       });
     })(req, res, next);
   });
@@ -147,99 +123,38 @@ export function setupAuth(app: Express) {
   app.post("/api/logout", (req, res, next) => {
     req.logout((err) => {
       if (err) return next(err);
-      res.sendStatus(200);
+      req.session.destroy((err) => {
+        if (err) return next(err);
+        res.clearCookie("connect.sid");
+        res.sendStatus(200);
+      });
     });
   });
 
   app.get("/api/user", (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    // Remove password from response
-    const userResponse = { ...req.user } as any;
-    delete userResponse.password;
-    res.json(userResponse);
-  });
-  
-  // Get all users (admin only)
-  app.get("/api/users", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    if (req.user?.role !== "admin") return res.sendStatus(403);
     
+    // Remove password from response
+    const { password, ...userWithoutPassword } = req.user;
+    res.json(userWithoutPassword);
+  });
+
+  // Seed admin user if no users exist
+  (async () => {
     try {
       const users = await storage.getAllUsers();
-      // Remove passwords from response
-      const usersResponse = users.map(user => {
-        const userWithoutPassword = { ...user };
-        delete userWithoutPassword.password;
-        return userWithoutPassword;
-      });
-      
-      res.json(usersResponse);
+      if (users.length === 0) {
+        await storage.createUser({
+          username: "admin",
+          password: await hashPassword("admin123"),
+          fullName: "Administrador",
+          role: "admin",
+          active: true
+        });
+        console.log("Created default admin user: admin / admin123");
+      }
     } catch (error) {
-      res.status(500).json({ message: "Error al obtener usuarios" });
+      console.error("Error seeding initial admin user:", error);
     }
-  });
-  
-  // Create a new user (admin only)
-  app.post("/api/users", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    if (req.user?.role !== "admin") return res.sendStatus(403);
-    
-    try {
-      const existingUser = await storage.getUserByUsername(req.body.username);
-      if (existingUser) {
-        return res.status(400).json({ message: "El nombre de usuario ya existe" });
-      }
-
-      // Hash password
-      const hashedPassword = await hashPassword(req.body.password);
-      
-      const user = await storage.createUser({
-        ...req.body,
-        password: hashedPassword
-      });
-
-      // Remove password from response
-      const userResponse = { ...user };
-      delete userResponse.password;
-      
-      res.status(201).json(userResponse);
-    } catch (error) {
-      res.status(500).json({ message: "Error al crear usuario" });
-    }
-  });
-  
-  // Update a user (admin only)
-  app.put("/api/users/:id", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    if (req.user?.role !== "admin") return res.sendStatus(403);
-    
-    const userId = parseInt(req.params.id);
-    
-    try {
-      const existingUser = await storage.getUser(userId);
-      if (!existingUser) {
-        return res.status(404).json({ message: "Usuario no encontrado" });
-      }
-      
-      let userData = { ...req.body };
-      
-      // If password is being updated, hash it
-      if (userData.password) {
-        userData.password = await hashPassword(userData.password);
-      }
-      
-      const updatedUser = await storage.updateUser(userId, userData);
-      if (!updatedUser) {
-        return res.status(404).json({ message: "Usuario no encontrado" });
-      }
-      
-      // Remove password from response
-      const userResponse = { ...updatedUser };
-      delete userResponse.password;
-      
-      res.json(userResponse);
-    } catch (error) {
-      res.status(500).json({ message: "Error al actualizar usuario" });
-    }
-  });
+  })();
 }
