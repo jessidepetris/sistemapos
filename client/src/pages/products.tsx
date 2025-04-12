@@ -234,6 +234,19 @@ export default function ProductsPage() {
   const handleEditProduct = (product: any) => {
     setEditingProductId(product.id);
     
+    // Inicializar las conversiones desde el producto
+    const productConversions = product.conversionRates 
+      ? (typeof product.conversionRates === 'string' 
+          ? JSON.parse(product.conversionRates) 
+          : product.conversionRates)
+      : [];
+    
+    setConversionRates(productConversions);
+    
+    // Inicializar la lista de códigos de barras
+    const productBarcodes = product.barcodes || [];
+    setBarcodesList(productBarcodes);
+    
     // Format data for form
     form.reset({
       name: product.name,
@@ -247,7 +260,9 @@ export default function ProductsPage() {
       supplierId: product.supplierId,
       isRefrigerated: product.isRefrigerated,
       isBulk: product.isBulk,
-      conversionRates: product.conversionRates,
+      conversionRates: productConversions,
+      conversionUnit: "",
+      conversionFactor: 0,
     });
     
     setIsDialogOpen(true);
@@ -256,6 +271,13 @@ export default function ProductsPage() {
   // Open dialog for new product
   const handleNewProduct = () => {
     setEditingProductId(null);
+    
+    // Limpiar variables de estado
+    setConversionRates([]);
+    setBarcodesList([]);
+    setActiveTab("general");
+    
+    // Reiniciar el formulario
     form.reset({
       name: "",
       description: "",
@@ -267,6 +289,9 @@ export default function ProductsPage() {
       stockAlert: 0,
       isRefrigerated: false,
       isBulk: false,
+      conversionRates: [],
+      conversionUnit: "",
+      conversionFactor: 0,
     });
     setIsDialogOpen(true);
   };
@@ -392,7 +417,7 @@ export default function ProductsPage() {
       
       {/* Create/Edit Product Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingProductId ? "Editar Producto" : "Nuevo Producto"}
@@ -401,218 +426,367 @@ export default function ProductsPage() {
           
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Nombre del Producto</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Ingrese nombre" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Descripción</FormLabel>
-                        <FormControl>
-                          <Textarea placeholder="Descripción del producto" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="barcodes"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Códigos de Barras</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Separados por comas" {...field} />
-                        </FormControl>
-                        <FormDescription>
-                          Ingrese múltiples códigos separados por comas
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="supplierId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Proveedor</FormLabel>
-                        <Select 
-                          value={field.value?.toString()} 
-                          onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Seleccionar proveedor" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="">Sin proveedor</SelectItem>
-                            {suppliers?.map((supplier: any) => (
-                              <SelectItem key={supplier.id} value={supplier.id.toString()}>
-                                {supplier.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+              
+              <Tabs defaultValue="general" value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <TabsList className="grid grid-cols-3 mb-4">
+                  <TabsTrigger value="general" className="flex items-center gap-2">
+                    <Package size={16} />
+                    Información General
+                  </TabsTrigger>
+                  <TabsTrigger value="barcodes" className="flex items-center gap-2">
+                    <BarChart size={16} />
+                    Códigos de Barras
+                  </TabsTrigger>
+                  <TabsTrigger value="conversions" className="flex items-center gap-2" disabled={!watchIsBulk}>
+                    <Scale size={16} />
+                    Conversiones de Unidades
+                  </TabsTrigger>
+                </TabsList>
                 
-                <div className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="price"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Precio de Venta</FormLabel>
-                          <FormControl>
-                            <Input type="number" step="0.01" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="cost"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Costo</FormLabel>
-                          <FormControl>
-                            <Input type="number" step="0.01" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="stock"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Stock Actual</FormLabel>
-                          <FormControl>
-                            <Input type="number" step="0.01" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="stockAlert"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Alerta de Stock</FormLabel>
-                          <FormControl>
-                            <Input type="number" step="0.01" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="baseUnit"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Unidad Base</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
+                {/* Pestaña de Información General */}
+                <TabsContent value="general" className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-6">
+                      <FormField
+                        control={form.control}
+                        name="name"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Nombre del Producto</FormLabel>
                             <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Seleccionar unidad" />
-                              </SelectTrigger>
+                              <Input placeholder="Ingrese nombre" {...field} />
                             </FormControl>
-                            <SelectContent>
-                              <SelectItem value="unidad">Unidad</SelectItem>
-                              <SelectItem value="kg">Kilogramo</SelectItem>
-                              <SelectItem value="g">Gramo</SelectItem>
-                              <SelectItem value="l">Litro</SelectItem>
-                              <SelectItem value="ml">Mililitro</SelectItem>
-                              <SelectItem value="caja">Caja</SelectItem>
-                              <SelectItem value="paquete">Paquete</SelectItem>
-                            </SelectContent>
-                          </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name="description"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Descripción</FormLabel>
+                            <FormControl>
+                              <Textarea placeholder="Descripción del producto" {...field as any} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name="supplierId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Proveedor</FormLabel>
+                            <Select 
+                              value={field.value?.toString()} 
+                              onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Seleccionar proveedor" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="">Sin proveedor</SelectItem>
+                                {suppliers?.map((supplier: any) => (
+                                  <SelectItem key={supplier.id} value={supplier.id.toString()}>
+                                    {supplier.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="price"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Precio de Venta</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name="cost"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Costo</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="stock"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Stock Actual</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name="stockAlert"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Alerta de Stock</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      
+                      <FormField
+                        control={form.control}
+                        name="baseUnit"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Unidad Base</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Seleccionar unidad" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="unidad">Unidad</SelectItem>
+                                <SelectItem value="kg">Kilogramo</SelectItem>
+                                <SelectItem value="g">Gramo</SelectItem>
+                                <SelectItem value="l">Litro</SelectItem>
+                                <SelectItem value="ml">Mililitro</SelectItem>
+                                <SelectItem value="caja">Caja</SelectItem>
+                                <SelectItem value="paquete">Paquete</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <div className="flex flex-col space-y-4 mt-4">
+                        <FormField
+                          control={form.control}
+                          name="isRefrigerated"
+                          render={({ field }) => (
+                            <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                              <div className="space-y-1 leading-none">
+                                <FormLabel className="flex items-center gap-2">
+                                  <Thermometer size={16} className="text-blue-500" />
+                                  Producto Refrigerado
+                                </FormLabel>
+                                <FormDescription>
+                                  Requiere almacenamiento en frío
+                                </FormDescription>
+                              </div>
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name="isBulk"
+                          render={({ field }) => (
+                            <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value}
+                                  onCheckedChange={(checked) => {
+                                    field.onChange(checked);
+                                    if (!checked) {
+                                      // Si se desmarca, limpiamos las conversiones
+                                      setConversionRates([]);
+                                      form.setValue("conversionRates", []);
+                                      
+                                      // Si estamos en la pestaña de conversiones, cambiar a general
+                                      if (activeTab === "conversions") {
+                                        setActiveTab("general");
+                                      }
+                                    }
+                                  }}
+                                />
+                              </FormControl>
+                              <div className="space-y-1 leading-none">
+                                <FormLabel className="flex items-center gap-2">
+                                  <Scale size={16} className="text-amber-500" />
+                                  Producto a Granel
+                                </FormLabel>
+                                <FormDescription>
+                                  Se vende por peso o volumen en diferentes unidades
+                                </FormDescription>
+                              </div>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+                
+                {/* Pestaña de Códigos de Barras */}
+                <TabsContent value="barcodes" className="space-y-6">
+                  <div className="flex flex-col space-y-4">
+                    <h3 className="text-lg font-medium">Códigos de Barras</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Agregue múltiples códigos de barras para el producto. Útil para productos con diferentes presentaciones o empaques.
+                    </p>
+                    
+                    <FormField
+                      control={form.control}
+                      name="barcodes"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Códigos de Barras</FormLabel>
+                          <FormControl>
+                            <Input 
+                              placeholder="Separados por comas" 
+                              {...field} 
+                              onChange={(e) => {
+                                field.onChange(e);
+                                // Actualizar la lista visual de códigos
+                                const codes = e.target.value.split(',').map(b => b.trim()).filter(Boolean);
+                                setBarcodesList(codes);
+                              }}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Ingrese múltiples códigos separados por comas
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                  </div>
-                  
-                  <div className="flex flex-col space-y-4 mt-4">
-                    <FormField
-                      control={form.control}
-                      name="isRefrigerated"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                          <FormControl>
-                            <Checkbox
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
-                          </FormControl>
-                          <div className="space-y-1 leading-none">
-                            <FormLabel>Producto Refrigerado</FormLabel>
-                            <FormDescription>
-                              Requiere almacenamiento en frío
-                            </FormDescription>
-                          </div>
-                        </FormItem>
-                      )}
-                    />
                     
-                    <FormField
-                      control={form.control}
-                      name="isBulk"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                          <FormControl>
-                            <Checkbox
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
-                          </FormControl>
-                          <div className="space-y-1 leading-none">
-                            <FormLabel>Producto a Granel</FormLabel>
-                            <FormDescription>
-                              Se vende por peso o volumen
-                            </FormDescription>
-                          </div>
-                        </FormItem>
-                      )}
-                    />
+                    {/* Vista previa de los códigos de barras */}
+                    {barcodesList.length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-medium mb-2">Códigos ingresados:</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {barcodesList.map((code, index) => (
+                            <Badge key={index} variant="outline" className="px-3 py-1 flex items-center gap-2">
+                              <BarChart size={14} />
+                              {code}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              </div>
+                </TabsContent>
+                
+                {/* Pestaña de Conversiones de Unidades (solo visible si es producto a granel) */}
+                <TabsContent value="conversions" className="space-y-6">
+                  <div className="flex flex-col space-y-4">
+                    <h3 className="text-lg font-medium">Conversiones de Unidades</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Configure las conversiones entre la unidad base y otras unidades de venta. Por ejemplo, de kg a gramos, onzas, etc.
+                    </p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="conversionUnit"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Unidad de Conversión</FormLabel>
+                            <FormControl>
+                              <Input placeholder="ej. gramos, onzas" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name="conversionFactor"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Factor de Conversión</FormLabel>
+                            <FormControl>
+                              <Input type="number" step="0.001" placeholder="ej. 1000" {...field} />
+                            </FormControl>
+                            <FormDescription>
+                              1 {form.watch("baseUnit")} = X {form.watch("conversionUnit")}
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <div className="flex items-end">
+                        <Button 
+                          type="button" 
+                          onClick={addConversionRate}
+                          className="w-full"
+                        >
+                          <Plus size={16} className="mr-2" />
+                          Agregar Conversión
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    {/* Lista de conversiones agregadas */}
+                    {conversionRates.length > 0 && (
+                      <div className="mt-4 border rounded-md p-4">
+                        <h4 className="text-sm font-medium mb-2">Conversiones configuradas:</h4>
+                        <div className="space-y-2">
+                          {conversionRates.map((conv, index) => (
+                            <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                              <span>
+                                1 {form.watch("baseUnit")} = {conv.factor} {conv.unit}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeConversionRate(index)}
+                              >
+                                <X size={16} className="text-destructive" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+              </Tabs>
               
               <DialogFooter>
                 <Button
