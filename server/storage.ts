@@ -3,7 +3,8 @@ import { users, User, InsertUser, Supplier, InsertSupplier, Customer, InsertCust
   Order, InsertOrder, OrderItem, InsertOrderItem, Note, InsertNote, AccountTransaction, InsertAccountTransaction, 
   Vehicle, InsertVehicle, DeliveryZone, InsertDeliveryZone, DeliveryRoute, InsertDeliveryRoute, 
   Delivery, InsertDelivery, DeliveryEvent, InsertDeliveryEvent, RouteAssignment, InsertRouteAssignment, 
-  Cart, InsertCart, CartItem, InsertCartItem, WebUser, InsertWebUser } from "@shared/schema";
+  Cart, InsertCart, CartItem, InsertCartItem, WebUser, InsertWebUser,
+  ProductCategory, InsertProductCategory, ProductCategoryRelation, InsertProductCategoryRelation } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 
@@ -139,6 +140,20 @@ export interface IStorage {
   createRouteAssignment(assignment: InsertRouteAssignment): Promise<RouteAssignment>;
   updateRouteAssignment(id: number, assignment: Partial<RouteAssignment>): Promise<RouteAssignment>;
   deleteRouteAssignment(id: number): Promise<void>;
+  
+  // Product Categories
+  getProductCategory(id: number): Promise<ProductCategory | undefined>;
+  getAllProductCategories(): Promise<ProductCategory[]>;
+  getProductCategoriesByParentId(parentId: number | null): Promise<ProductCategory[]>;
+  createProductCategory(category: InsertProductCategory): Promise<ProductCategory>;
+  updateProductCategory(id: number, category: Partial<ProductCategory>): Promise<ProductCategory>;
+  deleteProductCategory(id: number): Promise<void>;
+  
+  // Product Category Relations
+  getProductCategoriesByProductId(productId: number): Promise<ProductCategory[]>;
+  getProductsByCategory(categoryId: number): Promise<Product[]>;
+  addProductToCategory(productId: number, categoryId: number): Promise<ProductCategoryRelation>;
+  removeProductFromCategory(productId: number, categoryId: number): Promise<void>;
   
   // Session store
   sessionStore: session.Store;
