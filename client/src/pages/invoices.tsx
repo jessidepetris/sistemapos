@@ -23,13 +23,13 @@ import InvoiceDetail from "@/components/invoices/InvoiceDetail";
 export default function InvoicesPage() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
-  const [dateRange, setDateRange] = useState({ startDate: null, endDate: null });
+  const [dateRange, setDateRange] = useState<{ startDate: Date | null, endDate: Date | null }>({ startDate: null, endDate: null });
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   
   // Get invoices
-  const { data: invoices, isLoading } = useQuery({
+  const { data: invoices = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/invoices"],
     retry: false,
   });
@@ -41,25 +41,23 @@ export default function InvoicesPage() {
   };
   
   // Filtered invoices
-  const filteredInvoices = invoices
-    ? invoices.filter((invoice: any) => {
-        // Filter by search query
-        const matchesSearch = !searchQuery || 
-          invoice.id.toString().includes(searchQuery) || 
-          (invoice.customer?.name && invoice.customer.name.toLowerCase().includes(searchQuery.toLowerCase()));
-        
-        // Filter by date range
-        let matchesDateRange = true;
-        if (dateRange.startDate) {
-          matchesDateRange = new Date(invoice.timestamp) >= new Date(dateRange.startDate);
-        }
-        if (dateRange.endDate && matchesDateRange) {
-          matchesDateRange = new Date(invoice.timestamp) <= new Date(dateRange.endDate);
-        }
-        
-        return matchesSearch && matchesDateRange;
-      })
-    : [];
+  const filteredInvoices = invoices.filter((invoice: any) => {
+    // Filter by search query
+    const matchesSearch = !searchQuery || 
+      invoice.id.toString().includes(searchQuery) || 
+      (invoice.customer?.name && invoice.customer.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    // Filter by date range
+    let matchesDateRange = true;
+    if (dateRange.startDate) {
+      matchesDateRange = new Date(invoice.timestamp) >= new Date(dateRange.startDate);
+    }
+    if (dateRange.endDate && matchesDateRange) {
+      matchesDateRange = new Date(invoice.timestamp) <= new Date(dateRange.endDate);
+    }
+    
+    return matchesSearch && matchesDateRange;
+  });
   
   // View invoice details
   const handleViewInvoice = (invoice: any) => {
