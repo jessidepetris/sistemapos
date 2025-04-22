@@ -1,5 +1,5 @@
 import { ReactNode, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ShoppingCart, User, Search, Menu, X } from "lucide-react";
@@ -20,6 +20,7 @@ export default function CatalogLayout({ children }: CatalogLayoutProps) {
   const { user, logoutMutation } = useWebAuth();
   const { totalItems } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [, setLocation] = useLocation();
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
