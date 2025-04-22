@@ -1,12 +1,11 @@
-import { users, User, InsertUser, Supplier, InsertSupplier, Customer, InsertCustomer, Product, InsertProduct, Account, InsertAccount, Sale, InsertSale, SaleItem, InsertSaleItem, Order, InsertOrder, OrderItem, InsertOrderItem, Note, InsertNote, AccountTransaction, InsertAccountTransaction, Vehicle, InsertVehicle, DeliveryZone, InsertDeliveryZone, DeliveryRoute, InsertDeliveryRoute, Delivery, InsertDelivery, DeliveryEvent, InsertDeliveryEvent, RouteAssignment, InsertRouteAssignment } from "@shared/schema";
+import { users, User, InsertUser, Supplier, InsertSupplier, Customer, InsertCustomer, 
+  Product, InsertProduct, Account, InsertAccount, Sale, InsertSale, SaleItem, InsertSaleItem, 
+  Order, InsertOrder, OrderItem, InsertOrderItem, Note, InsertNote, AccountTransaction, InsertAccountTransaction, 
+  Vehicle, InsertVehicle, DeliveryZone, InsertDeliveryZone, DeliveryRoute, InsertDeliveryRoute, 
+  Delivery, InsertDelivery, DeliveryEvent, InsertDeliveryEvent, RouteAssignment, InsertRouteAssignment, 
+  Cart, InsertCart, CartItem, InsertCartItem, WebUser, InsertWebUser } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
-import { User, InsertUser, Supplier, InsertSupplier, Customer, InsertCustomer, 
-  Product, InsertProduct, Account, InsertAccount, AccountTransaction, InsertAccountTransaction, 
-  Sale, InsertSale, SaleItem, InsertSaleItem, Order, InsertOrder, OrderItem, InsertOrderItem, 
-  Note, InsertNote, Vehicle, InsertVehicle, DeliveryZone, InsertDeliveryZone, 
-  DeliveryRoute, InsertDeliveryRoute, Delivery, InsertDelivery, DeliveryEvent, InsertDeliveryEvent, 
-  RouteAssignment, InsertRouteAssignment, Cart, InsertCart, CartItem, InsertCartItem, WebUser, InsertWebUser } from "@shared/schema";
 
 const MemoryStore = createMemoryStore(session);
 
@@ -240,6 +239,16 @@ export class MemStorage implements IStorage {
     this.deliveryIdCounter = 1;
     this.deliveryEventIdCounter = 1;
     this.routeAssignmentIdCounter = 1;
+    
+    // Inicializar mapas web
+    this.carts = new Map();
+    this.cartItems = new Map();
+    this.webUsers = new Map();
+    
+    // Inicializar contadores web
+    this.cartIdCounter = 1;
+    this.cartItemIdCounter = 1;
+    this.webUserIdCounter = 1;
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000 // prune expired entries every 24h
@@ -990,6 +999,98 @@ export class MemStorage implements IStorage {
     if (assignment) {
       this.routeAssignments.set(id, { ...assignment, status: 'cancelled' });
     }
+  }
+  
+  // Web Cart methods
+  async getCart(id: number): Promise<Cart | undefined> {
+    return this.carts.get(id);
+  }
+  
+  async getCartsBySessionId(sessionId: string): Promise<Cart[]> {
+    return Array.from(this.carts.values())
+      .filter(cart => cart.sessionId === sessionId);
+  }
+  
+  async createCart(insertCart: InsertCart): Promise<Cart> {
+    const id = this.cartIdCounter++;
+    const cart: Cart = {
+      ...insertCart,
+      id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      items: 0,
+      total: "0"
+    };
+    this.carts.set(id, cart);
+    return cart;
+  }
+  
+  async updateCart(id: number, cartData: Partial<Cart>): Promise<Cart> {
+    const cart = await this.getCart(id);
+    if (!cart) {
+      throw new Error(`Carrito con ID ${id} no encontrado`);
+    }
+    
+    const updatedCart = { 
+      ...cart, 
+      ...cartData,
+      updatedAt: new Date()
+    };
+    this.carts.set(id, updatedCart);
+    return updatedCart;
+  }
+  
+  async getCartItem(id: number): Promise<CartItem | undefined> {
+    return this.cartItems.get(id);
+  }
+  
+  async getCartItemsByCartId(cartId: number): Promise<CartItem[]> {
+    return Array.from(this.cartItems.values())
+      .filter(item => item.cartId === cartId);
+  }
+  
+  async createCartItem(insertItem: InsertCartItem): Promise<CartItem> {
+    const id = this.cartItemIdCounter++;
+    const item: CartItem = { ...insertItem, id };
+    this.cartItems.set(id, item);
+    
+    // Actualizar el carrito
+    const cart = await this.getCart(insertItem.cartId);
+    if (cart) {
+      const cartItems = await this.getCartItemsByCartId(cart.id);
+      const total = cartItems.reduce((sum, item) => 
+        sum + parseFloat(item.total), parseFloat(insertItem.total)).toString();
+      
+      await this.updateCart(cart.id, { 
+        items: cartItems.length + 1,
+        total
+      });
+    }
+    
+    return item;
+  }
+  
+  async deleteCartItem(id: number): Promise<void> {
+    const item = this.cartItems.get(id);
+    if (!item) {
+      throw new Error(`Item de carrito con ID ${id} no encontrado`);
+    }
+    
+    // Actualizar el carrito antes de eliminar el item
+    const cart = await this.getCart(item.cartId);
+    if (cart) {
+      const cartItems = await this.getCartItemsByCartId(cart.id);
+      const filteredItems = cartItems.filter(i => i.id !== id);
+      const total = filteredItems.reduce((sum, item) => 
+        sum + parseFloat(item.total), 0).toString();
+      
+      await this.updateCart(cart.id, { 
+        items: filteredItems.length,
+        total
+      });
+    }
+    
+    this.cartItems.delete(id);
   }
 }
 
