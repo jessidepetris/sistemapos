@@ -2785,6 +2785,247 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Product Categories endpoints
+  app.get("/api/product-categories", async (req, res) => {
+    try {
+      const categories = await storage.getAllProductCategories();
+      res.json(categories);
+    } catch (error) {
+      console.error("Error al obtener categorías:", error);
+      res.status(500).json({ error: "Error al obtener categorías de productos" });
+    }
+  });
+  
+  app.get("/api/product-categories/root", async (req, res) => {
+    try {
+      const rootCategories = await storage.getProductCategoriesByParentId(null);
+      res.json(rootCategories);
+    } catch (error) {
+      console.error("Error al obtener categorías raíz:", error);
+      res.status(500).json({ error: "Error al obtener categorías principales" });
+    }
+  });
+  
+  app.get("/api/product-categories/:id/subcategories", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const subCategories = await storage.getProductCategoriesByParentId(id);
+      res.json(subCategories);
+    } catch (error) {
+      console.error("Error al obtener subcategorías:", error);
+      res.status(500).json({ error: "Error al obtener subcategorías" });
+    }
+  });
+  
+  app.get("/api/product-categories/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const category = await storage.getProductCategory(id);
+      
+      if (!category) {
+        return res.status(404).json({ error: "Categoría no encontrada" });
+      }
+      
+      res.json(category);
+    } catch (error) {
+      console.error("Error al obtener categoría:", error);
+      res.status(500).json({ error: "Error al obtener categoría" });
+    }
+  });
+  
+  app.post("/api/product-categories", async (req, res) => {
+    try {
+      // Validar datos de entrada
+      const schema = z.object({
+        name: z.string().min(1, "El nombre es requerido"),
+        description: z.string().optional(),
+        imageUrl: z.string().optional(),
+        parentId: z.number().optional().nullable(),
+        displayOrder: z.number().optional(),
+        active: z.boolean().optional()
+      });
+      
+      const validation = schema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          error: "Datos de categoría inválidos", 
+          details: validation.error.format()
+        });
+      }
+      
+      // Si hay parentId, verificar que exista la categoría padre
+      if (req.body.parentId) {
+        const parentCategory = await storage.getProductCategory(req.body.parentId);
+        if (!parentCategory) {
+          return res.status(400).json({ error: "La categoría padre no existe" });
+        }
+      }
+      
+      const category = await storage.createProductCategory(req.body);
+      res.status(201).json(category);
+    } catch (error) {
+      console.error("Error al crear categoría:", error);
+      res.status(500).json({ error: "Error al crear categoría" });
+    }
+  });
+  
+  app.put("/api/product-categories/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Validar datos de entrada
+      const schema = z.object({
+        name: z.string().min(1, "El nombre es requerido").optional(),
+        description: z.string().optional(),
+        imageUrl: z.string().optional(),
+        parentId: z.number().optional().nullable(),
+        displayOrder: z.number().optional(),
+        active: z.boolean().optional()
+      });
+      
+      const validation = schema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          error: "Datos de categoría inválidos", 
+          details: validation.error.format()
+        });
+      }
+      
+      // Si hay parentId, verificar que exista la categoría padre
+      if (req.body.parentId) {
+        // Evitar ciclos (una categoría no puede ser su propia subcategoría)
+        if (req.body.parentId === id) {
+          return res.status(400).json({ error: "Una categoría no puede ser su propia subcategoría" });
+        }
+        
+        const parentCategory = await storage.getProductCategory(req.body.parentId);
+        if (!parentCategory) {
+          return res.status(400).json({ error: "La categoría padre no existe" });
+        }
+        
+        // Verificar si no estamos creando un ciclo en la jerarquía
+        // (no se puede asignar como padre a una de sus subcategorías)
+        let tempCategory = parentCategory;
+        while (tempCategory && tempCategory.parentId) {
+          if (tempCategory.parentId === id) {
+            return res.status(400).json({ 
+              error: "No se puede asignar como padre a una subcategoría (ciclo en la jerarquía)"
+            });
+          }
+          tempCategory = await storage.getProductCategory(tempCategory.parentId);
+        }
+      }
+      
+      const category = await storage.updateProductCategory(id, req.body);
+      res.json(category);
+    } catch (error) {
+      console.error("Error al actualizar categoría:", error);
+      res.status(500).json({ error: "Error al actualizar categoría" });
+    }
+  });
+  
+  app.delete("/api/product-categories/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Primero verificamos si la categoría existe
+      const category = await storage.getProductCategory(id);
+      if (!category) {
+        return res.status(404).json({ error: "Categoría no encontrada" });
+      }
+      
+      await storage.deleteProductCategory(id);
+      res.json({ success: true, message: "Categoría eliminada correctamente" });
+    } catch (error) {
+      console.error("Error al eliminar categoría:", error);
+      // Si el error es sobre categorías hijas o productos asignados, enviamos 400
+      if (error instanceof Error && error.message.includes("subcategorías") || 
+          error instanceof Error && error.message.includes("productos")) {
+        return res.status(400).json({ error: error.message });
+      }
+      res.status(500).json({ error: "Error al eliminar categoría" });
+    }
+  });
+  
+  // Product-Category relation endpoints
+  app.get("/api/products/:productId/categories", async (req, res) => {
+    try {
+      const productId = parseInt(req.params.productId);
+      
+      // Verificar que el producto exista
+      const product = await storage.getProduct(productId);
+      if (!product) {
+        return res.status(404).json({ error: "Producto no encontrado" });
+      }
+      
+      const categories = await storage.getProductCategoriesByProductId(productId);
+      res.json(categories);
+    } catch (error) {
+      console.error("Error al obtener categorías del producto:", error);
+      res.status(500).json({ error: "Error al obtener categorías del producto" });
+    }
+  });
+  
+  app.get("/api/product-categories/:categoryId/products", async (req, res) => {
+    try {
+      const categoryId = parseInt(req.params.categoryId);
+      
+      // Verificar que la categoría exista
+      const category = await storage.getProductCategory(categoryId);
+      if (!category) {
+        return res.status(404).json({ error: "Categoría no encontrada" });
+      }
+      
+      const products = await storage.getProductsByCategory(categoryId);
+      res.json(products);
+    } catch (error) {
+      console.error("Error al obtener productos de la categoría:", error);
+      res.status(500).json({ error: "Error al obtener productos de la categoría" });
+    }
+  });
+  
+  app.post("/api/products/:productId/categories/:categoryId", async (req, res) => {
+    try {
+      const productId = parseInt(req.params.productId);
+      const categoryId = parseInt(req.params.categoryId);
+      
+      const relation = await storage.addProductToCategory(productId, categoryId);
+      res.status(201).json(relation);
+    } catch (error) {
+      console.error("Error al asignar producto a categoría:", error);
+      
+      // Manejar errores específicos
+      if (error instanceof Error) {
+        if (error.message.includes("ya está asignado")) {
+          return res.status(400).json({ error: error.message });
+        } else if (error.message.includes("no encontrado") || error.message.includes("no encontrada")) {
+          return res.status(404).json({ error: error.message });
+        }
+      }
+      
+      res.status(500).json({ error: "Error al asignar producto a categoría" });
+    }
+  });
+  
+  app.delete("/api/products/:productId/categories/:categoryId", async (req, res) => {
+    try {
+      const productId = parseInt(req.params.productId);
+      const categoryId = parseInt(req.params.categoryId);
+      
+      await storage.removeProductFromCategory(productId, categoryId);
+      res.json({ success: true, message: "Producto removido de la categoría" });
+    } catch (error) {
+      console.error("Error al remover producto de categoría:", error);
+      
+      // Manejar errores específicos
+      if (error instanceof Error && error.message.includes("no encontrada")) {
+        return res.status(404).json({ error: error.message });
+      }
+      
+      res.status(500).json({ error: "Error al remover producto de categoría" });
+    }
+  });
+  
   const httpServer = createServer(app);
 
   return httpServer;
