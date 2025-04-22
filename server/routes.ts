@@ -212,11 +212,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/account-transactions", async (req, res) => {
     try {
-      if (!req.user) {
-        return res.status(401).json({ message: "No autorizado" });
+      // Comprobar si el usuario está autenticado
+      const userId = req.user?.id || req.body.userId;
+      
+      if (!userId) {
+        return res.status(401).json({ message: "No autorizado: Se requiere usuario para la transacción" });
       }
       
       const { accountId, amount, type, description } = req.body;
+      
+      console.log("Solicitud de transacción recibida:", { accountId, amount, type, description, userId });
       
       const account = await storage.getAccount(accountId);
       if (!account) {
@@ -231,21 +236,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         newBalance -= parseFloat(amount);
       }
       
+      console.log("Nuevo balance calculado:", newBalance);
+      
       // Create transaction
       const transaction = await storage.createAccountTransaction({
         accountId,
         amount,
         type,
         description,
-        userId: req.user.id,
+        userId,
         balanceAfter: newBalance
       });
       
       // Update account balance
       await storage.updateAccount(accountId, { balance: newBalance, lastUpdated: new Date() });
       
+      console.log("Transacción creada con éxito:", transaction);
+      
       res.status(201).json(transaction);
     } catch (error) {
+      console.error("Error al crear transacción:", error);
       res.status(400).json({ message: "Error al crear transacción", error: (error as Error).message });
     }
   });
