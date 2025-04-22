@@ -20,6 +20,15 @@ interface ChartProps {
 }
 
 export function BarChart({ data }: ChartProps) {
+  // Si no hay datos o no tienen el formato correcto, mostramos un gráfico vacío
+  if (!data || !data.labels || !data.datasets || !data.datasets[0]) {
+    return (
+      <div className="flex justify-center items-center h-full w-full text-muted-foreground">
+        No hay datos para mostrar
+      </div>
+    );
+  }
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <RechartsBarChart
@@ -50,6 +59,15 @@ export function BarChart({ data }: ChartProps) {
 }
 
 export function PieChart({ data }: ChartProps) {
+  // Si no hay datos o no tienen el formato correcto, mostramos un gráfico vacío
+  if (!data || !data.labels || !data.datasets || !data.datasets[0]) {
+    return (
+      <div className="flex justify-center items-center h-full w-full text-muted-foreground">
+        No hay datos para mostrar
+      </div>
+    );
+  }
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <RechartsPieChart>
@@ -82,6 +100,15 @@ export function PieChart({ data }: ChartProps) {
 }
 
 export function LineChart({ data }: ChartProps) {
+  // Si no hay datos o no tienen el formato correcto, mostramos un gráfico vacío
+  if (!data || !data.labels || !data.datasets || !data.datasets[0]) {
+    return (
+      <div className="flex justify-center items-center h-full w-full text-muted-foreground">
+        No hay datos para mostrar
+      </div>
+    );
+  }
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <RechartsLineChart
