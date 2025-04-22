@@ -786,7 +786,7 @@ export default function CreditNotesPage() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">Sin cliente</SelectItem>
+                        <SelectItem value="0">Sin cliente</SelectItem>
                         {customers?.map((customer: any) => (
                           <SelectItem key={customer.id} value={customer.id.toString()}>
                             {customer.name}
@@ -815,7 +815,7 @@ export default function CreditNotesPage() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">Sin venta relacionada</SelectItem>
+                        <SelectItem value="0">Sin venta relacionada</SelectItem>
                         {sales?.map((sale: any) => (
                           <SelectItem key={sale.id} value={sale.id.toString()}>
                             #{sale.id} - ${parseFloat(sale.total).toFixed(2)} - {formatDate(sale.timestamp)}
