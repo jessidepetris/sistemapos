@@ -353,11 +353,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (account) {
             const newBalance = parseFloat(account.balance.toString()) - parseFloat(total);
             
+            // Descripción detallada basada en el tipo de documento
+            let docTypeText = "Venta";
+            if (documentType === "remito") {
+              docTypeText = "Remito";
+            } else if (documentType === "factura_c") {
+              docTypeText = "Factura C";
+            } else if (documentType === "factura_a") {
+              docTypeText = "Factura A";
+            } else if (documentType === "factura_b") {
+              docTypeText = "Factura B";
+            }
+            
+            const docNumber = invoiceNumber || `#${sale.id}`;
+            
             await storage.createAccountTransaction({
               accountId: account.id,
               amount: total,
               type: "debit",
-              description: `Venta #${sale.id}`,
+              description: `${docTypeText} ${docNumber}`,
               relatedSaleId: sale.id,
               userId: req.user.id
             });
