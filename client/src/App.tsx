@@ -10,7 +10,7 @@ import { ProtectedRoute } from "@/lib/protected-route";
 import Dashboard from "@/pages/dashboard";
 import AuthPage from "@/pages/auth-page";
 import POSPage from "@/pages/pos";
-import ProductsPage from "@/pages/products";
+import ProductsPage from "@/pages/products-page";
 import SuppliersPage from "@/pages/suppliers";
 import CustomersPage from "@/pages/customers";
 import AccountsPage from "@/pages/accounts";
