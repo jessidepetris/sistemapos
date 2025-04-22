@@ -551,7 +551,11 @@ export default function ProductsPage() {
                 
                 {/* Pestaña de Información General */}
                 <TabsContent value="general">
-                  <GeneralTab form={form} suppliers={Array.isArray(suppliers) ? suppliers : []} />
+                  <GeneralTab 
+                    form={form} 
+                    suppliers={Array.isArray(suppliers) ? suppliers : []} 
+                    onTabChange={setActiveTab}
+                  />
                 </TabsContent>
                 
                 {/* Pestaña de Precios */}

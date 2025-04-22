@@ -23,9 +23,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 type GeneralTabProps = {
   form: UseFormReturn<any>;
   suppliers: any[];
+  onTabChange?: (tabValue: string) => void;
 };
 
-export function GeneralTab({ form, suppliers }: GeneralTabProps) {
+export function GeneralTab({ form, suppliers, onTabChange }: GeneralTabProps) {
   return (
     <div className="space-y-6">
       <Card>
@@ -273,8 +274,8 @@ export function GeneralTab({ form, suppliers }: GeneralTabProps) {
                           field.onChange(checked);
                           
                           // Si se marca como compuesto, cambiar a la pestaña de componentes
-                          if (checked && typeof props.onTabChange === 'function') {
-                            props.onTabChange('components');
+                          if (checked && typeof onTabChange === 'function') {
+                            onTabChange('components');
                           }
                         }}
                       />
