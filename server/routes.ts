@@ -1536,16 +1536,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Obtener los ítems del carrito actual
   app.get("/api/web/cart/items", async (req, res) => {
     try {
-      // Obtener sessionId desde cookie
-      const sessionId = req.cookies?.cart_session_id;
+      // Obtener sessionId desde cookie o de la URL
+      let sessionId = req.cookies?.cart_session_id;
       
-      // Log para depuración
-      console.log("Obteniendo ítems del carrito para la sesión:", sessionId);
-      
+      // Si no hay sessionId en la cookie, verificar en los headers y crear uno nuevo si es necesario
       if (!sessionId) {
-        console.log("No hay sessionId en la cookie");
+        console.log("No hay sessionId en la cookie, creando uno nuevo");
+        sessionId = Math.random().toString(36).substring(2, 15);
+        // Configurar cookie con SameSite=Lax para permitir redirecciones
+        res.cookie('cart_session_id', sessionId, {
+          maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: process.env.NODE_ENV === 'production'
+        });
+        console.log("Nueva cookie cart_session_id creada:", sessionId);
+        
+        // Como es nueva, no habrá items todavía
         return res.json([]);
       }
+      
+      console.log("Obteniendo ítems del carrito para la sesión:", sessionId);
       
       // Buscar un carrito existente para esta sesión
       const existingCarts = await storage.getCartsBySessionId(sessionId);
@@ -1555,10 +1566,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (!cart) {
         console.log("No se encontró un carrito activo para la sesión", sessionId);
+        
+        // Crear un nuevo carrito para esta sesión
+        console.log("Creando un nuevo carrito para la sesión:", sessionId);
+        const newCart = await storage.createCart({
+          sessionId,
+          status: 'active',
+          totalAmount: '0',
+          totalItems: 0,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        
+        console.log("Nuevo carrito creado con ID:", newCart.id);
         return res.json([]);
       }
       
       console.log("Carrito encontrado con ID:", cart.id);
+      
+      // Reforzar la cookie en cada respuesta para asegurar que está correctamente configurada
+      res.cookie('cart_session_id', sessionId, {
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production'
+      });
       
       // Obtener items del carrito
       const cartItems = await storage.getCartItemsByCartId(cart.id);
