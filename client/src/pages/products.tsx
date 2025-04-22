@@ -115,9 +115,45 @@ export default function ProductsPage() {
     retry: false,
   });
   
+  // Función para calcular el costo de un producto compuesto basado en sus componentes
+  const calculateCompositeCost = () => {
+    // Si no es un producto compuesto o no hay componentes, retornar
+    const isComposite = form.getValues("isComposite");
+    if (!isComposite || componentsList.length === 0) {
+      return null;
+    }
+    
+    // Calculamos el costo sumando el costo de cada componente * su cantidad
+    let totalCost = 0;
+    
+    componentsList.forEach(component => {
+      // Buscar el producto componente para obtener su costo
+      const componentProduct = products?.find((p: any) => p.id === component.productId);
+      if (componentProduct && componentProduct.cost) {
+        // Multiplicar el costo por la cantidad
+        totalCost += (parseFloat(componentProduct.cost) * parseFloat(component.quantity));
+      }
+    });
+    
+    // Redondeo a 2 decimales
+    return Math.round(totalCost * 100) / 100;
+  };
+  
   // Función para calcular el precio de venta basado en costo, IVA, flete y ganancia
   const calculateSellingPrice = () => {
-    const cost = form.getValues("cost") || 0;
+    let cost = form.getValues("cost") || 0;
+    const isComposite = form.getValues("isComposite");
+    
+    // Si es un producto compuesto, calculamos su costo basado en componentes
+    if (isComposite && componentsList.length > 0) {
+      const compositeCost = calculateCompositeCost();
+      if (compositeCost !== null) {
+        cost = compositeCost;
+        // Actualizamos el campo de costo en el formulario
+        form.setValue("cost", compositeCost);
+      }
+    }
+    
     const ivaRate = form.getValues("iva") || 0;
     const shippingRate = form.getValues("shipping") || 0;
     const profitRate = form.getValues("profit") || 0;
@@ -273,6 +309,18 @@ export default function ProductsPage() {
     // Actualizar el valor en el formulario
     form.setValue("components", newComponentsList);
     
+    // Calcular el nuevo costo basado en los componentes
+    const compositeCost = calculateCompositeCost();
+    if (compositeCost !== null) {
+      form.setValue("cost", compositeCost);
+      // Actualizar el precio de venta basado en el nuevo costo
+      calculateSellingPrice();
+      toast({
+        title: "Costo actualizado",
+        description: `El costo del producto ha sido actualizado a $${compositeCost.toFixed(2)} basado en sus componentes.`,
+      });
+    }
+    
     // Limpiar los campos
     form.setValue("componentProductId", undefined);
     form.setValue("componentQuantity", 0);
@@ -284,6 +332,28 @@ export default function ProductsPage() {
     const newComponentsList = componentsList.filter((_, index) => index !== indexToRemove);
     setComponentsList(newComponentsList);
     form.setValue("components", newComponentsList);
+    
+    // Recalcular el costo si todavía quedan componentes
+    const isComposite = form.getValues("isComposite");
+    if (isComposite && newComponentsList.length > 0) {
+      const compositeCost = calculateCompositeCost();
+      if (compositeCost !== null) {
+        form.setValue("cost", compositeCost);
+        // Actualizar el precio de venta basado en el nuevo costo
+        calculateSellingPrice();
+        toast({
+          title: "Costo actualizado",
+          description: `El costo del producto ha sido actualizado a $${compositeCost.toFixed(2)} basado en sus componentes restantes.`,
+        });
+      }
+    } else if (isComposite && newComponentsList.length === 0) {
+      // Si ya no hay componentes, establecer el costo a 0
+      form.setValue("cost", 0);
+      toast({
+        title: "Costo restablecido",
+        description: "El producto no tiene componentes, el costo ha sido restablecido a $0.",
+      });
+    }
   };
   
   // Create product mutation
