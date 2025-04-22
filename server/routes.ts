@@ -1177,9 +1177,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const products = await storage.getAllProducts();
       
       // Filtrar productos para mostrar en el catálogo
-      // Solo devolver productos con stock > 0 y datos necesarios para el catálogo
+      // Solo devolver productos que estén marcados como visibles en web, con stock > 0 y activos
       const catalogProducts = products
-        .filter(p => parseFloat(p.stock.toString()) > 0 || req.query.showOutOfStock === 'true')
+        .filter(p => {
+          // Si el producto no está activo o no está marcado para mostrar en web, no lo incluimos
+          if (!p.active || !p.webVisible) return false;
+          
+          // Solo incluir productos con stock, a menos que se solicite mostrar los agotados
+          return parseFloat(p.stock.toString()) > 0 || req.query.showOutOfStock === 'true';
+        })
         .map(p => ({
           id: p.id,
           name: p.name,

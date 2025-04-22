@@ -82,6 +82,10 @@ export const products = pgTable("products", {
   isBulk: boolean("is_bulk").default(false),
   // Indicar si es un producto compuesto (combo)
   isComposite: boolean("is_composite").default(false),
+  // Indicar si el producto está activo (disponible para vender)
+  active: boolean("active").default(true),
+  // Indicar si el producto es visible en el catálogo web
+  webVisible: boolean("web_visible").default(false),
   conversionRates: json("conversion_rates"),
   // Categoría del producto
   category: text("category"),
@@ -109,6 +113,8 @@ export const insertProductSchema = createInsertSchema(products).pick({
   isRefrigerated: true,
   isBulk: true,
   isComposite: true,
+  active: true,
+  webVisible: true,
   conversionRates: true,
   category: true,
   imageUrl: true,
