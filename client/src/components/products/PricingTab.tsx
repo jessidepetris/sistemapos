@@ -26,7 +26,7 @@ export function PricingTab({ form, recalculatePrice }: PricingTabProps) {
         <CardHeader>
           <CardTitle>Configuración de Precios</CardTitle>
           <CardDescription>
-            Configure los valores utilizados para calcular el precio final
+            Configure los valores utilizados para calcular el precio final (se actualiza automáticamente)
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -45,6 +45,8 @@ export function PricingTab({ form, recalculatePrice }: PricingTabProps) {
                       {...field} 
                       onChange={(e) => {
                         field.onChange(parseFloat(e.target.value));
+                        // Actualizar precio automáticamente
+                        recalculatePrice();
                       }}
                     />
                   </FormControl>
@@ -71,6 +73,8 @@ export function PricingTab({ form, recalculatePrice }: PricingTabProps) {
                       {...field} 
                       onChange={(e) => {
                         field.onChange(parseFloat(e.target.value));
+                        // Actualizar precio automáticamente
+                        recalculatePrice();
                       }}
                     />
                   </FormControl>
@@ -97,6 +101,8 @@ export function PricingTab({ form, recalculatePrice }: PricingTabProps) {
                       {...field} 
                       onChange={(e) => {
                         field.onChange(parseFloat(e.target.value));
+                        // Actualizar precio automáticamente
+                        recalculatePrice();
                       }}
                     />
                   </FormControl>
@@ -123,6 +129,8 @@ export function PricingTab({ form, recalculatePrice }: PricingTabProps) {
                       {...field} 
                       onChange={(e) => {
                         field.onChange(parseFloat(e.target.value));
+                        // Actualizar precio automáticamente
+                        recalculatePrice();
                       }}
                     />
                   </FormControl>
@@ -159,7 +167,7 @@ export function PricingTab({ form, recalculatePrice }: PricingTabProps) {
                       className="shrink-0"
                     >
                       <RefreshCcw className="h-4 w-4 mr-2" />
-                      Calcular
+                      Actualizar
                     </Button>
                   </div>
                   <FormDescription>
