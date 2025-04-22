@@ -51,8 +51,10 @@ const componentSchema = z.object({
 // Extend the product schema to include a better structure for conversions
 const productFormSchema = insertProductSchema.extend({
   // Transform comma-separated string to array for barcodes
-  barcodes: z.string().optional().transform(val => 
-    val ? val.split(',').map(b => b.trim()).filter(Boolean) : []
+  barcodes: z.preprocess(
+    (val) => typeof val === 'string' && val ? 
+      val.split(',').map((b: string) => b.trim()).filter(Boolean) : [],
+    z.array(z.string().optional())
   ),
   // Form validation for numeric fields
   price: z.coerce.number().min(0, "El precio debe ser mayor o igual a 0"),
@@ -543,7 +545,7 @@ export default function ProductsPage() {
                 
                 {/* Pestaña de Conversiones (para productos a granel) */}
                 <TabsContent value="conversions">
-                  <ConversionsTab 
+                  <EnhancedConversionsTab 
                     form={form} 
                     conversionRates={conversionRates} 
                     setConversionRates={setConversionRates} 
