@@ -5,9 +5,11 @@ import { Loader2, Printer } from 'lucide-react';
 
 interface ThermalTicketProps {
   sale: any;
-  saleItems: any[];
+  saleItems?: any[];
+  items?: any[];
   customerName?: string;
-  businessInfo: {
+  customer?: any;
+  businessInfo?: {
     name: string;
     address: string;
     phone: string;
@@ -15,7 +17,20 @@ interface ThermalTicketProps {
   };
 }
 
-export function ThermalTicket({ sale, saleItems, customerName, businessInfo }: ThermalTicketProps) {
+export function ThermalTicket({ 
+  sale, 
+  saleItems, 
+  items = [],
+  customerName, 
+  customer,
+  businessInfo = {
+    name: 'PUNTO PASTELERO',
+    address: 'Avenida Siempre Viva 123, Springfield',
+    phone: '(555) 123-4567',
+  }
+}: ThermalTicketProps) {
+  // Utilizar saleItems si están definidos, o items como alternativa
+  const products = saleItems || items;
   const [isPrinting, setIsPrinting] = useState(false);
 
   const printTicket = async () => {
@@ -39,16 +54,16 @@ export function ThermalTicket({ sale, saleItems, customerName, businessInfo }: T
         .text('----------------------------------')
         .align('left')
         .text(`Fecha: ${new Date(sale.timestamp).toLocaleString()}`)
-        .text(`Ticket #: ${sale.id}`)
+        .text(`Ticket #: ${sale.id || 'N/A'}`)
         .text(`Comprobante: ${getDocumentTypeName(sale.documentType)}`)
-        .text(`Cliente: ${customerName || 'Consumidor Final'}`)
-        .text(`Vendedor: ${sale.userId}`)
+        .text(`Cliente: ${customerName || (customer?.name) || 'Consumidor Final'}`)
+        .text(`Vendedor: ${sale.userId || 'N/A'}`)
         .text('----------------------------------')
         .text('PRODUCTOS')
         .text('----------------------------------');
       
       // Agregar productos
-      saleItems.forEach(item => {
+      products.forEach(item => {
         escpos
           .text(`${item.name}`)
           .text(`${item.quantity} x $${item.price.toFixed(2)} = $${item.total.toFixed(2)}`)

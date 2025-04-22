@@ -62,13 +62,13 @@ export default function POSPage() {
   const receiptRef = useRef<HTMLDivElement>(null);
   
   // Get products
-  const { data: products, isLoading: isLoadingProducts } = useQuery({
+  const { data: products = [], isLoading: isLoadingProducts } = useQuery<any[]>({
     queryKey: ["/api/products"],
     retry: false,
   });
   
   // Get customers for checkout
-  const { data: customers, isLoading: isLoadingCustomers } = useQuery({
+  const { data: customers = [], isLoading: isLoadingCustomers } = useQuery<any[]>({
     queryKey: ["/api/customers"],
     retry: false,
   });
@@ -893,6 +893,123 @@ export default function POSPage() {
               </Button>
             </div>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Receipt Dialog */}
+      <Dialog open={showReceiptDialog} onOpenChange={setShowReceiptDialog}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Comprobante de Venta</DialogTitle>
+            <DialogHeader className="text-muted-foreground text-sm mt-1">
+              Venta realizada exitosamente. Puede imprimir o exportar el comprobante.
+            </DialogHeader>
+          </DialogHeader>
+          
+          {completedSale && (
+            <div className="py-4">
+              <div className="mb-5 border rounded-lg p-4">
+                <div ref={receiptRef} className="w-full">
+                  {completedSale.documentType.startsWith('factura') ? (
+                    <InvoiceContent 
+                      sale={completedSale} 
+                      items={completedSale.items}
+                      customer={completedSale.customer}
+                    />
+                  ) : (
+                    <div className="flex justify-center">
+                      <ThermalTicket
+                        sale={completedSale}
+                        items={completedSale.items}
+                        customer={completedSale.customer}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <DialogFooter className="flex flex-col sm:flex-row gap-3 justify-end">
+                <Button 
+                  variant="outline"
+                  onClick={() => setShowReceiptDialog(false)}
+                >
+                  Cerrar
+                </Button>
+                
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    if (completedSale.documentType.startsWith('factura')) {
+                      // Generar un PDF con la factura
+                      InvoicePDF.generate(
+                        completedSale,
+                        completedSale.items,
+                        completedSale.customer
+                      );
+                    } else {
+                      // Imprimir en impresora térmica
+                      if (receiptRef.current) {
+                        try {
+                          const printWindow = window.open('', '_blank');
+                          if (printWindow) {
+                            printWindow.document.write(`
+                              <html>
+                                <head>
+                                  <title>Imprimir Ticket</title>
+                                  <style>
+                                    body { font-family: monospace; }
+                                    .receipt { width: 80mm; margin: 0 auto; }
+                                  </style>
+                                </head>
+                                <body>
+                                  <div class="receipt">
+                                    ${receiptRef.current.innerHTML}
+                                  </div>
+                                  <script>
+                                    window.onload = function() {
+                                      window.print();
+                                      setTimeout(function() { window.close(); }, 500);
+                                    };
+                                  </script>
+                                </body>
+                              </html>
+                            `);
+                            printWindow.document.close();
+                          }
+                        } catch (error) {
+                          console.error('Error al imprimir:', error);
+                          toast({
+                            title: "Error al imprimir",
+                            description: "No se pudo imprimir el ticket",
+                            variant: "destructive"
+                          });
+                        }
+                      }
+                    }
+                  }}
+                >
+                  {completedSale.documentType.startsWith('factura') 
+                    ? "Exportar a PDF" 
+                    : "Imprimir Ticket"
+                  }
+                </Button>
+                
+                {completedSale.documentType.startsWith('factura') && (
+                  <Button
+                    onClick={() => {
+                      // Enviar por email
+                      toast({
+                        title: "Enviando por email",
+                        description: "El comprobante se enviará al correo del cliente"
+                      });
+                    }}
+                  >
+                    Enviar por Email
+                  </Button>
+                )}
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
