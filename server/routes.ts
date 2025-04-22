@@ -293,7 +293,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/products", async (req, res) => {
     try {
-      const product = await storage.createProduct(req.body);
+      let productData = { ...req.body };
+      
+      // Si es un producto compuesto, calcular el costo automáticamente
+      if (productData.isComposite && productData.components && productData.components.length > 0) {
+        let components;
+        
+        // Parsear los componentes si están en formato string
+        if (typeof productData.components === 'string') {
+          try {
+            components = JSON.parse(productData.components);
+          } catch (e) {
+            console.error("Error al parsear componentes:", e);
+            components = [];
+          }
+        } else {
+          components = productData.components;
+        }
+        
+        // Calcular costo total basado en los componentes
+        let totalCost = 0;
+        
+        for (const component of components) {
+          const componentProduct = await storage.getProduct(component.productId);
+          if (componentProduct && componentProduct.cost) {
+            const componentCost = parseFloat(componentProduct.cost.toString());
+            const quantity = parseFloat(component.quantity);
+            totalCost += componentCost * quantity;
+          }
+        }
+        
+        console.log(`Producto compuesto: Costo calculado automáticamente = ${totalCost}`);
+        productData.cost = totalCost;
+      }
+      
+      const product = await storage.createProduct(productData);
       res.status(201).json(product);
     } catch (error) {
       res.status(400).json({ message: "Error al crear producto", error: (error as Error).message });
@@ -303,7 +337,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/products/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const product = await storage.updateProduct(id, req.body);
+      let productData = { ...req.body };
+      
+      // Si es un producto compuesto, calcular el costo automáticamente
+      if (productData.isComposite && productData.components) {
+        let components;
+        
+        // Parsear los componentes si están en formato string
+        if (typeof productData.components === 'string') {
+          try {
+            components = JSON.parse(productData.components);
+          } catch (e) {
+            console.error("Error al parsear componentes:", e);
+            components = [];
+          }
+        } else {
+          components = productData.components;
+        }
+        
+        if (components && components.length > 0) {
+          // Calcular costo total basado en los componentes
+          let totalCost = 0;
+          
+          for (const component of components) {
+            const componentProduct = await storage.getProduct(component.productId);
+            if (componentProduct && componentProduct.cost) {
+              const componentCost = parseFloat(componentProduct.cost.toString());
+              const quantity = parseFloat(component.quantity);
+              totalCost += componentCost * quantity;
+            }
+          }
+          
+          console.log(`Producto compuesto actualizado: Costo calculado automáticamente = ${totalCost}`);
+          productData.cost = totalCost;
+        }
+      }
+      
+      const product = await storage.updateProduct(id, productData);
       res.json(product);
     } catch (error) {
       res.status(400).json({ message: "Error al actualizar producto", error: (error as Error).message });
