@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ThermalTicket } from "@/components/printing/ThermalTicket";
 import { InvoicePDF } from "@/components/printing/InvoicePDF";
 import { InvoiceContent } from "@/components/invoices/InvoiceDetail";
+import { PDFService } from "@/services/pdfService";
 
 type CartItem = {
   id: number;
@@ -912,7 +913,7 @@ export default function POSPage() {
                 <div ref={receiptRef} className="w-full">
                   {completedSale.documentType.startsWith('factura') ? (
                     <InvoiceContent 
-                      sale={completedSale} 
+                      invoice={completedSale} 
                       items={completedSale.items}
                       customer={completedSale.customer}
                     />
@@ -941,7 +942,7 @@ export default function POSPage() {
                   onClick={() => {
                     if (completedSale.documentType.startsWith('factura')) {
                       // Generar un PDF con la factura
-                      InvoicePDF.generate(
+                      PDFService.generateInvoicePDF(
                         completedSale,
                         completedSale.items,
                         completedSale.customer
