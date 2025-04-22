@@ -51,7 +51,7 @@ export default function AccountsPage() {
   
   // Get account transactions if an account is selected
   const { data: transactions, isLoading: isLoadingTransactions } = useQuery({
-    queryKey: ["/api/accounts", selectedAccount, "transactions"],
+    queryKey: [`/api/accounts/${selectedAccount}/transactions`],
     enabled: !!selectedAccount,
     retry: false,
   });
@@ -121,7 +121,7 @@ export default function AccountsPage() {
       setIsTransactionDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
       if (selectedAccount) {
-        queryClient.invalidateQueries({ queryKey: ["/api/accounts", selectedAccount, "transactions"] });
+        queryClient.invalidateQueries({ queryKey: [`/api/accounts/${selectedAccount}/transactions`] });
       }
     },
     onError: (error) => {
