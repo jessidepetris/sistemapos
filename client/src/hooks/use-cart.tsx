@@ -1,181 +1,113 @@
-import { createContext, ReactNode, useContext, useEffect, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "../lib/queryClient";
+import { createContext, ReactNode, useContext } from "react";
+import {
+  useQuery,
+  useMutation,
+  UseMutationResult,
+} from "@tanstack/react-query";
+import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useWebAuth } from "./use-web-auth";
+import { useWebAuth } from "@/hooks/use-web-auth";
 
-type Product = {
+// Interfaces para el carrito
+interface Product {
   id: number;
   name: string;
   description: string | null;
   price: string;
   imageUrl: string | null;
-  baseUnit: string;
-  conversionRates: any;
   category: string | null;
   inStock: boolean;
-  isRefrigerated: boolean;
-};
+  baseUnit: string;
+}
 
-type CartItem = {
+interface CartItem {
   id: number;
+  productId: number;
   cartId: number;
-  productId: number;
   quantity: string;
-  unit: string;
   price: string;
-  notes: string | null;
+  unit: string;
   product?: Product;
-};
+}
 
-type Cart = {
+interface Cart {
   id: number;
-  webUserId: number | null;
-  sessionId: string | null;
-  status: string;
-  totalItems: number;
-  totalAmount: string;
+  userId: number | null;
   items: CartItem[];
-};
+  itemCount: number;
+  totalAmount: number;
+  createdAt: string;
+  updatedAt: string;
+}
 
-type AddToCartData = {
+interface AddToCartData {
   productId: number;
   quantity: string;
   unit: string;
-  notes?: string;
-};
+}
 
 type CartContextType = {
   cart: Cart | null;
   isLoading: boolean;
   error: Error | null;
-  addToCartMutation: any;
-  removeFromCartMutation: any;
-  createCartMutation: any;
-  cartId: number | null;
   totalItems: number;
-  totalAmount: number;
+  addToCartMutation: UseMutationResult<Cart, Error, AddToCartData>;
+  removeFromCartMutation: UseMutationResult<Cart, Error, number>;
+  clearCartMutation: UseMutationResult<void, Error, void>;
 };
 
 export const CartContext = createContext<CartContextType | null>(null);
 
-const SESSION_ID_KEY = 'web_cart_session';
-const CART_ID_KEY = 'web_cart_id';
-
-function getOrCreateSessionId() {
-  let sessionId = localStorage.getItem(SESSION_ID_KEY);
-  if (!sessionId) {
-    sessionId = Math.random().toString(36).substring(2, 15);
-    localStorage.setItem(SESSION_ID_KEY, sessionId);
-  }
-  return sessionId;
-}
-
 export function CartProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
   const { user } = useWebAuth();
-  const [cartId, setCartId] = useState<number | null>(null);
   
-  // Cargar ID del carrito desde localStorage al inicio
-  useEffect(() => {
-    const savedCartId = localStorage.getItem(CART_ID_KEY);
-    if (savedCartId) {
-      setCartId(parseInt(savedCartId));
-    }
-  }, []);
-
-  // Mutación para crear un nuevo carrito
-  const createCartMutation = useMutation({
-    mutationFn: async () => {
-      const sessionId = getOrCreateSessionId();
-      const res = await apiRequest("POST", "/api/web/carts", {
-        webUserId: user?.id || null,
-        sessionId: sessionId
-      });
-      return await res.json();
-    },
-    onSuccess: (newCart: Cart) => {
-      setCartId(newCart.id);
-      localStorage.setItem(CART_ID_KEY, newCart.id.toString());
-      queryClient.invalidateQueries({ queryKey: ['/api/web/carts', cartId] });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error al crear carrito",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
+  const {
+    data: cart,
+    error,
+    isLoading,
+  } = useQuery<Cart | undefined, Error>({
+    queryKey: ["/api/web/cart"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
-  // Obtener carrito actual
-  const { 
-    data: cart, 
-    isLoading, 
-    error 
-  } = useQuery({
-    queryKey: ['/api/web/carts', cartId],
-    queryFn: async () => {
-      if (!cartId) return null;
-      const res = await apiRequest("GET", `/api/web/carts/${cartId}`);
-      return await res.json();
-    },
-    enabled: !!cartId,
-  });
+  // Número total de artículos en el carrito
+  const totalItems = cart?.itemCount || 0;
 
-  // Mutación para agregar producto al carrito
+  // Añadir producto al carrito
   const addToCartMutation = useMutation({
     mutationFn: async (data: AddToCartData) => {
-      // Si no hay carrito, crear uno primero
-      if (!cartId) {
-        const sessionId = getOrCreateSessionId();
-        const cartRes = await apiRequest("POST", "/api/web/carts", {
-          webUserId: user?.id || null,
-          sessionId: sessionId
-        });
-        const newCart = await cartRes.json();
-        setCartId(newCart.id);
-        localStorage.setItem(CART_ID_KEY, newCart.id.toString());
-        
-        // Luego agregar el producto al nuevo carrito
-        const itemRes = await apiRequest("POST", "/api/web/cart-items", {
-          cartId: newCart.id,
-          ...data
-        });
-        return await itemRes.json();
-      } else {
-        // Agregar al carrito existente
-        const res = await apiRequest("POST", "/api/web/cart-items", {
-          cartId,
-          ...data
-        });
-        return await res.json();
+      const res = await apiRequest("POST", "/api/web/cart/items", data);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Error al agregar al carrito");
       }
+      return await res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/web/carts', cartId] });
-      toast({
-        title: "Producto agregado",
-        description: "El producto ha sido agregado al carrito",
-      });
+    onSuccess: (updatedCart: Cart) => {
+      queryClient.setQueryData(["/api/web/cart"], updatedCart);
     },
     onError: (error: Error) => {
       toast({
-        title: "Error al agregar producto",
+        title: "Error al agregar al carrito",
         description: error.message,
         variant: "destructive",
       });
     },
   });
 
-  // Mutación para quitar producto del carrito
+  // Eliminar producto del carrito
   const removeFromCartMutation = useMutation({
     mutationFn: async (itemId: number) => {
-      const res = await apiRequest("DELETE", `/api/web/cart-items/${itemId}`);
+      const res = await apiRequest("DELETE", `/api/web/cart/items/${itemId}`);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Error al eliminar del carrito");
+      }
       return await res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/web/carts', cartId] });
+    onSuccess: (updatedCart: Cart) => {
+      queryClient.setQueryData(["/api/web/cart"], updatedCart);
       toast({
         title: "Producto eliminado",
         description: "El producto ha sido eliminado del carrito",
@@ -183,28 +115,48 @@ export function CartProvider({ children }: { children: ReactNode }) {
     },
     onError: (error: Error) => {
       toast({
-        title: "Error al eliminar producto",
+        title: "Error al eliminar del carrito",
         description: error.message,
         variant: "destructive",
       });
     },
   });
 
-  const totalItems = cart?.totalItems || 0;
-  const totalAmount = cart?.totalAmount ? parseFloat(cart.totalAmount) : 0;
+  // Vaciar el carrito
+  const clearCartMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", "/api/web/cart");
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Error al vaciar el carrito");
+      }
+    },
+    onSuccess: () => {
+      queryClient.setQueryData(["/api/web/cart"], { ...cart, items: [], itemCount: 0, totalAmount: 0 });
+      toast({
+        title: "Carrito vacío",
+        description: "Tu carrito ha sido vaciado",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error al vaciar el carrito",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   return (
     <CartContext.Provider
       value={{
-        cart,
+        cart: cart ?? null,
         isLoading,
         error,
+        totalItems,
         addToCartMutation,
         removeFromCartMutation,
-        createCartMutation,
-        cartId,
-        totalItems,
-        totalAmount
+        clearCartMutation,
       }}
     >
       {children}
@@ -215,7 +167,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 export function useCart() {
   const context = useContext(CartContext);
   if (!context) {
-    throw new Error("useCart must be used within a CartProvider");
+    throw new Error("useCart debe usarse dentro de un CartProvider");
   }
   return context;
 }

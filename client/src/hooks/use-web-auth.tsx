@@ -1,35 +1,37 @@
-import { createContext, ReactNode, useContext, useEffect, useState } from "react";
-import { useMutation, useQuery, UseMutationResult } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "../lib/queryClient";
+import { createContext, ReactNode, useContext } from "react";
+import {
+  useQuery,
+  useMutation,
+  UseMutationResult,
+} from "@tanstack/react-query";
+import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
-type WebUser = {
+// Interfaces para los usuarios web
+interface WebUser {
   id: number;
-  email: string;
-  customerId: number | null;
-  verified: boolean;
-  customer?: {
-    name: string;
-    address: string;
-    phone: string;
-  };
-  token?: string;
-};
-
-type LoginData = {
-  email: string;
-  password: string;
-};
-
-type RegisterData = {
-  email: string;
-  password: string;
   name: string;
+  email: string;
+  address: string | null;
+  phone: string | null;
+  city: string | null;
+  province: string | null;
+}
+
+interface LoginData {
+  email: string;
+  password: string;
+}
+
+interface RegisterData {
+  name: string;
+  email: string;
+  password: string;
   address: string;
   phone: string;
   city: string;
   province: string;
-};
+}
 
 type WebAuthContextType = {
   user: WebUser | null;
@@ -42,44 +44,37 @@ type WebAuthContextType = {
 
 export const WebAuthContext = createContext<WebAuthContextType | null>(null);
 
-const LOCAL_STORAGE_KEY = 'web_user';
-
 export function WebAuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
-  const [storedUser, setStoredUser] = useState<WebUser | null>(null);
   
-  // Cargar el usuario desde localStorage al inicio
-  useEffect(() => {
-    const savedUser = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (savedUser) {
-      try {
-        setStoredUser(JSON.parse(savedUser));
-      } catch (error) {
-        console.error("Error parsing stored user", error);
-        localStorage.removeItem(LOCAL_STORAGE_KEY);
-      }
-    }
-  }, []);
+  const {
+    data: user,
+    error,
+    isLoading,
+  } = useQuery<WebUser | undefined, Error>({
+    queryKey: ["/api/web/user"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
 
-  // No usamos useQuery aquí porque la autenticación web es basada en localStorage,
-  // no en sesiones del servidor como la autenticación regular
-  
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginData) => {
       const res = await apiRequest("POST", "/api/web/login", credentials);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Error al iniciar sesión");
+      }
       return await res.json();
     },
     onSuccess: (user: WebUser) => {
-      setStoredUser(user);
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(user));
+      queryClient.setQueryData(["/api/web/user"], user);
       toast({
-        title: "Inicio de sesión exitoso",
-        description: `Bienvenido, ${user.customer?.name || user.email}`,
+        title: "Sesión iniciada",
+        description: `Bienvenido/a, ${user.name}`,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Error de inicio de sesión",
+        title: "Error al iniciar sesión",
         description: error.message,
         variant: "destructive",
       });
@@ -87,19 +82,24 @@ export function WebAuthProvider({ children }: { children: ReactNode }) {
   });
 
   const registerMutation = useMutation({
-    mutationFn: async (data: RegisterData) => {
-      const res = await apiRequest("POST", "/api/web/register", data);
+    mutationFn: async (userData: RegisterData) => {
+      const res = await apiRequest("POST", "/api/web/register", userData);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Error al registrarse");
+      }
       return await res.json();
     },
     onSuccess: (user: WebUser) => {
+      queryClient.setQueryData(["/api/web/user"], user);
       toast({
         title: "Registro exitoso",
-        description: "Tu cuenta ha sido creada. Ahora puedes iniciar sesión.",
+        description: `Bienvenido/a, ${user.name}`,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Error de registro",
+        title: "Error al registrarse",
         description: error.message,
         variant: "destructive",
       });
@@ -108,16 +108,17 @@ export function WebAuthProvider({ children }: { children: ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      // En esta implementación, el logout es local
-      // No hay una llamada al servidor porque usamos almacenamiento local
+      const res = await apiRequest("POST", "/api/web/logout");
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Error al cerrar sesión");
+      }
     },
     onSuccess: () => {
-      localStorage.removeItem(LOCAL_STORAGE_KEY);
-      setStoredUser(null);
-      queryClient.invalidateQueries({ queryKey: ['/api/web/user'] });
+      queryClient.setQueryData(["/api/web/user"], null);
       toast({
         title: "Sesión cerrada",
-        description: "Has cerrado sesión exitosamente",
+        description: "Has cerrado sesión correctamente",
       });
     },
     onError: (error: Error) => {
@@ -132,9 +133,9 @@ export function WebAuthProvider({ children }: { children: ReactNode }) {
   return (
     <WebAuthContext.Provider
       value={{
-        user: storedUser,
-        isLoading: false,
-        error: null,
+        user: user ?? null,
+        isLoading,
+        error,
         loginMutation,
         logoutMutation,
         registerMutation,
@@ -148,7 +149,7 @@ export function WebAuthProvider({ children }: { children: ReactNode }) {
 export function useWebAuth() {
   const context = useContext(WebAuthContext);
   if (!context) {
-    throw new Error("useWebAuth must be used within a WebAuthProvider");
+    throw new Error("useWebAuth debe usarse dentro de un WebAuthProvider");
   }
   return context;
 }

@@ -27,6 +27,8 @@ import LogisticsPage from "@/pages/logistics-page";
 // Web Catalog Pages
 import WebHomePage from "@/pages/web/home-page";
 import LoginPage from "@/pages/web/login-page";
+import WebProductsPage from "@/pages/web/products-page";
+import CartPage from "@/pages/web/cart-page";
 
 function Router() {
   return (
@@ -55,12 +57,10 @@ function Router() {
         <LoginPage />
       </Route>
       <Route path="/web/products">
-        {/* Agregar ProductsPage cuando esté listo */}
-        <WebHomePage />
+        <WebProductsPage />
       </Route>
       <Route path="/web/cart">
-        {/* Agregar CartPage cuando esté listo */}
-        <WebHomePage />
+        <CartPage />
       </Route>
       <Route path="/web/checkout">
         {/* Agregar CheckoutPage cuando esté listo */}
