@@ -1,6 +1,5 @@
 import React, { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useQuery } from "@tanstack/react-query";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
@@ -17,9 +16,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Calendar, Download, FileText, Plus, Printer, Search } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import InvoiceDetail from "@/components/invoices/InvoiceDetail";
 
 export default function InvoicesPage() {
   const { toast } = useToast();
@@ -265,107 +264,26 @@ export default function InvoicesPage() {
       
       {/* Invoice Detail Dialog */}
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>Detalle de Remito #{selectedInvoice?.id}</DialogTitle>
           </DialogHeader>
           
           {selectedInvoice && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Cliente</p>
-                  <p className="font-medium">{selectedInvoice.customer?.name || "Venta sin cliente"}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Fecha</p>
-                  <p className="font-medium">{formatDate(selectedInvoice.timestamp)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Estado</p>
-                  <Badge 
-                    variant={selectedInvoice.status === "completed" ? "default" : "secondary"} 
-                    className={
-                      selectedInvoice.status === "completed" 
-                        ? "bg-green-100 text-green-800" 
-                        : "bg-blue-100 text-blue-800"
-                    }
-                  >
-                    {selectedInvoice.status === "completed" ? "Completado" : "Pendiente"}
-                  </Badge>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Vendedor</p>
-                  <p className="font-medium">{selectedInvoice.user?.fullName || "Usuario desconocido"}</p>
-                </div>
-              </div>
-              
-              <div>
-                <h3 className="font-medium mb-2">Productos</h3>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Producto</TableHead>
-                      <TableHead className="text-right">Cantidad</TableHead>
-                      <TableHead className="text-right">Precio Unit.</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedInvoice.items && selectedInvoice.items.map((item: any, index: number) => (
-                      <TableRow key={index}>
-                        <TableCell>{item.product?.name || `Producto #${item.productId}`}</TableCell>
-                        <TableCell className="text-right">{parseFloat(item.quantity).toFixed(2)} {item.unit}</TableCell>
-                        <TableCell className="text-right">${parseFloat(item.price).toFixed(2)}</TableCell>
-                        <TableCell className="text-right">${parseFloat(item.total).toFixed(2)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              
-              <div className="flex justify-between items-center pt-4 border-t">
-                <div>
-                  <p className="text-sm text-muted-foreground">Método de pago</p>
-                  <p className="font-medium capitalize">{selectedInvoice.paymentMethod}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm text-muted-foreground">Total</p>
-                  <p className="font-medium text-lg">${parseFloat(selectedInvoice.total).toFixed(2)}</p>
-                </div>
-              </div>
-              
-              {selectedInvoice.notes && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Notas</p>
-                  <p>{selectedInvoice.notes}</p>
-                </div>
-              )}
-            </div>
+            <InvoiceDetail 
+              invoice={selectedInvoice} 
+              items={selectedInvoice.items || []} 
+              customer={selectedInvoice.customer}
+            />
           )}
           
           <DialogFooter>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setIsDetailDialogOpen(false)}
-              >
-                Cerrar
-              </Button>
-              <Button 
-                variant="outline"
-                onClick={() => handlePrintInvoice(selectedInvoice.id)}
-              >
-                <Printer className="mr-2 h-4 w-4" />
-                Imprimir
-              </Button>
-              <Button
-                onClick={() => handleExportInvoice(selectedInvoice.id)}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Exportar PDF
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              onClick={() => setIsDetailDialogOpen(false)}
+            >
+              Cerrar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
