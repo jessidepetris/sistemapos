@@ -30,6 +30,8 @@ import LoginPage from "@/pages/web/login-page";
 import WebProductsPage from "@/pages/web/products-page";
 import ProductDetailsPage from "@/pages/web/product-details";
 import CartPage from "@/pages/web/cart-page";
+import CheckoutPage from "@/pages/web/checkout-page";
+import OrderConfirmationPage from "@/pages/web/order-confirmation-page";
 
 function Router() {
   return (
@@ -67,8 +69,10 @@ function Router() {
         <CartPage />
       </Route>
       <Route path="/web/checkout">
-        {/* Agregar CheckoutPage cuando esté listo */}
-        <WebHomePage />
+        <CheckoutPage />
+      </Route>
+      <Route path="/web/order-confirmation/:orderId">
+        <OrderConfirmationPage />
       </Route>
       
       <Route component={NotFound} />

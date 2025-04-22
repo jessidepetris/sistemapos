@@ -1,90 +1,113 @@
-import { useState, useEffect } from "react";
-import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
 import { useCart } from "@/hooks/use-cart";
+import { useWebAuth } from "@/hooks/use-web-auth";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Loader2 } from "lucide-react";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { apiRequest } from "@/lib/queryClient";
-import { useNavigate } from "wouter";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { useToast } from "@/hooks/use-toast";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useLocation } from "wouter";
 import WebLayout from "./web-layout";
+import { apiRequest } from "@/lib/queryClient";
+import { Loader2 } from "lucide-react";
 
-export default function CheckoutPage() {
+const CheckoutPage = () => {
+  const { cart, cartItems, clearCart } = useCart();
+  const { user } = useWebAuth();
   const { toast } = useToast();
-  const navigate = useNavigate();
-  const { cart, cartItems, isLoading: isCartLoading, clearCart } = useCart();
+  const [location, setLocation] = useLocation();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<string>("efectivo");
-  const [customerData, setCustomerData] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    address: "",
-    notes: ""
+
+  // Redireccionar si el carrito está vacío
+  if (cart && cartItems.length === 0) {
+    setLocation("/web/catalogo");
+    return null;
+  }
+
+  const formSchema = z.object({
+    name: z.string().min(3, { message: "El nombre es obligatorio" }),
+    email: z.string().email({ message: "Email inválido" }),
+    phone: z.string().min(6, { message: "Teléfono inválido" }),
+    address: z.string().min(5, { message: "La dirección es obligatoria" }),
+    notes: z.string().optional(),
+    paymentMethod: z.enum(["efectivo", "transferencia"], {
+      required_error: "Por favor seleccione un método de pago",
+    }),
   });
 
-  // Redirigir si el carrito está vacío
-  useEffect(() => {
-    if (!isCartLoading && cart && cart.items === 0) {
-      toast({
-        title: "Carrito vacío",
-        description: "No hay productos en su carrito de compras",
-        variant: "destructive",
-      });
-      navigate("/catalogo");
-    }
-  }, [cart, isCartLoading, navigate, toast]);
+  type CheckoutFormValues = z.infer<typeof formSchema>;
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setCustomerData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+  // Valores por defecto del formulario
+  const defaultValues: Partial<CheckoutFormValues> = {
+    name: user?.name || "",
+    email: user?.email || "",
+    phone: user?.phone || "",
+    address: user?.address || "",
+    notes: "",
+    paymentMethod: "efectivo",
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!cart) return;
+  const form = useForm<CheckoutFormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues,
+  });
+
+  const onSubmit = async (data: CheckoutFormValues) => {
+    if (!cart) {
+      toast({
+        title: "Error",
+        description: "No hay productos en el carrito",
+        variant: "destructive",
+      });
+      return;
+    }
     
     setIsSubmitting(true);
     
     try {
-      // Crear la orden a partir del carrito
+      // Crear el objeto de la orden
       const orderData = {
-        paymentMethod,
-        customerData,
-        cartId: cart.id
+        customerData: {
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          address: data.address,
+          notes: data.notes || "",
+        },
+        paymentMethod: data.paymentMethod,
+        items: cartItems,
+        total: calculateTotal(),
       };
-      
+
+      // Enviar la orden al servidor
       const response = await apiRequest("POST", "/api/web/orders", orderData);
       
       if (!response.ok) {
-        throw new Error("Error al procesar la orden");
+        throw new Error("Error al procesar el pedido");
       }
       
-      const orderResult = await response.json();
+      const result = await response.json();
       
-      // Vaciar el carrito después de la orden exitosa
+      // Limpiar el carrito después de la orden exitosa
       await clearCart();
       
-      toast({
-        title: "¡Orden completada!",
-        description: `Su orden #${orderResult.id} ha sido recibida y está siendo procesada.`,
-      });
+      // Redireccionar a la página de confirmación
+      setLocation(`/web/order-confirmation/${result.id}`);
       
-      // Redirigir a la página de confirmación
-      navigate(`/orden-confirmada/${orderResult.id}`);
-    } catch (error) {
       toast({
-        title: "Error al procesar la orden",
-        description: error instanceof Error ? error.message : "Ocurrió un error inesperado",
+        title: "¡Pedido realizado!",
+        description: "Tu pedido ha sido procesado correctamente",
+      });
+    } catch (error) {
+      console.error("Error al procesar el pedido:", error);
+      toast({
+        title: "Error",
+        description: "Hubo un problema al procesar tu pedido. Por favor intenta nuevamente.",
         variant: "destructive",
       });
     } finally {
@@ -92,169 +115,187 @@ export default function CheckoutPage() {
     }
   };
 
-  if (isCartLoading) {
-    return (
-      <WebLayout>
-        <div className="container mx-auto py-8 flex items-center justify-center min-h-[50vh]">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </WebLayout>
-    );
-  }
+  // Calcular el total de la orden
+  const calculateTotal = () => {
+    return cartItems.reduce((sum, item) => sum + parseFloat(item.total), 0).toFixed(2);
+  };
 
   return (
     <WebLayout>
-      <div className="container mx-auto py-8">
-        <h1 className="text-3xl font-bold mb-8">Finalizar Compra</h1>
+      <div className="container py-10">
+        <h1 className="text-3xl font-bold mb-6">Finalizar Compra</h1>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Formulario de datos del cliente */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Formulario de checkout */}
           <div className="md:col-span-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Información de Contacto</CardTitle>
-                <CardDescription>
-                  Ingrese sus datos para procesar su pedido
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Nombre Completo</Label>
-                      <Input 
-                        id="name" 
-                        name="name"
-                        value={customerData.name}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Correo Electrónico</Label>
-                      <Input 
-                        id="email" 
-                        name="email"
-                        type="email"
-                        value={customerData.email}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Teléfono</Label>
-                      <Input 
-                        id="phone" 
-                        name="phone"
-                        value={customerData.phone}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="address">Dirección de Entrega</Label>
-                      <Input 
-                        id="address" 
-                        name="address"
-                        value={customerData.address}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="notes">Notas Adicionales</Label>
-                    <Textarea 
-                      id="notes" 
-                      name="notes"
-                      value={customerData.notes}
-                      onChange={handleInputChange}
-                      placeholder="Instrucciones especiales para la entrega, referencias, etc."
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Información de contacto</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nombre completo</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Tu nombre completo" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                  </div>
-
-                  <div className="space-y-3 pt-4">
-                    <Label>Método de Pago</Label>
-                    <RadioGroup 
-                      defaultValue="efectivo" 
-                      value={paymentMethod}
-                      onValueChange={setPaymentMethod}
-                      className="flex flex-col space-y-2"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="efectivo" id="efectivo" />
-                        <Label htmlFor="efectivo" className="font-normal">Efectivo (pago contra entrega)</Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="transferencia" id="transferencia" />
-                        <Label htmlFor="transferencia" className="font-normal">Transferencia Bancaria</Label>
-                      </div>
-                    </RadioGroup>
-                  </div>
-
-                  {paymentMethod === "transferencia" && (
-                    <div className="p-4 bg-muted rounded-md mt-2">
-                      <p className="text-sm mb-2">Datos para la transferencia:</p>
-                      <p className="text-sm"><strong>Banco:</strong> Banco de la Nación Argentina</p>
-                      <p className="text-sm"><strong>Titular:</strong> Punto Pastelero S.R.L.</p>
-                      <p className="text-sm"><strong>CUIT:</strong> 30-71234567-8</p>
-                      <p className="text-sm"><strong>CBU:</strong> 0110012345678901234567</p>
-                      <p className="text-sm"><strong>Alias:</strong> PUNTO.PASTELERO</p>
-                      <p className="text-sm mt-2 italic">* Enviar comprobante a info@puntopastelero.com.ar</p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="email"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Email</FormLabel>
+                            <FormControl>
+                              <Input placeholder="tu@email.com" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name="phone"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Teléfono</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Tu número de teléfono" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     </div>
-                  )}
-                </form>
-              </CardContent>
-            </Card>
+                    
+                    <FormField
+                      control={form.control}
+                      name="address"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Dirección de entrega</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Dirección completa" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="notes"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Notas adicionales</FormLabel>
+                          <FormControl>
+                            <Textarea placeholder="Instrucciones especiales para la entrega" {...field} />
+                          </FormControl>
+                          <FormDescription>
+                            Opcional: Indicaciones para la entrega, horarios preferidos, etc.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Método de pago</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <FormField
+                      control={form.control}
+                      name="paymentMethod"
+                      render={({ field }) => (
+                        <FormItem className="space-y-3">
+                          <FormControl>
+                            <RadioGroup
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                              className="flex flex-col space-y-1"
+                            >
+                              <FormItem className="flex items-center space-x-3 space-y-0">
+                                <FormControl>
+                                  <RadioGroupItem value="efectivo" />
+                                </FormControl>
+                                <FormLabel className="font-normal">
+                                  Efectivo al momento de la entrega
+                                </FormLabel>
+                              </FormItem>
+                              <FormItem className="flex items-center space-x-3 space-y-0">
+                                <FormControl>
+                                  <RadioGroupItem value="transferencia" />
+                                </FormControl>
+                                <FormLabel className="font-normal">
+                                  Transferencia bancaria
+                                </FormLabel>
+                              </FormItem>
+                            </RadioGroup>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </CardContent>
+                  <CardFooter>
+                    <Button 
+                      type="submit" 
+                      className="w-full"
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Procesando...
+                        </>
+                      ) : (
+                        'Confirmar Pedido'
+                      )}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </form>
+            </Form>
           </div>
           
           {/* Resumen del pedido */}
           <div>
             <Card>
               <CardHeader>
-                <CardTitle>Resumen del Pedido</CardTitle>
+                <CardTitle>Resumen del pedido</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {cartItems.map((item) => (
-                  <div key={item.id} className="flex justify-between">
-                    <div>
-                      <p>{item.productName}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {item.quantity} x ${item.price}
-                      </p>
+                <div className="space-y-2">
+                  {cartItems.map((item) => (
+                    <div key={item.id} className="flex justify-between items-start py-2 border-b">
+                      <div>
+                        <p className="font-medium">{item.productName}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {item.quantity} {item.unit} x ${parseFloat(item.price).toFixed(2)}
+                        </p>
+                      </div>
+                      <p className="font-medium">${parseFloat(item.total).toFixed(2)}</p>
                     </div>
-                    <p className="font-medium">${item.total}</p>
-                  </div>
-                ))}
-                
-                <Separator />
-                
-                <div className="flex justify-between font-bold">
-                  <p>Total</p>
-                  <p>${cart?.total}</p>
+                  ))}
                 </div>
               </CardContent>
-              <CardFooter>
-                <Button 
-                  className="w-full" 
-                  onClick={handleSubmit}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Procesando...
-                    </>
-                  ) : (
-                    'Confirmar Pedido'
-                  )}
-                </Button>
+              <CardFooter className="flex justify-between border-t pt-4">
+                <p className="font-bold text-lg">Total</p>
+                <p className="font-bold text-xl">${calculateTotal()}</p>
               </CardFooter>
             </Card>
           </div>
@@ -262,4 +303,6 @@ export default function CheckoutPage() {
       </div>
     </WebLayout>
   );
-}
+};
+
+export default CheckoutPage;
