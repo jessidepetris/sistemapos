@@ -53,6 +53,8 @@ export const customers = pgTable("customers", {
   city: text("city"),
   notes: text("notes"),
   hasAccount: boolean("has_account").default(false),
+  sellerId: integer("seller_id").references(() => users.id),
+  invoiceType: text("invoice_type").default("remito"), // 'remito' o 'factura_c'
 });
 
 export const insertCustomerSchema = createInsertSchema(customers).pick({
@@ -60,8 +62,12 @@ export const insertCustomerSchema = createInsertSchema(customers).pick({
   phone: true,
   email: true,
   address: true,
+  city: true,
+  province: true,
   notes: true,
   hasAccount: true,
+  sellerId: true,
+  invoiceType: true,
 });
 
 // Products table
