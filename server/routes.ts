@@ -1088,6 +1088,470 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Rutas para el Catálogo Web
+  
+  // Autenticación de usuarios web
+  app.post("/api/web/register", async (req, res) => {
+    try {
+      const { email, password, name, address, phone, city, province } = req.body;
+      
+      // Verificar si el usuario ya existe
+      const existingUsers = await storage.getAllWebUsers();
+      const existingUser = existingUsers.find(u => u.email === email);
+      if (existingUser) {
+        return res.status(400).json({ message: "El email ya está registrado" });
+      }
+      
+      // Crear un cliente primero
+      const customer = await storage.createCustomer({
+        name,
+        address,
+        phone,
+        email,
+        city,
+        province,
+        hasAccount: false
+      });
+      
+      // Crear usuario web
+      // En un sistema real, deberíamos encriptar la contraseña y generar un token de verificación
+      const webUser = await storage.createWebUser({
+        email,
+        password, // En un sistema real, esto debería estar hasheado
+        customerId: customer.id,
+        verificationToken: Math.random().toString(36).substring(2, 15),
+        verified: false
+      });
+      
+      res.status(201).json({
+        id: webUser.id,
+        email: webUser.email,
+        customerId: webUser.customerId,
+        verified: webUser.verified
+      });
+    } catch (error) {
+      res.status(400).json({ message: "Error al registrar usuario", error: (error as Error).message });
+    }
+  });
+  
+  app.post("/api/web/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      
+      // Buscar usuario por email
+      const webUsers = await storage.getAllWebUsers();
+      const webUser = webUsers.find(u => u.email === email);
+      
+      if (!webUser || webUser.password !== password) {
+        return res.status(401).json({ message: "Credenciales inválidas" });
+      }
+      
+      // Actualizar el último login
+      await storage.updateWebUser(webUser.id, { lastLogin: new Date() });
+      
+      // Obtener información del cliente asociado
+      let customer = null;
+      if (webUser.customerId) {
+        customer = await storage.getCustomer(webUser.customerId);
+      }
+      
+      // Crear sesión web (en una implementación real usaríamos JWT o similar)
+      const sessionToken = Math.random().toString(36).substring(2, 15);
+      
+      res.json({
+        id: webUser.id,
+        email: webUser.email,
+        customerId: webUser.customerId,
+        verified: webUser.verified,
+        customer,
+        token: sessionToken
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Error al iniciar sesión", error: (error as Error).message });
+    }
+  });
+  
+  // Productos para catálogo
+  app.get("/api/web/products", async (req, res) => {
+    try {
+      const products = await storage.getAllProducts();
+      
+      // Filtrar productos para mostrar en el catálogo
+      // Solo devolver productos con stock > 0 y datos necesarios para el catálogo
+      const catalogProducts = products
+        .filter(p => parseFloat(p.stock.toString()) > 0 || req.query.showOutOfStock === 'true')
+        .map(p => ({
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          price: p.price,
+          imageUrl: p.imageUrl,
+          category: p.category,
+          inStock: parseFloat(p.stock.toString()) > 0,
+          isRefrigerated: p.isRefrigerated,
+          baseUnit: p.baseUnit,
+          conversionRates: p.conversionRates
+        }));
+      
+      res.json(catalogProducts);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener productos", error: (error as Error).message });
+    }
+  });
+  
+  // Categorías para catálogo
+  app.get("/api/web/categories", async (req, res) => {
+    try {
+      const categories = await storage.getAllProductCategories();
+      res.json(categories);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener categorías", error: (error as Error).message });
+    }
+  });
+  
+  // Carrito de compra
+  app.post("/api/web/carts", async (req, res) => {
+    try {
+      const { webUserId, sessionId } = req.body;
+      
+      const cart = await storage.createCart({
+        webUserId,
+        sessionId,
+        status: 'active'
+      });
+      
+      res.status(201).json(cart);
+    } catch (error) {
+      res.status(400).json({ message: "Error al crear carrito", error: (error as Error).message });
+    }
+  });
+  
+  app.get("/api/web/carts/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const cart = await storage.getCart(id);
+      
+      if (!cart) {
+        return res.status(404).json({ message: "Carrito no encontrado" });
+      }
+      
+      // Obtener items del carrito
+      const cartItems = await storage.getCartItemsByCartId(id);
+      
+      // Enriquecer con información de productos
+      const enrichedItems = await Promise.all(
+        cartItems.map(async (item) => {
+          const product = await storage.getProduct(item.productId);
+          return {
+            ...item,
+            product
+          };
+        })
+      );
+      
+      res.json({
+        ...cart,
+        items: enrichedItems
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener carrito", error: (error as Error).message });
+    }
+  });
+  
+  app.post("/api/web/cart-items", async (req, res) => {
+    try {
+      const { cartId, productId, quantity, unit, notes } = req.body;
+      
+      // Verificar que el carrito existe
+      const cart = await storage.getCart(cartId);
+      if (!cart) {
+        return res.status(404).json({ message: "Carrito no encontrado" });
+      }
+      
+      // Verificar que el producto existe y tiene stock
+      const product = await storage.getProduct(productId);
+      if (!product) {
+        return res.status(404).json({ message: "Producto no encontrado" });
+      }
+      
+      // Verificar stock disponible
+      let stockToCheck = parseFloat(product.stock.toString());
+      let quantityToDeduct = parseFloat(quantity);
+      
+      // Si es una presentación específica (unidad diferente a la base), aplicar conversión
+      if (unit !== product.baseUnit && product.conversionRates) {
+        const conversions = product.conversionRates as any;
+        if (conversions && conversions[unit]) {
+          const conversionFactor = parseFloat(conversions[unit].factor);
+          quantityToDeduct = quantityToDeduct * conversionFactor;
+        }
+      }
+      
+      if (quantityToDeduct > stockToCheck) {
+        return res.status(400).json({ message: "No hay suficiente stock disponible" });
+      }
+      
+      // Obtener el precio
+      let price = parseFloat(product.price.toString());
+      
+      // Si es una presentación específica, usar el precio de la presentación
+      if (unit !== product.baseUnit && product.conversionRates) {
+        const conversions = product.conversionRates as any;
+        if (conversions && conversions[unit] && conversions[unit].price) {
+          price = parseFloat(conversions[unit].price);
+        }
+      }
+      
+      // Calcular total
+      const total = price * parseFloat(quantity);
+      
+      // Crear item en el carrito
+      const cartItem = await storage.createCartItem({
+        cartId,
+        productId,
+        quantity,
+        unit,
+        price: price.toString(),
+        notes
+      });
+      
+      // Actualizar el total del carrito
+      const allCartItems = await storage.getCartItemsByCartId(cartId);
+      const cartTotal = allCartItems.reduce((sum, item) => sum + parseFloat(item.price) * parseFloat(item.quantity), 0);
+      const cartTotalItems = allCartItems.reduce((sum, item) => sum + parseFloat(item.quantity), 0);
+      
+      await storage.updateCart(cartId, {
+        totalAmount: cartTotal.toString(),
+        totalItems: cartTotalItems,
+        updatedAt: new Date()
+      });
+      
+      res.status(201).json({
+        ...cartItem,
+        product
+      });
+    } catch (error) {
+      res.status(400).json({ message: "Error al agregar item al carrito", error: (error as Error).message });
+    }
+  });
+  
+  app.delete("/api/web/cart-items/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const cartItem = await storage.getCartItem(id);
+      
+      if (!cartItem) {
+        return res.status(404).json({ message: "Item no encontrado" });
+      }
+      
+      // Eliminar item
+      await storage.deleteCartItem(id);
+      
+      // Actualizar el total del carrito
+      const allCartItems = await storage.getCartItemsByCartId(cartItem.cartId);
+      const cartTotal = allCartItems.reduce((sum, item) => sum + parseFloat(item.price) * parseFloat(item.quantity), 0);
+      const cartTotalItems = allCartItems.reduce((sum, item) => sum + parseFloat(item.quantity), 0);
+      
+      await storage.updateCart(cartItem.cartId, {
+        totalAmount: cartTotal.toString(),
+        totalItems: cartTotalItems,
+        updatedAt: new Date()
+      });
+      
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ message: "Error al eliminar item del carrito", error: (error as Error).message });
+    }
+  });
+  
+  // Checkout y creación de orden
+  app.post("/api/web/orders", async (req, res) => {
+    try {
+      const { 
+        cartId, 
+        webUserId, 
+        shippingAddress, 
+        billingAddress, 
+        paymentMethod,
+        notes 
+      } = req.body;
+      
+      // Verificar que el carrito existe
+      const cart = await storage.getCart(cartId);
+      if (!cart) {
+        return res.status(404).json({ message: "Carrito no encontrado" });
+      }
+      
+      // Verificar que el usuario web existe
+      const webUser = await storage.getWebUser(webUserId);
+      if (!webUser) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+      
+      // Obtener items del carrito
+      const cartItems = await storage.getCartItemsByCartId(cartId);
+      if (cartItems.length === 0) {
+        return res.status(400).json({ message: "El carrito está vacío" });
+      }
+      
+      // Crear la orden en el sistema principal
+      // En un sistema real, aquí veríamos cómo manejar el usuario del sistema
+      // que está vinculado a las órdenes web
+      // Por ahora, usamos un ID de usuario fijo (administrador)
+      const adminUsers = await storage.getAllUsers();
+      const adminUser = adminUsers.find(u => u.role === "admin") || adminUsers[0];
+      
+      if (!adminUser) {
+        return res.status(500).json({ message: "No se encontró un usuario administrador para procesar la orden" });
+      }
+      
+      // Calcular el total
+      const total = cartItems.reduce((sum, item) => sum + parseFloat(item.price) * parseFloat(item.quantity), 0);
+      
+      // Crear la orden
+      const order = await storage.createOrder({
+        customerId: webUser.customerId,
+        userId: adminUser.id,
+        total: total.toString(),
+        status: "pending",
+        notes,
+        deliveryDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // entrega al día siguiente
+        isWebOrder: true,
+        source: "web"
+      });
+      
+      // Crear items de la orden
+      for (const item of cartItems) {
+        await storage.createOrderItem({
+          orderId: order.id,
+          productId: item.productId,
+          quantity: item.quantity,
+          unit: item.unit,
+          price: item.price,
+          total: (parseFloat(item.price) * parseFloat(item.quantity)).toString()
+        });
+        
+        // Actualizar stock (lo haremos cuando se confirme la orden)
+        // const product = await storage.getProduct(item.productId);
+        // if (product) {
+        //   const newStock = parseFloat(product.stock.toString()) - parseFloat(item.quantity);
+        //   await storage.updateProduct(item.productId, { stock: newStock.toString() });
+        // }
+      }
+      
+      // Crear la orden web (detalles adicionales)
+      const webOrder = await storage.createWebOrder({
+        orderId: order.id,
+        webUserId,
+        cartId,
+        shippingAddress,
+        billingAddress,
+        paymentMethod,
+        paymentStatus: "pending",
+        notes,
+        trackingCode: Math.random().toString(36).substring(2, 10).toUpperCase()
+      });
+      
+      // Marcar el carrito como convertido
+      await storage.updateCart(cartId, {
+        status: "converted",
+        updatedAt: new Date()
+      });
+      
+      res.status(201).json({
+        order,
+        webOrder,
+        trackingUrl: `/web/tracking?code=${webOrder.trackingCode}`
+      });
+    } catch (error) {
+      res.status(400).json({ message: "Error al crear orden", error: (error as Error).message });
+    }
+  });
+  
+  // Seguimiento de pedido
+  app.get("/api/web/tracking/:code", async (req, res) => {
+    try {
+      const code = req.params.code;
+      
+      // Buscar la orden web por código de seguimiento
+      const webOrders = await storage.getAllWebOrders();
+      const webOrder = webOrders.find(o => o.trackingCode === code);
+      
+      if (!webOrder) {
+        return res.status(404).json({ message: "Orden no encontrada" });
+      }
+      
+      // Obtener la orden principal
+      const order = await storage.getOrder(webOrder.orderId);
+      if (!order) {
+        return res.status(404).json({ message: "Orden principal no encontrada" });
+      }
+      
+      // Obtener los items de la orden
+      const orderItems = await storage.getOrderItemsByOrderId(order.id);
+      
+      // Obtener información del cliente
+      let customer = null;
+      if (order.customerId) {
+        customer = await storage.getCustomer(order.customerId);
+      }
+      
+      // Obtener información de entrega si existe
+      const deliveries = await storage.getAllDeliveries();
+      const delivery = deliveries.find(d => d.orderId === order.id);
+      
+      let deliveryStatus = null;
+      let estimatedDelivery = null;
+      
+      if (delivery) {
+        deliveryStatus = delivery.status;
+        estimatedDelivery = delivery.estimatedDeliveryTime;
+        
+        // Obtener eventos de entrega
+        const events = await storage.getDeliveryEventsByDelivery(delivery.id);
+        delivery.events = events;
+      }
+      
+      res.json({
+        trackingCode: webOrder.trackingCode,
+        status: order.status,
+        orderDate: order.timestamp,
+        deliveryDate: order.deliveryDate,
+        total: order.total,
+        items: orderItems,
+        customer,
+        shippingAddress: webOrder.shippingAddress,
+        paymentMethod: webOrder.paymentMethod,
+        paymentStatus: webOrder.paymentStatus,
+        delivery: delivery ? {
+          status: deliveryStatus,
+          estimatedDelivery,
+          events: delivery.events
+        } : null
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener información de seguimiento", error: (error as Error).message });
+    }
+  });
+  
+  // Configuración del catálogo
+  app.get("/api/web/catalog-settings", async (req, res) => {
+    try {
+      const settings = await storage.getCatalogSettings();
+      res.json(settings || {
+        storeName: "Punto Pastelero",
+        storeDescription: "La mejor pastelería de la ciudad",
+        primaryColor: "#3498db",
+        secondaryColor: "#2ecc71",
+        showOutOfStock: true,
+        orderMinimum: "500",
+        deliveryFee: "200"
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener configuración", error: (error as Error).message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
