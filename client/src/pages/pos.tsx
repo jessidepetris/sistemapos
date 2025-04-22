@@ -286,7 +286,12 @@ export default function POSPage() {
         quantity: item.quantity,
         unit: item.unit,
         price: item.price,
-        total: item.total
+        total: item.total,
+        // Incluir información de conversión si es una presentación específica
+        isConversion: item.isConversion || false,
+        conversionFactor: item.conversionFactor || 1,
+        conversionUnit: item.conversionUnit || item.unit,
+        conversionBarcode: item.conversionBarcode || null
       }))
     };
     
@@ -424,6 +429,11 @@ export default function POSPage() {
                                 )}
                                 {item.isBulk && (
                                   <Badge variant="outline" className="text-xs">A granel</Badge>
+                                )}
+                                {item.isConversion && (
+                                  <Badge variant="outline" className="text-green-500 border-green-200 bg-green-100 text-xs">
+                                    Presentación: {item.unit}
+                                  </Badge>
                                 )}
                               </div>
                             </div>

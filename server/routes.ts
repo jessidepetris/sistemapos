@@ -293,8 +293,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Update product stock
           const product = await storage.getProduct(item.productId);
           if (product) {
-            const newStock = parseFloat(product.stock.toString()) - parseFloat(item.quantity);
-            await storage.updateProduct(item.productId, { stock: newStock });
+            // Si el item tiene información de conversión, aplicamos el factor
+            if (item.isConversion && item.conversionFactor) {
+              // Descontamos proporcionalmente según el factor de conversión
+              // Por ejemplo, si vendemos una presentación de 500g (factor 0.5) con cantidad 2,
+              // descontamos 2 * 0.5 = 1kg del stock principal
+              const stockToDeduct = parseFloat(item.quantity) * parseFloat(item.conversionFactor.toString());
+              const newStock = parseFloat(product.stock.toString()) - stockToDeduct;
+              await storage.updateProduct(item.productId, { stock: newStock });
+              
+              console.log(`Venta de conversión: Producto ${product.name}, Presentación: ${item.unit}, 
+                           Cantidad: ${item.quantity}, Factor: ${item.conversionFactor}, 
+                           Stock descontado: ${stockToDeduct} ${product.baseUnit}`);
+            } else {
+              // Descuento normal para productos estándar
+              const newStock = parseFloat(product.stock.toString()) - parseFloat(item.quantity);
+              await storage.updateProduct(item.productId, { stock: newStock });
+            }
           }
         }
       }
