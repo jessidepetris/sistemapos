@@ -324,16 +324,155 @@ export default function CreditNotesPage() {
                 </TabsContent>
                 
                 <TabsContent value="credit" className="m-0">
-                  {/* Similar table but filtered for credit notes */}
-                  <div className="text-center py-10">
-                    <p className="text-muted-foreground">Vista pendiente de implementación</p>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Número</TableHead>
+                          <TableHead>Cliente</TableHead>
+                          <TableHead>Fecha</TableHead>
+                          <TableHead>Motivo</TableHead>
+                          <TableHead>Monto</TableHead>
+                          <TableHead className="text-right">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {isLoading ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center py-10">
+                              Cargando notas de crédito...
+                            </TableCell>
+                          </TableRow>
+                        ) : filteredNotes.filter((note: any) => note.type === "credit").length > 0 ? (
+                          filteredNotes
+                            .filter((note: any) => note.type === "credit")
+                            .map((note: any) => (
+                              <TableRow key={note.id}>
+                                <TableCell className="font-medium">#{note.id}</TableCell>
+                                <TableCell>{note.customer?.name || "Sin cliente"}</TableCell>
+                                <TableCell>{formatDate(note.timestamp)}</TableCell>
+                                <TableCell className="max-w-xs truncate">{note.reason}</TableCell>
+                                <TableCell>${parseFloat(note.amount).toFixed(2)}</TableCell>
+                                <TableCell className="text-right">
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    onClick={() => handleViewNote(note)}
+                                  >
+                                    <Eye className="h-4 w-4 mr-1" />
+                                    Ver
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center py-10">
+                              <div className="flex flex-col items-center justify-center text-center">
+                                <FileEdit className="h-12 w-12 text-muted-foreground mb-4" />
+                                <h3 className="text-lg font-medium mb-2">
+                                  {searchQuery || dateRange.startDate || dateRange.endDate
+                                    ? "No se encontraron notas de crédito con los filtros aplicados"
+                                    : "No hay notas de crédito registradas"
+                                  }
+                                </h3>
+                                <p className="text-muted-foreground mb-4">
+                                  {searchQuery || dateRange.startDate || dateRange.endDate
+                                    ? "Intente con otros criterios de búsqueda"
+                                    : "Comience creando una nueva nota de crédito"
+                                  }
+                                </p>
+                                {!searchQuery && !dateRange.startDate && !dateRange.endDate && (
+                                  <Button 
+                                    variant="outline" 
+                                    onClick={() => handleOpenCreateDialog("credit")}
+                                  >
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    Nueva Nota de Crédito
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
                   </div>
                 </TabsContent>
                 
                 <TabsContent value="debit" className="m-0">
-                  {/* Similar table but filtered for debit notes */}
-                  <div className="text-center py-10">
-                    <p className="text-muted-foreground">Vista pendiente de implementación</p>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Número</TableHead>
+                          <TableHead>Cliente</TableHead>
+                          <TableHead>Fecha</TableHead>
+                          <TableHead>Motivo</TableHead>
+                          <TableHead>Monto</TableHead>
+                          <TableHead className="text-right">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {isLoading ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center py-10">
+                              Cargando notas de débito...
+                            </TableCell>
+                          </TableRow>
+                        ) : filteredNotes.filter((note: any) => note.type === "debit").length > 0 ? (
+                          filteredNotes
+                            .filter((note: any) => note.type === "debit")
+                            .map((note: any) => (
+                              <TableRow key={note.id}>
+                                <TableCell className="font-medium">#{note.id}</TableCell>
+                                <TableCell>{note.customer?.name || "Sin cliente"}</TableCell>
+                                <TableCell>{formatDate(note.timestamp)}</TableCell>
+                                <TableCell className="max-w-xs truncate">{note.reason}</TableCell>
+                                <TableCell>${parseFloat(note.amount).toFixed(2)}</TableCell>
+                                <TableCell className="text-right">
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    onClick={() => handleViewNote(note)}
+                                  >
+                                    <Eye className="h-4 w-4 mr-1" />
+                                    Ver
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center py-10">
+                              <div className="flex flex-col items-center justify-center text-center">
+                                <FileEdit className="h-12 w-12 text-muted-foreground mb-4" />
+                                <h3 className="text-lg font-medium mb-2">
+                                  {searchQuery || dateRange.startDate || dateRange.endDate
+                                    ? "No se encontraron notas de débito con los filtros aplicados"
+                                    : "No hay notas de débito registradas"
+                                  }
+                                </h3>
+                                <p className="text-muted-foreground mb-4">
+                                  {searchQuery || dateRange.startDate || dateRange.endDate
+                                    ? "Intente con otros criterios de búsqueda"
+                                    : "Comience creando una nueva nota de débito"
+                                  }
+                                </p>
+                                {!searchQuery && !dateRange.startDate && !dateRange.endDate && (
+                                  <Button 
+                                    onClick={() => handleOpenCreateDialog("debit")}
+                                  >
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    Nueva Nota de Débito
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
                   </div>
                 </TabsContent>
               </Tabs>
@@ -421,12 +560,68 @@ export default function CreditNotesPage() {
           
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="type"
+                  render={({ field }) => (
+                    <FormItem className="col-span-1">
+                      <FormLabel>Tipo de Nota</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          setNoteType(value as "credit" | "debit");
+                          // Si el tipo cambia, resetear la razón porque las opciones son diferentes
+                          form.setValue("reason", "");
+                        }}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar tipo" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="credit">Nota de Crédito</SelectItem>
+                          <SelectItem value="debit">Nota de Débito</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="amount"
+                  render={({ field }) => (
+                    <FormItem className="col-span-1">
+                      <FormLabel>Monto</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 transform -translate-y-1/2">$</span>
+                          <Input 
+                            type="number" 
+                            step="0.01" 
+                            min="0.01"
+                            className="pl-7"
+                            placeholder="0.00"
+                            {...field}
+                          />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
               <FormField
                 control={form.control}
                 name="customerId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Cliente (opcional)</FormLabel>
+                    <FormLabel>Cliente{noteType === "credit" ? "" : " (opcional)"}</FormLabel>
                     <Select 
                       value={field.value?.toString()} 
                       onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)}
@@ -481,27 +676,41 @@ export default function CreditNotesPage() {
               
               <FormField
                 control={form.control}
-                name="amount"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Monto</FormLabel>
-                    <FormControl>
-                      <Input type="number" step="0.01" min="0.01" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={form.control}
                 name="reason"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Motivo</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Motivo de la nota" {...field} />
-                    </FormControl>
+                    <Select
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar motivo" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {noteType === "credit" ? (
+                          <>
+                            <SelectItem value="Devolución de productos">Devolución de productos</SelectItem>
+                            <SelectItem value="Descuento aplicado">Descuento aplicado</SelectItem>
+                            <SelectItem value="Error en facturación">Error en facturación</SelectItem>
+                            <SelectItem value="Bonificación">Bonificación</SelectItem>
+                            <SelectItem value="Ajuste de precios">Ajuste de precios</SelectItem>
+                            <SelectItem value="Otro">Otro</SelectItem>
+                          </>
+                        ) : (
+                          <>
+                            <SelectItem value="Cargo adicional">Cargo adicional</SelectItem>
+                            <SelectItem value="Interés por mora">Interés por mora</SelectItem>
+                            <SelectItem value="Penalización">Penalización</SelectItem>
+                            <SelectItem value="Faltante en pago">Faltante en pago</SelectItem>
+                            <SelectItem value="Ajuste de precios">Ajuste de precios</SelectItem>
+                            <SelectItem value="Otro">Otro</SelectItem>
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -512,9 +721,13 @@ export default function CreditNotesPage() {
                 name="notes"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Notas Adicionales (opcional)</FormLabel>
+                    <FormLabel>{form.watch("reason") === "Otro" ? "Especificar motivo" : "Detalles adicionales (opcional)"}</FormLabel>
                     <FormControl>
-                      <Textarea placeholder="Detalles adicionales" {...field} />
+                      <Textarea 
+                        placeholder={form.watch("reason") === "Otro" ? "Especifique el motivo de la nota" : "Información adicional relevante"}
+                        className="resize-none min-h-[80px]" 
+                        {...field} 
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
