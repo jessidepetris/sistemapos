@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import Sidebar from "@/components/layout/sidebar";
@@ -34,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { provincias, localidadesPorProvincia } from "@/lib/argentina-data";
 
 const customerFormSchema = insertCustomerSchema.extend({});
 
@@ -44,6 +45,8 @@ export default function CustomersPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [editingCustomer, setEditingCustomer] = useState<number | null>(null);
+  const [selectedProvinciaId, setSelectedProvinciaId] = useState<string | null>(null);
+  const [availableLocalidades, setAvailableLocalidades] = useState<{ id: string, nombre: string }[]>([]);
 
   // Get customers
   const { data: customers, isLoading } = useQuery({
@@ -56,6 +59,16 @@ export default function CustomersPage() {
     queryKey: ["/api/users"],
     retry: false,
   });
+  
+  // Update localidades when provincia changes
+  useEffect(() => {
+    if (selectedProvinciaId) {
+      const localidades = localidadesPorProvincia[selectedProvinciaId] || [];
+      setAvailableLocalidades(localidades);
+    } else {
+      setAvailableLocalidades([]);
+    }
+  }, [selectedProvinciaId]);
 
   // Form definition
   const form = useForm<CustomerFormValues>({
@@ -160,6 +173,16 @@ export default function CustomersPage() {
   // Edit customer handler
   const handleEditCustomer = (customer: any) => {
     setEditingCustomer(customer.id);
+    
+    // Buscar el ID de la provincia basado en el nombre
+    const provinciaId = provincias.find(p => p.nombre === customer.province)?.id || null;
+    setSelectedProvinciaId(provinciaId);
+    
+    // Si tenemos la provincia, cargamos sus localidades
+    if (provinciaId) {
+      setAvailableLocalidades(localidadesPorProvincia[provinciaId] || []);
+    }
+    
     form.reset({
       name: customer.name,
       phone: customer.phone || "",
@@ -169,15 +192,19 @@ export default function CustomersPage() {
       province: customer.province || "",
       notes: customer.notes || "",
       hasAccount: customer.hasAccount || false,
-      sellerId: customer.sellerId,
+      sellerId: customer.sellerId || 0,
       invoiceType: customer.invoiceType || "remito",
     });
+    
     setIsDialogOpen(true);
   };
 
   // New customer handler
   const handleNewCustomer = () => {
     setEditingCustomer(null);
+    setSelectedProvinciaId(null);
+    setAvailableLocalidades([]);
+    
     form.reset({
       name: "",
       phone: "",
@@ -190,6 +217,7 @@ export default function CustomersPage() {
       sellerId: 0,
       invoiceType: "remito",
     });
+    
     setIsDialogOpen(true);
   };
 
@@ -380,13 +408,30 @@ export default function CustomersPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
-                  name="city"
+                  name="province"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Localidad</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Localidad" {...field} />
-                      </FormControl>
+                      <FormLabel>Provincia</FormLabel>
+                      <Select 
+                        onValueChange={(value) => {
+                          field.onChange(value ? provincias.find(p => p.id === value)?.nombre || "" : "");
+                          setSelectedProvinciaId(value);
+                        }}
+                        value={provincias.find(p => p.nombre === field.value)?.id || ""}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccione provincia" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {provincias.map((provincia) => (
+                            <SelectItem key={provincia.id} value={provincia.id}>
+                              {provincia.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -394,13 +439,30 @@ export default function CustomersPage() {
                 
                 <FormField
                   control={form.control}
-                  name="province"
+                  name="city"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Provincia</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Provincia" {...field} />
-                      </FormControl>
+                      <FormLabel>Localidad</FormLabel>
+                      <Select 
+                        onValueChange={(value) => {
+                          field.onChange(value ? availableLocalidades.find(l => l.id === value)?.nombre || "" : "");
+                        }}
+                        value={availableLocalidades.find(l => l.nombre === field.value)?.id || ""}
+                        disabled={!selectedProvinciaId || availableLocalidades.length === 0}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccione localidad" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {availableLocalidades.map((localidad) => (
+                            <SelectItem key={localidad.id} value={localidad.id}>
+                              {localidad.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
