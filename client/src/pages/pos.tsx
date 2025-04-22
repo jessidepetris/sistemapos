@@ -26,6 +26,11 @@ type CartItem = {
   isBulk: boolean;
   isRefrigerated: boolean;
   conversionRates?: any;
+  // Campos para conversiones mejoradas
+  isConversion?: boolean;
+  conversionUnit?: string;
+  conversionFactor?: number;
+  conversionBarcode?: string;
 };
 
 export default function POSPage() {
@@ -88,11 +93,13 @@ export default function POSPage() {
   // Handle adding product to cart
   const addToCart = (product: any) => {
     setCart(prevCart => {
-      const existingItem = prevCart.find(item => item.productId === product.id);
+      const existingItem = prevCart.find(item => 
+        item.productId === product.id && item.isConversion === false
+      );
       
       if (existingItem) {
         return prevCart.map(item => 
-          item.productId === product.id 
+          item.productId === product.id && item.isConversion === false
             ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * item.price }
             : item
         );
@@ -108,9 +115,66 @@ export default function POSPage() {
           stockAvailable: parseFloat(product.stock),
           isBulk: product.isBulk,
           isRefrigerated: product.isRefrigerated,
-          conversionRates: product.conversionRates
+          conversionRates: product.conversionRates,
+          isConversion: false,
+          conversionFactor: 1  // Factor 1 para producto principal
         }];
       }
+    });
+  };
+  
+  // Handle adding a product conversion to cart
+  const addConversionToCart = (product: any, conversion: any) => {
+    const displayName = conversion.description 
+      ? `${product.name} - ${conversion.description}` 
+      : `${product.name} (${conversion.unit})`;
+      
+    // Calculamos el precio basado en el factor de conversión
+    // Por ejemplo, si vende en unidades de 500g, y el factor es 0.5,
+    // entonces el precio es el 50% del precio total
+    const conversionPrice = parseFloat(product.price) * conversion.factor;
+    
+    setCart(prevCart => {
+      // Buscar si ya existe este producto con esta conversión específica
+      const existingItem = prevCart.find(item => 
+        item.productId === product.id && 
+        item.isConversion === true && 
+        item.conversionUnit === conversion.unit
+      );
+      
+      if (existingItem) {
+        return prevCart.map(item => 
+          (item.productId === product.id && 
+           item.isConversion === true && 
+           item.conversionUnit === conversion.unit)
+            ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * item.price }
+            : item
+        );
+      } else {
+        return [...prevCart, {
+          id: Date.now(),
+          productId: product.id,
+          name: displayName,
+          price: conversionPrice,
+          quantity: 1,
+          unit: conversion.unit,
+          total: conversionPrice,
+          stockAvailable: parseFloat(product.stock) / conversion.factor,
+          isBulk: product.isBulk,
+          isRefrigerated: product.isRefrigerated,
+          conversionRates: product.conversionRates,
+          isConversion: true,
+          conversionUnit: conversion.unit,
+          conversionFactor: conversion.factor,
+          conversionBarcode: conversion.barcode
+        }];
+      }
+    });
+    
+    // Mostrar un toast de confirmación
+    toast({
+      title: "Producto agregado",
+      description: `${displayName} agregado al carrito`,
     });
   };
   
@@ -119,14 +183,50 @@ export default function POSPage() {
     e.preventDefault();
     if (!barcodeInput.trim()) return;
     
+    // Primero buscamos si es un código de barras principal del producto
     const foundProduct = products?.find((product: any) => 
       product.barcodes && product.barcodes.includes(barcodeInput.trim())
     );
     
     if (foundProduct) {
+      // Añadir el producto con su código principal
       addToCart(foundProduct);
       setBarcodeInput("");
-    } else {
+      return;
+    }
+    
+    // Si no encontramos un producto directamente, buscamos en las conversiones
+    let foundConversion = false;
+    
+    if (Array.isArray(products)) {
+      for (const product of products) {
+        if (!product.isBulk || !product.conversionRates) continue;
+        
+        // Parsear las conversiones si están en formato string
+        const conversions = typeof product.conversionRates === 'string' 
+          ? JSON.parse(product.conversionRates) 
+          : product.conversionRates;
+        
+        if (!Array.isArray(conversions)) continue;
+        
+        // Buscar en las conversiones
+        const matchingConversion = conversions.find((conv: any) => 
+          conv.barcode === barcodeInput.trim()
+        );
+        
+        if (matchingConversion) {
+          // Encontramos una presentación con este código de barras
+          foundConversion = true;
+          
+          // Añadir al carrito con la información de la conversión
+          addConversionToCart(product, matchingConversion);
+          setBarcodeInput("");
+          break;
+        }
+      }
+    }
+    
+    if (!foundConversion) {
       toast({
         title: "Producto no encontrado",
         description: `No se encontró ningún producto con el código de barras ${barcodeInput}`,
