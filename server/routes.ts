@@ -1943,6 +1943,142 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Este endpoint ya existía y fue eliminado para evitar duplicación
+  
+  // Endpoint para obtener pedidos del usuario web
+  app.get("/api/web/orders", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "No autorizado" });
+    }
+    
+    try {
+      // Obtener todos los pedidos
+      const allOrders = await storage.getAllOrders();
+      
+      // Filtrar los pedidos web del usuario actual
+      const userOrders = allOrders
+        .filter(order => order.isWebOrder && order.customerData)
+        .map(order => {
+          let customerData = {};
+          try {
+            customerData = JSON.parse(order.customerData || '{}');
+          } catch (e) {
+            console.error("Error al parsear datos del cliente:", e);
+          }
+          
+          // Si el usuario está autenticado, filtrar solo sus pedidos
+          if (customerData.customerId === req.user.customerId || 
+              customerData.email === req.user.email) {
+            return order;
+          }
+          return null;
+        })
+        .filter(Boolean); // Eliminar nulls
+      
+      // Enriquecer con items de cada pedido
+      const enrichedOrders = await Promise.all(
+        userOrders.map(async (order) => {
+          const items = await storage.getOrderItemsByOrderId(order.id);
+          
+          // Enriquecer los items con datos del producto
+          const enrichedItems = await Promise.all(
+            items.map(async (item) => {
+              const product = await storage.getProduct(item.productId);
+              return {
+                ...item,
+                productName: product ? product.name : "Producto desconocido"
+              };
+            })
+          );
+          
+          return {
+            ...order,
+            items: enrichedItems
+          };
+        })
+      );
+      
+      res.json(enrichedOrders);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener pedidos", error: (error as Error).message });
+    }
+  });
+  
+  // Actualizar perfil de usuario web
+  app.put("/api/web/user/profile", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "No autorizado" });
+    }
+    
+    try {
+      const { name, email, phone, address, city, province } = req.body;
+      const userId = req.user.id;
+      
+      // Actualizar el usuario
+      const updatedUser = await storage.updateUser(userId, {
+        fullName: name
+      });
+      
+      // Si el usuario está asociado a un cliente, actualizar también los datos del cliente
+      if (req.user.customerId) {
+        await storage.updateCustomer(req.user.customerId, {
+          name, 
+          email, 
+          phone, 
+          address,
+          city,
+          province
+        });
+      }
+      
+      const { password, ...userData } = updatedUser;
+      res.json({
+        ...userData,
+        name: userData.fullName,
+        email,
+        phone,
+        address,
+        city,
+        province
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Error al actualizar el perfil", error: (error as Error).message });
+    }
+  });
+  
+  // Cambiar contraseña de usuario web
+  app.put("/api/web/user/password", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "No autorizado" });
+    }
+    
+    try {
+      const { currentPassword, newPassword } = req.body;
+      const userId = req.user.id;
+      
+      // Verificar la contraseña actual
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+      
+      const passwordMatches = await comparePasswords(currentPassword, user.password);
+      if (!passwordMatches) {
+        return res.status(400).json({ message: "La contraseña actual es incorrecta" });
+      }
+      
+      // Hash de la nueva contraseña
+      const hashedPassword = await hashPassword(newPassword);
+      
+      // Actualizar la contraseña
+      await storage.updateUser(userId, { password: hashedPassword });
+      
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Error al cambiar la contraseña", error: (error as Error).message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
