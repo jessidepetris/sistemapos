@@ -69,7 +69,7 @@ export default function CustomersPage() {
       province: "",
       notes: "",
       hasAccount: false,
-      sellerId: undefined,
+      sellerId: 0,
       invoiceType: "remito",
     },
   });
@@ -187,7 +187,7 @@ export default function CustomersPage() {
       province: "",
       notes: "",
       hasAccount: false,
-      sellerId: undefined,
+      sellerId: 0,
       invoiceType: "remito",
     });
     setIsDialogOpen(true);
@@ -424,7 +424,7 @@ export default function CustomersPage() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">Sin vendedor asignado</SelectItem>
+                          <SelectItem value="0">Sin vendedor asignado</SelectItem>
                           {users?.map((user: any) => (
                             <SelectItem key={user.id} value={user.id.toString()}>
                               {user.fullName}
