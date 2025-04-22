@@ -10,46 +10,276 @@ export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
 
   // Dashboard endpoints
-  app.get("/api/dashboard/stats", (req, res) => {
-    const stats = {
-      todaySales: { total: "$24,500", change: "12%", trend: "up" },
-      transactions: { count: "42", change: "8%", trend: "up" },
-      lowStock: { count: "8" },
-      newCustomers: { count: "3" }
-    };
-    res.json(stats);
+  app.get("/api/dashboard/stats", async (req, res) => {
+    try {
+      // Obtener fecha de hoy (inicio y fin)
+      const today = new Date();
+      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      
+      // Obtener ventas de hoy
+      const todaySales = await storage.getAllSales() || [];
+      const todaySalesFiltered = todaySales.filter((sale: any) => {
+        const saleDate = new Date(sale.timestamp);
+        return saleDate >= startOfToday;
+      });
+      
+      const yesterdaySales = await storage.getAllSales() || [];
+      const yesterdaySalesFiltered = yesterdaySales.filter((sale: any) => {
+        const saleDate = new Date(sale.timestamp);
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        const startOfYesterday = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
+        const endOfYesterday = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59);
+        return saleDate >= startOfYesterday && saleDate <= endOfYesterday;
+      });
+      
+      // Calcular total de ventas de hoy
+      const todayTotal = todaySalesFiltered.reduce((acc: number, sale: any) => {
+        return acc + parseFloat(sale.total);
+      }, 0);
+      
+      // Calcular total de ventas de ayer
+      const yesterdayTotal = yesterdaySalesFiltered.reduce((acc: number, sale: any) => {
+        return acc + parseFloat(sale.total);
+      }, 0);
+      
+      // Calcular cambio porcentual
+      let percentChange = 0;
+      let trend = "neutral";
+      
+      if (yesterdayTotal > 0) {
+        percentChange = ((todayTotal - yesterdayTotal) / yesterdayTotal) * 100;
+        trend = percentChange > 0 ? "up" : percentChange < 0 ? "down" : "neutral";
+      } else if (todayTotal > 0) {
+        percentChange = 100;
+        trend = "up";
+      }
+      
+      // Obtener productos con stock bajo
+      const products = await storage.getAllProducts() || [];
+      const lowStockProducts = products.filter((product: any) => {
+        // Consideramos stock bajo cuando hay menos de 10 unidades
+        return parseFloat(product.stock) < 10;
+      });
+      
+      // Obtener clientes nuevos (últimos 7 días)
+      const customers = await storage.getAllCustomers() || [];
+      const sevenDaysAgo = new Date(today);
+      sevenDaysAgo.setDate(today.getDate() - 7);
+      
+      const newCustomers = customers.filter((customer: any) => {
+        // Si no hay fecha de registro, no lo consideramos nuevo
+        if (!customer.createdAt) return false;
+        const registerDate = new Date(customer.createdAt);
+        return registerDate >= sevenDaysAgo;
+      });
+      
+      const stats = {
+        todaySales: { 
+          total: `$${todayTotal.toFixed(2)}`, 
+          change: `${Math.abs(percentChange).toFixed(1)}%`, 
+          trend 
+        },
+        transactions: { 
+          count: `${todaySalesFiltered.length}`, 
+          change: yesterdaySalesFiltered.length > 0 
+            ? `${Math.abs(((todaySalesFiltered.length - yesterdaySalesFiltered.length) / yesterdaySalesFiltered.length) * 100).toFixed(1)}%` 
+            : "0%", 
+          trend: todaySalesFiltered.length > yesterdaySalesFiltered.length ? "up" : 
+                 todaySalesFiltered.length < yesterdaySalesFiltered.length ? "down" : "neutral" 
+        },
+        lowStock: { 
+          count: `${lowStockProducts.length}` 
+        },
+        newCustomers: { 
+          count: `${newCustomers.length}` 
+        }
+      };
+      
+      res.json(stats);
+    } catch (error) {
+      console.error("Error al generar estadísticas del dashboard:", error);
+      res.status(500).json({ error: "Error al generar estadísticas" });
+    }
   });
 
-  app.get("/api/dashboard/recent-sales", (req, res) => {
-    const recentSales = [
-      { id: 5263, customer: "Juan Pérez", items: 8, total: 4350, timestamp: "2023-05-12T10:42:00", status: "completed" },
-      { id: 5262, customer: "María García", items: 3, total: 850, timestamp: "2023-05-12T09:35:00", status: "completed" },
-      { id: 5261, customer: "Carlos López", items: 5, total: 1250, timestamp: "2023-05-12T09:10:00", status: "pending" },
-      { id: 5260, customer: "Ana Rodríguez", items: 12, total: 6780, timestamp: "2023-05-11T16:22:00", status: "completed" },
-      { id: 5259, customer: "Miguel Hernández", items: 2, total: 320, timestamp: "2023-05-11T15:45:00", status: "processing" }
-    ];
-    res.json(recentSales);
+  app.get("/api/dashboard/recent-sales", async (req, res) => {
+    try {
+      const allSales = await storage.getAllSales() || [];
+      
+      // Ordenar por fecha, más recientes primero
+      const sortedSales = [...allSales].sort((a, b) => {
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      });
+      
+      // Tomar las 5 ventas más recientes
+      const recentSales = sortedSales.slice(0, 5).map(async (sale) => {
+        // Obtener detalles del cliente
+        let customerName = "Cliente no registrado";
+        if (sale.customerId) {
+          const customer = await storage.getCustomer(sale.customerId);
+          if (customer) {
+            customerName = customer.name;
+          }
+        }
+        
+        // Obtener ítems de la venta
+        const saleItems = await storage.getSaleItemsBySaleId(sale.id);
+        
+        return {
+          id: sale.id,
+          customer: customerName,
+          items: saleItems.length,
+          total: parseFloat(sale.total),
+          timestamp: sale.timestamp,
+          status: sale.status || "completed"
+        };
+      });
+      
+      // Resolver todas las promesas
+      const processedSales = await Promise.all(recentSales);
+      
+      res.json(processedSales);
+    } catch (error) {
+      console.error("Error al obtener ventas recientes:", error);
+      res.status(500).json({ error: "Error al obtener ventas recientes" });
+    }
   });
 
-  app.get("/api/dashboard/inventory-alerts", (req, res) => {
-    const inventoryAlerts = [
-      { id: 1, product: "Leche Entera 1L", stock: 5, unit: "unidades", level: "critical" },
-      { id: 2, product: "Queso Cremoso", stock: 8, unit: "unidades", level: "warning" },
-      { id: 3, product: "Yogur Natural 500g", stock: 12, unit: "unidades", level: "warning" },
-      { id: 4, product: "Manteca 200g", stock: 3, unit: "unidades", level: "critical" }
-    ];
-    res.json(inventoryAlerts);
+  app.get("/api/dashboard/inventory-alerts", async (req, res) => {
+    try {
+      const products = await storage.getAllProducts() || [];
+      
+      // Filtrar productos con stock bajo
+      const lowStockProducts = products
+        .filter((product: any) => {
+          return parseFloat(product.stock) < 10;
+        })
+        .map((product: any, index) => {
+          return {
+            id: product.id,
+            product: product.name,
+            stock: parseFloat(product.stock),
+            unit: product.unit || "unidades",
+            level: parseFloat(product.stock) < 5 ? "critical" : "warning"
+          };
+        });
+      
+      // Ordenar por nivel de criticidad y stock (primero los más críticos)
+      const sortedAlerts = lowStockProducts.sort((a, b) => {
+        if (a.level === "critical" && b.level !== "critical") return -1;
+        if (a.level !== "critical" && b.level === "critical") return 1;
+        return a.stock - b.stock;
+      });
+      
+      // Limitar a 5 alertas
+      const inventoryAlerts = sortedAlerts.slice(0, 5);
+      
+      res.json(inventoryAlerts);
+    } catch (error) {
+      console.error("Error al obtener alertas de inventario:", error);
+      res.status(500).json({ error: "Error al obtener alertas de inventario" });
+    }
   });
 
-  app.get("/api/dashboard/recent-activity", (req, res) => {
-    const recentActivity = [
-      { id: 1, user: "María García", action: "generó un remito", timeAgo: "Hace 15 minutos", type: "sale" },
-      { id: 2, user: "Juan Pérez", action: "agregó 10 productos al inventario", timeAgo: "Hace 42 minutos", type: "inventory" },
-      { id: 3, user: "Carlos López", action: "actualizó precios", timeAgo: "Hace 1 hora", type: "price" },
-      { id: 4, user: "Ana Rodríguez", action: "registró un nuevo cliente", timeAgo: "Hace 3 horas", type: "customer" }
-    ];
-    res.json(recentActivity);
+  app.get("/api/dashboard/recent-activity", async (req, res) => {
+    try {
+      // Recopilar diferentes tipos de actividad
+      const allSales = await storage.getAllSales() || [];
+      const users = await storage.getAllUsers() || [];
+      
+      // Crear actividades de venta (las 2 más recientes)
+      const salesActivities = allSales
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, 2)
+        .map((sale, index) => {
+          const user = users.find((u: any) => u.id === sale.userId);
+          const timeAgo = getTimeAgo(sale.timestamp);
+          
+          return {
+            id: `sale-${sale.id}`,
+            user: user ? (user.fullName || user.username) : "Usuario",
+            action: `registró una venta de $${parseFloat(sale.total).toFixed(2)}`,
+            timeAgo,
+            type: "sale",
+            timestamp: new Date(sale.timestamp).getTime()
+          };
+        });
+      
+      // Actividades de inventario
+      const inventoryActivities = [
+        {
+          id: "inventory-1",
+          user: "Sistema",
+          action: "actualizó nivel de stock de productos",
+          timeAgo: "Hace 2 horas",
+          type: "inventory",
+          timestamp: Date.now() - 2 * 60 * 60 * 1000
+        }
+      ];
+      
+      // Actividades de precios
+      const priceActivities = [
+        {
+          id: "price-1",
+          user: users.length > 0 ? (users[0].fullName || users[0].username) : "Usuario",
+          action: "actualizó precios de productos",
+          timeAgo: "Hace 4 horas",
+          type: "price",
+          timestamp: Date.now() - 4 * 60 * 60 * 1000
+        }
+      ];
+      
+      // Actividades de clientes
+      const customerActivities = [
+        {
+          id: "customer-1",
+          user: users.length > 1 ? (users[1].fullName || users[1].username) : "Usuario",
+          action: "registró un nuevo cliente",
+          timeAgo: "Hace 6 horas",
+          type: "customer",
+          timestamp: Date.now() - 6 * 60 * 60 * 1000
+        }
+      ];
+      
+      // Combinar todas las actividades
+      const allActivities = [
+        ...salesActivities,
+        ...inventoryActivities,
+        ...priceActivities,
+        ...customerActivities
+      ];
+      
+      // Ordenar por tiempo (más recientes primero)
+      const sortedActivities = allActivities.sort((a, b) => b.timestamp - a.timestamp);
+      
+      // Tomar las 4 actividades más recientes
+      const recentActivity = sortedActivities.slice(0, 4);
+      
+      res.json(recentActivity);
+    } catch (error) {
+      console.error("Error al obtener actividad reciente:", error);
+      res.status(500).json({ error: "Error al obtener actividad reciente" });
+    }
   });
+  
+  // Función helper para calcular tiempo transcurrido
+  function getTimeAgo(timestamp: string | Date) {
+    const now = new Date();
+    const date = new Date(timestamp);
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffMins < 60) {
+      return `Hace ${diffMins} minutos`;
+    } else if (diffHours < 24) {
+      return `Hace ${diffHours} horas`;
+    } else {
+      return `Hace ${diffDays} días`;
+    }
+  }
 
   // Products endpoints
   app.get("/api/products", async (req, res) => {

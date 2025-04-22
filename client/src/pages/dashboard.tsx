@@ -87,7 +87,7 @@ export default function Dashboard() {
             <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-slate-200">
               <div className="p-4 border-b border-slate-200 flex items-center justify-between">
                 <h3 className="font-medium">Ventas Recientes</h3>
-                <Button variant="link" className="text-sm">Ver Todas</Button>
+                <Button variant="link" className="text-sm" onClick={() => window.location.href = "/invoices"}>Ver Todas</Button>
               </div>
               
               <div className="overflow-x-auto">
@@ -144,7 +144,7 @@ export default function Dashboard() {
               <Card>
                 <div className="p-4 border-b border-slate-200 flex items-center justify-between">
                   <h3 className="font-medium">Alertas de Inventario</h3>
-                  <Button variant="link" className="text-sm">Ver Todas</Button>
+                  <Button variant="link" className="text-sm" onClick={() => window.location.href = "/products"}>Ver Todas</Button>
                 </div>
                 
                 <CardContent className="p-4 space-y-4">
@@ -163,7 +163,8 @@ export default function Dashboard() {
                               <p className="text-xs text-slate-500">Stock bajo: {alert.stock} {alert.unit}</p>
                             </div>
                           </div>
-                          <Button variant="outline" size="sm" className="text-xs">
+                          <Button variant="outline" size="sm" className="text-xs" 
+                              onClick={() => window.location.href = "/orders"}>
                             Pedir
                           </Button>
                         </div>
@@ -218,34 +219,40 @@ export default function Dashboard() {
           <div className="mt-6">
             <h3 className="text-lg font-medium mb-4">Acciones Rápidas</h3>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              <Card className="p-4 hover:shadow-md transition-shadow flex flex-col items-center justify-center text-center">
+              <Card className="p-4 hover:shadow-md transition-shadow flex flex-col items-center justify-center text-center cursor-pointer"
+                onClick={() => window.location.href = "/pos"}>
                 <ShoppingCart className="text-primary text-2xl mb-2" />
                 <span className="text-sm font-medium">Nueva Venta</span>
               </Card>
               
-              <Card className="p-4 hover:shadow-md transition-shadow flex flex-col items-center justify-center text-center">
+              <Card className="p-4 hover:shadow-md transition-shadow flex flex-col items-center justify-center text-center cursor-pointer"
+                onClick={() => window.location.href = "/products"}>
                 <Package className="text-primary text-2xl mb-2" />
                 <span className="text-sm font-medium">Nuevo Producto</span>
               </Card>
               
-              <Card className="p-4 hover:shadow-md transition-shadow flex flex-col items-center justify-center text-center">
+              <Card className="p-4 hover:shadow-md transition-shadow flex flex-col items-center justify-center text-center cursor-pointer"
+                onClick={() => window.location.href = "/customers"}>
                 <Users className="text-primary text-2xl mb-2" />
                 <span className="text-sm font-medium">Nuevo Cliente</span>
               </Card>
               
-              <Card className="p-4 hover:shadow-md transition-shadow flex flex-col items-center justify-center text-center">
+              <Card className="p-4 hover:shadow-md transition-shadow flex flex-col items-center justify-center text-center cursor-pointer"
+                onClick={() => window.location.href = "/suppliers"}>
                 <TrendingUp className="text-primary text-2xl mb-2" />
                 <span className="text-sm font-medium">Nuevo Proveedor</span>
               </Card>
               
-              <Card className="p-4 hover:shadow-md transition-shadow flex flex-col items-center justify-center text-center">
+              <Card className="p-4 hover:shadow-md transition-shadow flex flex-col items-center justify-center text-center cursor-pointer"
+                onClick={() => window.location.href = "/credit-notes"}>
                 <Receipt className="text-primary text-2xl mb-2" />
-                <span className="text-sm font-medium">Exportar Lista</span>
+                <span className="text-sm font-medium">Notas Crédito/Débito</span>
               </Card>
               
-              <Card className="p-4 hover:shadow-md transition-shadow flex flex-col items-center justify-center text-center">
+              <Card className="p-4 hover:shadow-md transition-shadow flex flex-col items-center justify-center text-center cursor-pointer"
+                onClick={() => window.location.href = "/accounts"}>
                 <BarChart className="text-primary text-2xl mb-2" />
-                <span className="text-sm font-medium">Ver Reportes</span>
+                <span className="text-sm font-medium">Cuentas Corrientes</span>
               </Card>
             </div>
           </div>
