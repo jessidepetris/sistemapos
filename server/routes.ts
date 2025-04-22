@@ -1093,41 +1093,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Autenticación de usuarios web
   app.post("/api/web/register", async (req, res) => {
     try {
-      const { email, password, name, address, phone, city, province } = req.body;
+      const { username, password, fullName, email, phone, address, customerId } = req.body;
       
       // Verificar si el usuario ya existe
-      const existingUsers = await storage.getAllWebUsers();
-      const existingUser = existingUsers.find(u => u.email === email);
+      const existingUser = await storage.getUserByUsername(username);
       if (existingUser) {
-        return res.status(400).json({ message: "El email ya está registrado" });
+        return res.status(400).json({ message: "El nombre de usuario ya está registrado" });
       }
       
-      // Crear un cliente primero
-      const customer = await storage.createCustomer({
-        name,
-        address,
-        phone,
-        email,
-        city,
-        province,
-        hasAccount: false
-      });
+      // Si no se proporciona un customerId, crear un nuevo cliente
+      let customerAssociated = customerId;
+      if (!customerAssociated) {
+        const customer = await storage.createCustomer({
+          name: fullName,
+          address,
+          phone,
+          email,
+          province: "",
+          city: "",
+          hasAccount: false
+        });
+        customerAssociated = customer.id;
+      }
       
-      // Crear usuario web
-      // En un sistema real, deberíamos encriptar la contraseña y generar un token de verificación
-      const webUser = await storage.createWebUser({
-        email,
+      // Crear usuario web (reutilizamos la tabla de usuarios)
+      const webUser = await storage.createUser({
+        username,
         password, // En un sistema real, esto debería estar hasheado
-        customerId: customer.id,
-        verificationToken: Math.random().toString(36).substring(2, 15),
-        verified: false
+        fullName,
+        role: "cliente", // Rol específico para usuarios web
+        active: true
       });
       
       res.status(201).json({
         id: webUser.id,
-        email: webUser.email,
-        customerId: webUser.customerId,
-        verified: webUser.verified
+        username: webUser.username,
+        fullName: webUser.fullName,
+        customerId: customerAssociated
       });
     } catch (error) {
       res.status(400).json({ message: "Error al registrar usuario", error: (error as Error).message });
@@ -1136,35 +1138,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.post("/api/web/login", async (req, res) => {
     try {
-      const { email, password } = req.body;
+      const { username, password } = req.body;
       
-      // Buscar usuario por email
-      const webUsers = await storage.getAllWebUsers();
-      const webUser = webUsers.find(u => u.email === email);
+      // Buscar usuario por username
+      const user = await storage.getUserByUsername(username);
       
-      if (!webUser || webUser.password !== password) {
+      if (!user || user.password !== password) {
         return res.status(401).json({ message: "Credenciales inválidas" });
       }
       
-      // Actualizar el último login
-      await storage.updateWebUser(webUser.id, { lastLogin: new Date() });
-      
-      // Obtener información del cliente asociado
-      let customer = null;
-      if (webUser.customerId) {
-        customer = await storage.getCustomer(webUser.customerId);
+      // Verificar que sea un usuario cliente
+      if (user.role !== 'cliente') {
+        return res.status(403).json({ message: "Acceso denegado. Usuario no autorizado para el catálogo web" });
       }
       
-      // Crear sesión web (en una implementación real usaríamos JWT o similar)
-      const sessionToken = Math.random().toString(36).substring(2, 15);
+      // Buscar cliente asociado por nombre completo (simplificado, en producción se usaría relación directa)
+      const allCustomers = await storage.getAllCustomers();
+      const customer = allCustomers.find(c => c.name === user.fullName);
       
-      res.json({
-        id: webUser.id,
-        email: webUser.email,
-        customerId: webUser.customerId,
-        verified: webUser.verified,
-        customer,
-        token: sessionToken
+      let customerId = null;
+      if (customer) {
+        customerId = customer.id;
+      }
+      
+      // Iniciar sesión con Passport
+      req.login(user, (err) => {
+        if (err) {
+          return res.status(500).json({ message: "Error al iniciar sesión", error: err.message });
+        }
+        
+        // Responder con los datos del usuario
+        res.json({
+          id: user.id,
+          username: user.username,
+          fullName: user.fullName,
+          role: user.role,
+          customerId
+        });
       });
     } catch (error) {
       res.status(500).json({ message: "Error al iniciar sesión", error: (error as Error).message });
