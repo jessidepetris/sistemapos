@@ -83,8 +83,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const { data: cartItems = [] } = useQuery<CartItem[]>({
     queryKey: ["/api/web/cart/items"],
     queryFn: async () => {
-      if (!cart) return [];
-      const response = await fetch(`/api/web/cart/items?cartId=${cart.id}`);
+      // Simplemente hacemos una petición GET sin parámetros
+      // El servidor determinará el carrito basándose en la sesión
+      const response = await fetch(`/api/web/cart/items`);
       if (!response.ok) return [];
       return response.json();
     },
@@ -101,8 +102,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
       return await res.json();
     },
-    onSuccess: (updatedCart: Cart) => {
-      queryClient.setQueryData(["/api/web/cart"], updatedCart);
+    onSuccess: (data) => {
+      // Invalidar consultas para forzar recargas de datos
+      queryClient.invalidateQueries({ queryKey: ["/api/web/cart"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/web/cart/items"] });
+      
+      toast({
+        title: "Producto agregado",
+        description: "El producto ha sido agregado al carrito",
+      });
     },
     onError: (error: Error) => {
       toast({
@@ -123,8 +131,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
       return await res.json();
     },
-    onSuccess: (updatedCart: Cart) => {
-      queryClient.setQueryData(["/api/web/cart"], updatedCart);
+    onSuccess: () => {
+      // Invalidar consultas para forzar recargas de datos
+      queryClient.invalidateQueries({ queryKey: ["/api/web/cart"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/web/cart/items"] });
+      
       toast({
         title: "Producto eliminado",
         description: "El producto ha sido eliminado del carrito",
