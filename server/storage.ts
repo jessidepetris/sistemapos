@@ -126,7 +126,7 @@ export interface IStorage {
   deleteRouteAssignment(id: number): Promise<void>;
   
   // Session store
-  sessionStore: session.SessionStore;
+  sessionStore: session.Store;
 }
 
 export class MemStorage implements IStorage {
@@ -171,7 +171,7 @@ export class MemStorage implements IStorage {
   private deliveryEventIdCounter: number;
   private routeAssignmentIdCounter: number;
   
-  sessionStore: session.SessionStore;
+  sessionStore: session.Store;
 
   constructor() {
     this.users = new Map();
@@ -186,6 +186,15 @@ export class MemStorage implements IStorage {
     this.orderItems = new Map();
     this.notes = new Map();
     
+    // Inicializar los Maps de logística
+    this.vehicles = new Map();
+    this.deliveryZones = new Map();
+    this.deliveryRoutes = new Map();
+    this.deliveries = new Map();
+    this.deliveryEvents = new Map();
+    this.routeAssignments = new Map();
+    
+    // Inicializar contadores
     this.userIdCounter = 1;
     this.supplierIdCounter = 1;
     this.customerIdCounter = 1;
@@ -197,6 +206,14 @@ export class MemStorage implements IStorage {
     this.orderIdCounter = 1;
     this.orderItemIdCounter = 1;
     this.noteIdCounter = 1;
+    
+    // Inicializar contadores de logística
+    this.vehicleIdCounter = 1;
+    this.deliveryZoneIdCounter = 1;
+    this.deliveryRouteIdCounter = 1;
+    this.deliveryIdCounter = 1;
+    this.deliveryEventIdCounter = 1;
+    this.routeAssignmentIdCounter = 1;
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000 // prune expired entries every 24h
@@ -373,7 +390,7 @@ export class MemStorage implements IStorage {
     const account: Account = { 
       ...insertAccount, 
       id,
-      balance: insertAccount.balance || 0,
+      balance: insertAccount.balance || "0",
       lastUpdated: new Date() 
     };
     this.accounts.set(id, account);
@@ -434,7 +451,7 @@ export class MemStorage implements IStorage {
     return Array.from(this.sales.values())
       .sort((a, b) => {
         // Sort by timestamp in descending order (newest first)
-        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        return new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime();
       });
   }
   
@@ -443,7 +460,7 @@ export class MemStorage implements IStorage {
     const sale: Sale = { 
       ...insertSale, 
       id,
-      timestamp: insertSale.timestamp || new Date() 
+      timestamp: new Date() 
     };
     this.sales.set(id, sale);
     return sale;
@@ -495,7 +512,7 @@ export class MemStorage implements IStorage {
     return Array.from(this.orders.values())
       .sort((a, b) => {
         // Sort by timestamp in descending order (newest first)
-        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        return new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime();
       });
   }
   
@@ -504,7 +521,7 @@ export class MemStorage implements IStorage {
     const order: Order = { 
       ...insertOrder, 
       id,
-      timestamp: insertOrder.timestamp || new Date() 
+      timestamp: new Date() 
     };
     this.orders.set(id, order);
     return order;
@@ -553,11 +570,7 @@ export class MemStorage implements IStorage {
   }
   
   async getAllNotes(): Promise<Note[]> {
-    return Array.from(this.notes.values())
-      .sort((a, b) => {
-        // Sort by timestamp in descending order (newest first)
-        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-      });
+    return Array.from(this.notes.values());
   }
   
   async createNote(insertNote: InsertNote): Promise<Note> {
@@ -565,7 +578,7 @@ export class MemStorage implements IStorage {
     const note: Note = { 
       ...insertNote, 
       id,
-      timestamp: insertNote.timestamp || new Date() 
+      timestamp: new Date() 
     };
     this.notes.set(id, note);
     return note;
@@ -589,6 +602,368 @@ export class MemStorage implements IStorage {
     }
     
     this.notes.delete(id);
+  }
+  
+  // Vehicles
+  async getVehicle(id: number): Promise<Vehicle | undefined> {
+    return this.vehicles.get(id);
+  }
+  
+  async getAllVehicles(): Promise<Vehicle[]> {
+    return Array.from(this.vehicles.values()).filter(vehicle => vehicle.active);
+  }
+  
+  async createVehicle(insertVehicle: InsertVehicle): Promise<Vehicle> {
+    const id = this.vehicleIdCounter++;
+    const vehicle: Vehicle = { ...insertVehicle, id };
+    this.vehicles.set(id, vehicle);
+    return vehicle;
+  }
+  
+  async updateVehicle(id: number, vehicleData: Partial<Vehicle>): Promise<Vehicle> {
+    const vehicle = await this.getVehicle(id);
+    if (!vehicle) {
+      throw new Error(`Vehículo con ID ${id} no encontrado`);
+    }
+    
+    const updatedVehicle = { ...vehicle, ...vehicleData };
+    this.vehicles.set(id, updatedVehicle);
+    return updatedVehicle;
+  }
+  
+  async deleteVehicle(id: number): Promise<void> {
+    const exists = this.vehicles.has(id);
+    if (!exists) {
+      throw new Error(`Vehículo con ID ${id} no encontrado`);
+    }
+    
+    // Marcamos como inactivo en lugar de eliminar
+    const vehicle = this.vehicles.get(id);
+    if (vehicle) {
+      this.vehicles.set(id, { ...vehicle, active: false });
+    }
+  }
+  
+  // Delivery Zones
+  async getDeliveryZone(id: number): Promise<DeliveryZone | undefined> {
+    return this.deliveryZones.get(id);
+  }
+  
+  async getAllDeliveryZones(): Promise<DeliveryZone[]> {
+    return Array.from(this.deliveryZones.values()).filter(zone => zone.active);
+  }
+  
+  async createDeliveryZone(zone: InsertDeliveryZone): Promise<DeliveryZone> {
+    const id = this.deliveryZoneIdCounter++;
+    const deliveryZone: DeliveryZone = { ...zone, id };
+    this.deliveryZones.set(id, deliveryZone);
+    return deliveryZone;
+  }
+  
+  async updateDeliveryZone(id: number, zoneData: Partial<DeliveryZone>): Promise<DeliveryZone> {
+    const zone = await this.getDeliveryZone(id);
+    if (!zone) {
+      throw new Error(`Zona de entrega con ID ${id} no encontrada`);
+    }
+    
+    const updatedZone = { ...zone, ...zoneData };
+    this.deliveryZones.set(id, updatedZone);
+    return updatedZone;
+  }
+  
+  async deleteDeliveryZone(id: number): Promise<void> {
+    const exists = this.deliveryZones.has(id);
+    if (!exists) {
+      throw new Error(`Zona de entrega con ID ${id} no encontrada`);
+    }
+    
+    // Marcamos como inactivo en lugar de eliminar
+    const zone = this.deliveryZones.get(id);
+    if (zone) {
+      this.deliveryZones.set(id, { ...zone, active: false });
+    }
+  }
+  
+  // Delivery Routes
+  async getDeliveryRoute(id: number): Promise<DeliveryRoute | undefined> {
+    return this.deliveryRoutes.get(id);
+  }
+  
+  async getAllDeliveryRoutes(): Promise<DeliveryRoute[]> {
+    return Array.from(this.deliveryRoutes.values()).filter(route => route.active);
+  }
+  
+  async getDeliveryRoutesByZone(zoneId: number): Promise<DeliveryRoute[]> {
+    return Array.from(this.deliveryRoutes.values())
+      .filter(route => route.zoneId === zoneId && route.active);
+  }
+  
+  async createDeliveryRoute(route: InsertDeliveryRoute): Promise<DeliveryRoute> {
+    const id = this.deliveryRouteIdCounter++;
+    const deliveryRoute: DeliveryRoute = { ...route, id };
+    this.deliveryRoutes.set(id, deliveryRoute);
+    return deliveryRoute;
+  }
+  
+  async updateDeliveryRoute(id: number, routeData: Partial<DeliveryRoute>): Promise<DeliveryRoute> {
+    const route = await this.getDeliveryRoute(id);
+    if (!route) {
+      throw new Error(`Ruta de entrega con ID ${id} no encontrada`);
+    }
+    
+    const updatedRoute = { ...route, ...routeData };
+    this.deliveryRoutes.set(id, updatedRoute);
+    return updatedRoute;
+  }
+  
+  async deleteDeliveryRoute(id: number): Promise<void> {
+    const exists = this.deliveryRoutes.has(id);
+    if (!exists) {
+      throw new Error(`Ruta de entrega con ID ${id} no encontrada`);
+    }
+    
+    // Marcamos como inactivo en lugar de eliminar
+    const route = this.deliveryRoutes.get(id);
+    if (route) {
+      this.deliveryRoutes.set(id, { ...route, active: false });
+    }
+  }
+  
+  // Deliveries
+  async getDelivery(id: number): Promise<Delivery | undefined> {
+    return this.deliveries.get(id);
+  }
+  
+  async getAllDeliveries(): Promise<Delivery[]> {
+    return Array.from(this.deliveries.values())
+      .sort((a, b) => {
+        // Sort by scheduledDate in descending order (newest first)
+        return new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime();
+      });
+  }
+  
+  async getDeliveriesByStatus(status: string): Promise<Delivery[]> {
+    return Array.from(this.deliveries.values())
+      .filter(delivery => delivery.status === status)
+      .sort((a, b) => {
+        // Sort by scheduledDate in descending order (newest first)
+        return new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime();
+      });
+  }
+  
+  async getDeliveriesByDriver(driverId: number): Promise<Delivery[]> {
+    return Array.from(this.deliveries.values())
+      .filter(delivery => delivery.driverId === driverId)
+      .sort((a, b) => {
+        // Sort by scheduledDate in descending order (newest first)
+        return new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime();
+      });
+  }
+  
+  async getDeliveriesByCustomer(customerId: number): Promise<Delivery[]> {
+    return Array.from(this.deliveries.values())
+      .filter(delivery => delivery.customerId === customerId)
+      .sort((a, b) => {
+        // Sort by scheduledDate in descending order (newest first)
+        return new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime();
+      });
+  }
+  
+  async getDeliveriesByDate(date: Date): Promise<Delivery[]> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    return Array.from(this.deliveries.values())
+      .filter(delivery => {
+        const scheduledDate = new Date(delivery.scheduledDate);
+        return scheduledDate >= startOfDay && scheduledDate <= endOfDay;
+      })
+      .sort((a, b) => {
+        // Sort by scheduledDate in ascending order (earliest first)
+        return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
+      });
+  }
+  
+  async createDelivery(delivery: InsertDelivery): Promise<Delivery> {
+    const id = this.deliveryIdCounter++;
+    const trackingCode = `PUNTO-${id.toString().padStart(6, '0')}`;
+    
+    const newDelivery: Delivery = { 
+      ...delivery, 
+      id,
+      trackingCode,
+      status: delivery.status || 'pending'
+    };
+    
+    this.deliveries.set(id, newDelivery);
+    
+    // Crear un evento de creación
+    await this.createDeliveryEvent({
+      deliveryId: id,
+      eventType: 'status_change',
+      description: `Entrega #${id} creada con estado '${newDelivery.status}'`,
+      userId: delivery.userId
+    });
+    
+    return newDelivery;
+  }
+  
+  async updateDelivery(id: number, deliveryData: Partial<Delivery>): Promise<Delivery> {
+    const delivery = await this.getDelivery(id);
+    if (!delivery) {
+      throw new Error(`Entrega con ID ${id} no encontrada`);
+    }
+    
+    // Si hay cambio de status, creamos un evento
+    if (deliveryData.status && deliveryData.status !== delivery.status) {
+      await this.createDeliveryEvent({
+        deliveryId: id,
+        eventType: 'status_change',
+        description: `Estado cambiado de '${delivery.status}' a '${deliveryData.status}'`,
+        userId: delivery.userId
+      });
+    }
+    
+    const updatedDelivery = { ...delivery, ...deliveryData };
+    this.deliveries.set(id, updatedDelivery);
+    return updatedDelivery;
+  }
+  
+  async updateDeliveryStatus(id: number, status: string, userId: number): Promise<Delivery> {
+    const delivery = await this.getDelivery(id);
+    if (!delivery) {
+      throw new Error(`Entrega con ID ${id} no encontrada`);
+    }
+    
+    // Crear evento de cambio de status
+    await this.createDeliveryEvent({
+      deliveryId: id,
+      eventType: 'status_change',
+      description: `Estado cambiado de '${delivery.status}' a '${status}'`,
+      userId: userId
+    });
+    
+    // Si es entregado, actualizamos la fecha de entrega
+    let extraData = {};
+    if (status === 'delivered') {
+      extraData = { actualDeliveryTime: new Date() };
+    }
+    
+    const updatedDelivery = { ...delivery, status, ...extraData };
+    this.deliveries.set(id, updatedDelivery);
+    return updatedDelivery;
+  }
+  
+  async deleteDelivery(id: number): Promise<void> {
+    const exists = this.deliveries.has(id);
+    if (!exists) {
+      throw new Error(`Entrega con ID ${id} no encontrada`);
+    }
+    
+    // En vez de eliminar, marcar como cancelada
+    const delivery = this.deliveries.get(id);
+    if (delivery) {
+      this.deliveries.set(id, { ...delivery, status: 'cancelled' });
+      
+      // Crear evento de cancelación
+      await this.createDeliveryEvent({
+        deliveryId: id,
+        eventType: 'status_change',
+        description: `Entrega cancelada`,
+        userId: delivery.userId
+      });
+    }
+  }
+  
+  // Delivery Events
+  async getDeliveryEvent(id: number): Promise<DeliveryEvent | undefined> {
+    return this.deliveryEvents.get(id);
+  }
+  
+  async getDeliveryEventsByDelivery(deliveryId: number): Promise<DeliveryEvent[]> {
+    return Array.from(this.deliveryEvents.values())
+      .filter(event => event.deliveryId === deliveryId)
+      .sort((a, b) => {
+        // Sort by timestamp in ascending order (oldest first)
+        return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+      });
+  }
+  
+  async createDeliveryEvent(event: InsertDeliveryEvent): Promise<DeliveryEvent> {
+    const id = this.deliveryEventIdCounter++;
+    const deliveryEvent: DeliveryEvent = { 
+      ...event, 
+      id,
+      timestamp: new Date() 
+    };
+    this.deliveryEvents.set(id, deliveryEvent);
+    return deliveryEvent;
+  }
+  
+  // Route Assignments
+  async getRouteAssignment(id: number): Promise<RouteAssignment | undefined> {
+    return this.routeAssignments.get(id);
+  }
+  
+  async getRouteAssignmentsByDate(date: Date): Promise<RouteAssignment[]> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    return Array.from(this.routeAssignments.values())
+      .filter(assignment => {
+        const assignmentDate = new Date(assignment.date);
+        return assignmentDate >= startOfDay && assignmentDate <= endOfDay;
+      })
+      .sort((a, b) => {
+        // Sort by route ID
+        return a.routeId - b.routeId;
+      });
+  }
+  
+  async getRouteAssignmentsByDriver(driverId: number): Promise<RouteAssignment[]> {
+    return Array.from(this.routeAssignments.values())
+      .filter(assignment => assignment.driverId === driverId)
+      .sort((a, b) => {
+        // Sort by date in descending order (newest first)
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      });
+  }
+  
+  async createRouteAssignment(assignment: InsertRouteAssignment): Promise<RouteAssignment> {
+    const id = this.routeAssignmentIdCounter++;
+    const routeAssignment: RouteAssignment = { ...assignment, id };
+    this.routeAssignments.set(id, routeAssignment);
+    return routeAssignment;
+  }
+  
+  async updateRouteAssignment(id: number, assignmentData: Partial<RouteAssignment>): Promise<RouteAssignment> {
+    const assignment = await this.getRouteAssignment(id);
+    if (!assignment) {
+      throw new Error(`Asignación de ruta con ID ${id} no encontrada`);
+    }
+    
+    const updatedAssignment = { ...assignment, ...assignmentData };
+    this.routeAssignments.set(id, updatedAssignment);
+    return updatedAssignment;
+  }
+  
+  async deleteRouteAssignment(id: number): Promise<void> {
+    const exists = this.routeAssignments.has(id);
+    if (!exists) {
+      throw new Error(`Asignación de ruta con ID ${id} no encontrada`);
+    }
+    
+    // En vez de eliminar, marcar como cancelada
+    const assignment = this.routeAssignments.get(id);
+    if (assignment) {
+      this.routeAssignments.set(id, { ...assignment, status: 'cancelled' });
+    }
   }
 }
 
