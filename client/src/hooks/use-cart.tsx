@@ -83,11 +83,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const { data: cartItems = [] } = useQuery<CartItem[]>({
     queryKey: ["/api/web/cart/items"],
     queryFn: async () => {
-      // Simplemente hacemos una petición GET sin parámetros
-      // El servidor determinará el carrito basándose en la sesión
-      const response = await fetch(`/api/web/cart/items`);
+      // Usamos withCredentials para asegurar que se envíen las cookies
+      const response = await fetch(`/api/web/cart/items`, {
+        credentials: 'include', // Importante: envía las cookies con la solicitud
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      console.log('Respuesta de fetch carrito:', response.status);
       if (!response.ok) return [];
-      return response.json();
+      const data = await response.json();
+      console.log('Datos de items del carrito:', data);
+      return data;
     },
     enabled: !!cart,
   });
@@ -95,12 +102,25 @@ export function CartProvider({ children }: { children: ReactNode }) {
   // Añadir producto al carrito
   const addToCartMutation = useMutation({
     mutationFn: async (data: AddToCartData) => {
-      const res = await apiRequest("POST", "/api/web/cart/items", data);
+      console.log('Enviando datos al carrito:', data);
+      // Usamos fetch directamente para tener más control sobre la petición
+      const res = await fetch("/api/web/cart/items", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(data),
+        credentials: 'include' // Importante: incluye las cookies
+      });
+      console.log('Respuesta de agregar al carrito:', res.status);
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.message || "Error al agregar al carrito");
       }
-      return await res.json();
+      const responseData = await res.json();
+      console.log('Datos de respuesta al agregar al carrito:', responseData);
+      return responseData;
     },
     onSuccess: (data) => {
       // Invalidar consultas para forzar recargas de datos

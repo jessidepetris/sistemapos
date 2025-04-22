@@ -12,13 +12,22 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  console.log(`ApiRequest: ${method} ${url}`, data ? JSON.stringify(data) : 'Sin datos');
+  
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: data ? { 
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    } : {
+      "Accept": "application/json"
+    },
     body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
+    credentials: "include", // Enviar cookies con la solicitud
   });
 
+  console.log(`ApiRequest respuesta: ${res.status}`);
+  
   await throwIfResNotOk(res);
   return res;
 }
