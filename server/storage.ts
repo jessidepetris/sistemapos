@@ -1,4 +1,4 @@
-import { users, User, InsertUser, Supplier, InsertSupplier, Customer, InsertCustomer, Product, InsertProduct, Account, InsertAccount, Sale, InsertSale, SaleItem, InsertSaleItem, Order, InsertOrder, OrderItem, InsertOrderItem, Note, InsertNote, AccountTransaction, InsertAccountTransaction } from "@shared/schema";
+import { users, User, InsertUser, Supplier, InsertSupplier, Customer, InsertCustomer, Product, InsertProduct, Account, InsertAccount, Sale, InsertSale, SaleItem, InsertSaleItem, Order, InsertOrder, OrderItem, InsertOrderItem, Note, InsertNote, AccountTransaction, InsertAccountTransaction, Vehicle, InsertVehicle, DeliveryZone, InsertDeliveryZone, DeliveryRoute, InsertDeliveryRoute, Delivery, InsertDelivery, DeliveryEvent, InsertDeliveryEvent, RouteAssignment, InsertRouteAssignment } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 
@@ -78,6 +78,53 @@ export interface IStorage {
   updateNote(id: number, note: Partial<Note>): Promise<Note>;
   deleteNote(id: number): Promise<void>;
   
+  // Vehicles
+  getVehicle(id: number): Promise<Vehicle | undefined>;
+  getAllVehicles(): Promise<Vehicle[]>;
+  createVehicle(vehicle: InsertVehicle): Promise<Vehicle>;
+  updateVehicle(id: number, vehicle: Partial<Vehicle>): Promise<Vehicle>;
+  deleteVehicle(id: number): Promise<void>;
+  
+  // Delivery Zones
+  getDeliveryZone(id: number): Promise<DeliveryZone | undefined>;
+  getAllDeliveryZones(): Promise<DeliveryZone[]>;
+  createDeliveryZone(zone: InsertDeliveryZone): Promise<DeliveryZone>;
+  updateDeliveryZone(id: number, zone: Partial<DeliveryZone>): Promise<DeliveryZone>;
+  deleteDeliveryZone(id: number): Promise<void>;
+  
+  // Delivery Routes
+  getDeliveryRoute(id: number): Promise<DeliveryRoute | undefined>;
+  getAllDeliveryRoutes(): Promise<DeliveryRoute[]>;
+  getDeliveryRoutesByZone(zoneId: number): Promise<DeliveryRoute[]>;
+  createDeliveryRoute(route: InsertDeliveryRoute): Promise<DeliveryRoute>;
+  updateDeliveryRoute(id: number, route: Partial<DeliveryRoute>): Promise<DeliveryRoute>;
+  deleteDeliveryRoute(id: number): Promise<void>;
+  
+  // Deliveries
+  getDelivery(id: number): Promise<Delivery | undefined>;
+  getAllDeliveries(): Promise<Delivery[]>;
+  getDeliveriesByStatus(status: string): Promise<Delivery[]>;
+  getDeliveriesByDriver(driverId: number): Promise<Delivery[]>;
+  getDeliveriesByCustomer(customerId: number): Promise<Delivery[]>;
+  getDeliveriesByDate(date: Date): Promise<Delivery[]>;
+  createDelivery(delivery: InsertDelivery): Promise<Delivery>;
+  updateDelivery(id: number, delivery: Partial<Delivery>): Promise<Delivery>;
+  updateDeliveryStatus(id: number, status: string, userId: number): Promise<Delivery>;
+  deleteDelivery(id: number): Promise<void>;
+  
+  // Delivery Events
+  getDeliveryEvent(id: number): Promise<DeliveryEvent | undefined>;
+  getDeliveryEventsByDelivery(deliveryId: number): Promise<DeliveryEvent[]>;
+  createDeliveryEvent(event: InsertDeliveryEvent): Promise<DeliveryEvent>;
+  
+  // Route Assignments
+  getRouteAssignment(id: number): Promise<RouteAssignment | undefined>;
+  getRouteAssignmentsByDate(date: Date): Promise<RouteAssignment[]>;
+  getRouteAssignmentsByDriver(driverId: number): Promise<RouteAssignment[]>;
+  createRouteAssignment(assignment: InsertRouteAssignment): Promise<RouteAssignment>;
+  updateRouteAssignment(id: number, assignment: Partial<RouteAssignment>): Promise<RouteAssignment>;
+  deleteRouteAssignment(id: number): Promise<void>;
+  
   // Session store
   sessionStore: session.SessionStore;
 }
@@ -95,6 +142,15 @@ export class MemStorage implements IStorage {
   private orderItems: Map<number, OrderItem>;
   private notes: Map<number, Note>;
   
+  // Logistics related maps
+  private vehicles: Map<number, Vehicle>;
+  private deliveryZones: Map<number, DeliveryZone>;
+  private deliveryRoutes: Map<number, DeliveryRoute>;
+  private deliveries: Map<number, Delivery>;
+  private deliveryEvents: Map<number, DeliveryEvent>;
+  private routeAssignments: Map<number, RouteAssignment>;
+  
+  // ID counters
   private userIdCounter: number;
   private supplierIdCounter: number;
   private customerIdCounter: number;
@@ -106,6 +162,14 @@ export class MemStorage implements IStorage {
   private orderIdCounter: number;
   private orderItemIdCounter: number;
   private noteIdCounter: number;
+  
+  // Logistics ID counters
+  private vehicleIdCounter: number;
+  private deliveryZoneIdCounter: number;
+  private deliveryRouteIdCounter: number;
+  private deliveryIdCounter: number;
+  private deliveryEventIdCounter: number;
+  private routeAssignmentIdCounter: number;
   
   sessionStore: session.SessionStore;
 

@@ -329,3 +329,190 @@ export type InsertNote = z.infer<typeof insertNoteSchema>;
 
 export type AccountTransaction = typeof accountTransactions.$inferSelect;
 export type InsertAccountTransaction = z.infer<typeof insertAccountTransactionSchema>;
+
+// Enumeración para los estados de las entregas
+export const deliveryStatusEnum = [
+  'pending', // Pendiente de asignación
+  'assigned', // Asignada a un repartidor
+  'in_transit', // En tránsito
+  'delivered', // Entregada
+  'failed', // Fallida
+  'cancelled', // Cancelada
+] as const;
+
+// Tabla de vehículos
+export const vehicles = pgTable("vehicles", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  type: text("type").notNull(), // 'car', 'motorcycle', 'van', etc.
+  licensePlate: text("license_plate").notNull().unique(),
+  maxCapacity: numeric("max_capacity", { precision: 10, scale: 2 }), // en kg
+  refrigerated: boolean("refrigerated").default(false),
+  notes: text("notes"),
+  active: boolean("active").default(true),
+});
+
+export const insertVehicleSchema = createInsertSchema(vehicles).pick({
+  name: true,
+  type: true,
+  licensePlate: true,
+  maxCapacity: true,
+  refrigerated: true,
+  notes: true,
+  active: true,
+});
+
+// Tabla de zonas/rutas de entregas
+export const deliveryZones = pgTable("delivery_zones", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  coordinates: json("coordinates"), // Polígono o puntos que definen la zona
+  estimatedDeliveryTime: integer("estimated_delivery_time"), // Tiempo estimado en minutos
+  deliveryDays: text("delivery_days").array(), // ['monday', 'wednesday', 'friday']
+  active: boolean("active").default(true),
+});
+
+export const insertDeliveryZoneSchema = createInsertSchema(deliveryZones).pick({
+  name: true,
+  description: true,
+  coordinates: true,
+  estimatedDeliveryTime: true,
+  deliveryDays: true,
+  active: true,
+});
+
+// Tabla de rutas de entrega
+export const deliveryRoutes = pgTable("delivery_routes", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  zoneId: integer("zone_id").references(() => deliveryZones.id),
+  description: text("description"),
+  optimizedPath: json("optimized_path"), // Secuencia de puntos optimizada
+  estimatedDuration: integer("estimated_duration"), // En minutos
+  distance: numeric("distance", { precision: 10, scale: 2 }), // En km
+  active: boolean("active").default(true),
+});
+
+export const insertDeliveryRouteSchema = createInsertSchema(deliveryRoutes).pick({
+  name: true,
+  zoneId: true,
+  description: true,
+  optimizedPath: true,
+  estimatedDuration: true,
+  distance: true,
+  active: true,
+});
+
+// Tabla de entregas
+export const deliveries = pgTable("deliveries", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull().references(() => orders.id),
+  saleId: integer("sale_id").references(() => sales.id),
+  customerId: integer("customer_id").references(() => customers.id),
+  userId: integer("user_id").notNull().references(() => users.id), // Usuario que creó la entrega
+  vehicleId: integer("vehicle_id").references(() => vehicles.id),
+  driverId: integer("driver_id").references(() => users.id), // Conductor/repartidor
+  routeId: integer("route_id").references(() => deliveryRoutes.id),
+  status: text("status").notNull().$type<typeof deliveryStatusEnum[number]>().default('pending'),
+  scheduledDate: timestamp("scheduled_date").notNull(),
+  estimatedDeliveryTime: timestamp("estimated_delivery_time"),
+  actualDeliveryTime: timestamp("actual_delivery_time"),
+  deliveryAddress: text("delivery_address").notNull(),
+  deliveryNotes: text("delivery_notes"),
+  recipientName: text("recipient_name"),
+  recipientPhone: text("recipient_phone"),
+  trackingCode: text("tracking_code"), // Código único para seguimiento
+  priority: integer("priority").default(0), // Prioridad de la entrega (0-10)
+  requiresRefrigeration: boolean("requires_refrigeration").default(false),
+  proof: text("proof"), // URL a la imagen de prueba de entrega
+  deliveryPosition: json("delivery_position"), // Posición actual {lat, lng}
+  requestSignature: boolean("request_signature").default(false),
+  signatureUrl: text("signature_url"), // URL a la imagen de la firma
+  totalWeight: numeric("total_weight", { precision: 10, scale: 2 }), // Peso total en kg
+});
+
+export const insertDeliverySchema = createInsertSchema(deliveries).pick({
+  orderId: true,
+  saleId: true,
+  customerId: true,
+  userId: true,
+  vehicleId: true,
+  driverId: true,
+  routeId: true,
+  status: true,
+  scheduledDate: true,
+  estimatedDeliveryTime: true,
+  deliveryAddress: true,
+  deliveryNotes: true,
+  recipientName: true,
+  recipientPhone: true,
+  priority: true,
+  requiresRefrigeration: true,
+  requestSignature: true,
+  totalWeight: true,
+});
+
+// Tabla para el registro de eventos de entregas
+export const deliveryEvents = pgTable("delivery_events", {
+  id: serial("id").primaryKey(),
+  deliveryId: integer("delivery_id").notNull().references(() => deliveries.id),
+  timestamp: timestamp("timestamp").defaultNow(),
+  eventType: text("event_type").notNull(), // 'status_change', 'location_update', 'note', 'issue'
+  description: text("description").notNull(),
+  userId: integer("user_id").references(() => users.id), // Usuario que registró el evento
+  location: json("location"), // {lat, lng}
+  metadata: json("metadata"), // Datos adicionales
+});
+
+export const insertDeliveryEventSchema = createInsertSchema(deliveryEvents).pick({
+  deliveryId: true,
+  eventType: true,
+  description: true,
+  userId: true,
+  location: true,
+  metadata: true,
+});
+
+// Tabla para asignación de rutas diarias
+export const routeAssignments = pgTable("route_assignments", {
+  id: serial("id").primaryKey(),
+  date: timestamp("date").notNull(),
+  routeId: integer("route_id").notNull().references(() => deliveryRoutes.id),
+  driverId: integer("driver_id").notNull().references(() => users.id),
+  vehicleId: integer("vehicle_id").notNull().references(() => vehicles.id),
+  status: text("status").notNull().default('pending'), // 'pending', 'in_progress', 'completed', 'cancelled'
+  startTime: timestamp("start_time"),
+  endTime: timestamp("end_time"),
+  notes: text("notes"),
+});
+
+export const insertRouteAssignmentSchema = createInsertSchema(routeAssignments).pick({
+  date: true,
+  routeId: true,
+  driverId: true,
+  vehicleId: true,
+  status: true,
+  startTime: true,
+  endTime: true,
+  notes: true,
+});
+
+// Type exports para los modelos de logística
+export type Vehicle = typeof vehicles.$inferSelect;
+export type InsertVehicle = z.infer<typeof insertVehicleSchema>;
+
+export type DeliveryZone = typeof deliveryZones.$inferSelect;
+export type InsertDeliveryZone = z.infer<typeof insertDeliveryZoneSchema>;
+
+export type DeliveryRoute = typeof deliveryRoutes.$inferSelect;
+export type InsertDeliveryRoute = z.infer<typeof insertDeliveryRouteSchema>;
+
+export type Delivery = typeof deliveries.$inferSelect;
+export type InsertDelivery = z.infer<typeof insertDeliverySchema>;
+
+export type DeliveryEvent = typeof deliveryEvents.$inferSelect;
+export type InsertDeliveryEvent = z.infer<typeof insertDeliveryEventSchema>;
+
+export type RouteAssignment = typeof routeAssignments.$inferSelect;
+export type InsertRouteAssignment = z.infer<typeof insertRouteAssignmentSchema>;
