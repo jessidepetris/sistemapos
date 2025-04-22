@@ -29,13 +29,15 @@ import { Package, Plus, RefreshCw, Search, Thermometer, Scale, Calculator } from
 import { GeneralTab } from "@/components/products/GeneralTab";
 import { PricingTab } from "@/components/products/PricingTab";
 import { BarcodesTab } from "@/components/products/BarcodesTab";
-import { ConversionsTab } from "@/components/products/ConversionsTab";
+import { EnhancedConversionsTab } from "@/components/products/EnhancedConversionsTab";
 import { ComponentsTab } from "@/components/products/ComponentsTab";
 
-// Define a schema for unit conversions
+// Define a schema for unit conversions with barcodes
 const conversionRateSchema = z.object({
   unit: z.string(),
   factor: z.coerce.number().positive("El factor debe ser mayor que 0"),
+  barcode: z.string().optional(),
+  description: z.string().optional(),
 });
 
 // Define schema for component products
@@ -96,7 +98,12 @@ export default function ProductsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [editingProductId, setEditingProductId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState("general");
-  const [conversionRates, setConversionRates] = useState<Array<{unit: string, factor: number}>>([]);
+  const [conversionRates, setConversionRates] = useState<Array<{
+    unit: string, 
+    factor: number,
+    barcode?: string,
+    description?: string
+  }>>([]);
   const [barcodesList, setBarcodesList] = useState<string[]>([]);
   const [componentsList, setComponentsList] = useState<Array<{
     productId: number;
