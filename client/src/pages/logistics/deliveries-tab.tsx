@@ -819,7 +819,7 @@ export default function DeliveriesTab() {
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  <SelectItem value="">Sin asignar</SelectItem>
+                                  <SelectItem value="none">Sin asignar</SelectItem>
                                   {drivers && drivers.map(driver => (
                                     <SelectItem key={driver.id} value={driver.id.toString()}>
                                       {driver.fullName || driver.username}
@@ -847,7 +847,7 @@ export default function DeliveriesTab() {
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  <SelectItem value="">Sin asignar</SelectItem>
+                                  <SelectItem value="none">Sin asignar</SelectItem>
                                   {activeVehicles.map(vehicle => (
                                     <SelectItem key={vehicle.id} value={vehicle.id.toString()}>
                                       {vehicle.name}
@@ -875,7 +875,7 @@ export default function DeliveriesTab() {
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  <SelectItem value="">Sin asignar</SelectItem>
+                                  <SelectItem value="none">Sin asignar</SelectItem>
                                   {activeRoutes.map(route => (
                                     <SelectItem key={route.id} value={route.id.toString()}>
                                       {route.name}
@@ -1652,7 +1652,7 @@ export default function DeliveriesTab() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="">Sin asignar</SelectItem>
+                              <SelectItem value="none">Sin asignar</SelectItem>
                               {drivers && drivers.map(driver => (
                                 <SelectItem key={driver.id} value={driver.id.toString()}>
                                   {driver.fullName || driver.username}
@@ -1680,7 +1680,7 @@ export default function DeliveriesTab() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="">Sin asignar</SelectItem>
+                              <SelectItem value="none">Sin asignar</SelectItem>
                               {activeVehicles.map(vehicle => (
                                 <SelectItem key={vehicle.id} value={vehicle.id.toString()}>
                                   {vehicle.name}
@@ -1708,7 +1708,7 @@ export default function DeliveriesTab() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="">Sin asignar</SelectItem>
+                              <SelectItem value="none">Sin asignar</SelectItem>
                               {activeRoutes.map(route => (
                                 <SelectItem key={route.id} value={route.id.toString()}>
                                   {route.name}
