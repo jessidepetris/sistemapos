@@ -2376,6 +2376,310 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Reports endpoints
+  app.get("/api/reports/sales-by-day", async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // Última semana por defecto
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const sales = await storage.getAllSales() || [];
+      
+      // Mapa para almacenar ventas por día de la semana
+      const dayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+      const daysSales: Record<string, number> = {};
+      
+      // Inicializar con ceros
+      for (const day of dayNames) {
+        daysSales[day] = 0;
+      }
+      
+      // Agrupar ventas por día de la semana
+      for (const sale of sales) {
+        const saleDate = new Date(sale.timestamp as string);
+        
+        // Comprobar si la venta está dentro del rango
+        if (saleDate >= start && saleDate <= end) {
+          const dayName = dayNames[saleDate.getDay()];
+          daysSales[dayName] += parseFloat(sale.total);
+        }
+      }
+      
+      // Preparar datos para el gráfico
+      const result = {
+        labels: Object.keys(daysSales),
+        datasets: [
+          {
+            label: "Ventas por día",
+            data: Object.values(daysSales).map(value => Math.round(value * 100) / 100), // Redondear a 2 decimales
+            backgroundColor: "hsl(215, 70%, 60%)",
+          },
+        ],
+      };
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error al generar reporte de ventas por día:", error);
+      res.status(500).json({ error: "Error al generar reporte" });
+    }
+  });
+  
+  app.get("/api/reports/sales-by-category", async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // Último mes por defecto
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const sales = await storage.getAllSales() || [];
+      const products = await storage.getAllProducts() || [];
+      
+      // Crear categorías básicas de productos
+      const categories = {
+        "Pastelería": 0,
+        "Chocolate": 0,
+        "Harinas": 0,
+        "Esencias": 0,
+        "Colorantes": 0,
+        "Otros": 0,
+      };
+      
+      // Para cada venta en el rango
+      for (const sale of sales) {
+        const saleDate = new Date(sale.timestamp as string);
+        
+        // Comprobar si la venta está dentro del rango
+        if (saleDate >= start && saleDate <= end) {
+          // Obtener items de la venta
+          const saleItems = await storage.getSaleItemsBySaleId(sale.id);
+          
+          for (const item of saleItems) {
+            const product = products.find(p => p.id === item.productId);
+            if (product) {
+              // Determinar categoría basada en el nombre del producto
+              let category = "Otros";
+              if (product.name.toLowerCase().includes("chocolate") || product.name.toLowerCase().includes("cacao")) {
+                category = "Chocolate";
+              } else if (product.name.toLowerCase().includes("harina") || product.name.toLowerCase().includes("trigo")) {
+                category = "Harinas";
+              } else if (product.name.toLowerCase().includes("esencia") || product.name.toLowerCase().includes("vainilla")) {
+                category = "Esencias";
+              } else if (product.name.toLowerCase().includes("colorante") || product.name.toLowerCase().includes("color")) {
+                category = "Colorantes";
+              } else if (product.name.toLowerCase().includes("pastel") || product.name.toLowerCase().includes("torta")) {
+                category = "Pastelería";
+              }
+              
+              // Sumar al total de la categoría
+              const itemTotal = parseFloat(item.price) * parseFloat(item.quantity);
+              categories[category] += itemTotal;
+            }
+          }
+        }
+      }
+      
+      // Eliminar categorías sin ventas
+      const filteredCategories: Record<string, number> = {};
+      Object.entries(categories).forEach(([category, total]) => {
+        if (total > 0) {
+          filteredCategories[category] = total;
+        }
+      });
+      
+      // Si no hay categorías con ventas, mantener al menos una
+      if (Object.keys(filteredCategories).length === 0) {
+        filteredCategories["Sin ventas"] = 0;
+      }
+      
+      // Colores para el gráfico
+      const colors = [
+        "hsl(215, 70%, 60%)",
+        "hsl(260, 70%, 60%)",
+        "hsl(10, 70%, 60%)",
+        "hsl(130, 70%, 60%)",
+        "hsl(45, 70%, 60%)",
+        "hsl(300, 70%, 60%)",
+      ];
+      
+      // Preparar datos para el gráfico de pie
+      const result = {
+        labels: Object.keys(filteredCategories),
+        datasets: [
+          {
+            label: "Ventas por categoría",
+            data: Object.values(filteredCategories).map(value => Math.round(value * 100) / 100), // Redondear a 2 decimales
+            backgroundColor: colors.slice(0, Object.keys(filteredCategories).length),
+            borderColor: Array(Object.keys(filteredCategories).length).fill("#ffffff"),
+            borderWidth: 1,
+          },
+        ],
+      };
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error al generar reporte de ventas por categoría:", error);
+      res.status(500).json({ error: "Error al generar reporte" });
+    }
+  });
+  
+  app.get("/api/reports/sales-trend", async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date(Date.now() - 180 * 24 * 60 * 60 * 1000); // Últimos 6 meses por defecto
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const sales = await storage.getAllSales() || [];
+      
+      // Mapa para almacenar ventas por mes
+      const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+      const monthlySales: Record<string, number> = {};
+      
+      // Obtener el rango de meses
+      const startMonth = start.getMonth();
+      const startYear = start.getFullYear();
+      const endMonth = end.getMonth();
+      const endYear = end.getFullYear();
+      
+      // Inicializar meses en el rango
+      for (let year = startYear; year <= endYear; year++) {
+        const monthStart = year === startYear ? startMonth : 0;
+        const monthEnd = year === endYear ? endMonth : 11;
+        
+        for (let month = monthStart; month <= monthEnd; month++) {
+          const key = `${monthNames[month]} ${year}`;
+          monthlySales[key] = 0;
+        }
+      }
+      
+      // Agrupar ventas por mes
+      for (const sale of sales) {
+        const saleDate = new Date(sale.timestamp as string);
+        
+        // Comprobar si la venta está dentro del rango
+        if (saleDate >= start && saleDate <= end) {
+          const key = `${monthNames[saleDate.getMonth()]} ${saleDate.getFullYear()}`;
+          monthlySales[key] = (monthlySales[key] || 0) + parseFloat(sale.total);
+        }
+      }
+      
+      // Preparar datos para el gráfico
+      const result = {
+        labels: Object.keys(monthlySales),
+        datasets: [
+          {
+            label: "Tendencia de Ventas",
+            data: Object.values(monthlySales).map(value => Math.round(value * 100) / 100), // Redondear a 2 decimales
+            borderColor: "hsl(215, 70%, 60%)",
+            backgroundColor: "transparent",
+            tension: 0.2,
+          },
+        ],
+      };
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error al generar reporte de tendencia de ventas:", error);
+      res.status(500).json({ error: "Error al generar reporte" });
+    }
+  });
+  
+  app.get("/api/reports/sales-detail", async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // Último mes por defecto
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const sales = await storage.getAllSales() || [];
+      const customers = await storage.getAllCustomers() || [];
+      
+      // Filtrar ventas por fecha
+      const filteredSales = sales.filter(sale => {
+        const saleDate = new Date(sale.timestamp as string);
+        return saleDate >= start && saleDate <= end;
+      });
+      
+      // Enriquecer datos de ventas
+      const detailedSales = await Promise.all(filteredSales.map(async (sale) => {
+        const customer = customers.find(c => c.id === sale.customerId);
+        const saleItems = await storage.getSaleItemsBySaleId(sale.id);
+        
+        return {
+          id: sale.id,
+          date: new Date(sale.timestamp as string).toLocaleDateString(),
+          customer: customer ? customer.name : "Cliente no registrado",
+          total: parseFloat(sale.total).toFixed(2),
+          items: saleItems.length,
+          status: sale.status || "completed",
+        };
+      }));
+      
+      // Ordenar por fecha (más recientes primero)
+      detailedSales.sort((a, b) => {
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      });
+      
+      res.json(detailedSales);
+    } catch (error) {
+      console.error("Error al generar reporte detallado de ventas:", error);
+      res.status(500).json({ error: "Error al generar reporte" });
+    }
+  });
+  
+  app.get("/api/reports/inventory-status", async (req, res) => {
+    try {
+      const products = await storage.getAllProducts() || [];
+      
+      // Categorizar productos por nivel de stock
+      const inventoryStatus = {
+        critical: 0,  // stock < 5
+        low: 0,       // stock < 10
+        normal: 0,    // stock < 50
+        high: 0       // stock >= 50
+      };
+      
+      for (const product of products) {
+        const stock = parseFloat(product.stock);
+        if (stock < 5) {
+          inventoryStatus.critical++;
+        } else if (stock < 10) {
+          inventoryStatus.low++;
+        } else if (stock < 50) {
+          inventoryStatus.normal++;
+        } else {
+          inventoryStatus.high++;
+        }
+      }
+      
+      // Preparar datos para el gráfico
+      const result = {
+        labels: ["Crítico", "Bajo", "Normal", "Alto"],
+        datasets: [
+          {
+            label: "Estado de Inventario",
+            data: [
+              inventoryStatus.critical,
+              inventoryStatus.low,
+              inventoryStatus.normal,
+              inventoryStatus.high
+            ],
+            backgroundColor: [
+              "hsl(0, 70%, 60%)",
+              "hsl(45, 70%, 60%)",
+              "hsl(215, 70%, 60%)",
+              "hsl(130, 70%, 60%)"
+            ],
+            borderColor: Array(4).fill("#ffffff"),
+            borderWidth: 1,
+          },
+        ],
+      };
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error al generar reporte de estado de inventario:", error);
+      res.status(500).json({ error: "Error al generar reporte" });
+    }
+  });
+  
   const httpServer = createServer(app);
 
   return httpServer;

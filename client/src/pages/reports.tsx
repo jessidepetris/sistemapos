@@ -15,64 +15,116 @@ import { useToast } from "@/hooks/use-toast";
 export default function ReportsPage() {
   const { toast } = useToast();
   const [reportType, setReportType] = useState("sales");
-  const [dateRange, setDateRange] = useState({ startDate: null, endDate: null });
+  const [dateRange, setDateRange] = useState<{ startDate: Date | null, endDate: Date | null }>({ startDate: null, endDate: null });
   
-  // Get sales data
-  const { data: salesData, isLoading: isLoadingSales } = useQuery({
+  // Get sales data for reference
+  const { data: salesData } = useQuery({
     queryKey: ["/api/sales"],
+    retry: false,
+  });
+
+  // Get report data
+  const { data: salesByDayData, isLoading: isLoadingSalesByDay } = useQuery({
+    queryKey: ["/api/reports/sales-by-day", dateRange],
+    queryFn: async () => {
+      const startParam = dateRange.startDate ? `startDate=${dateRange.startDate.toISOString()}` : '';
+      const endParam = dateRange.endDate ? `endDate=${dateRange.endDate.toISOString()}` : '';
+      const params = [startParam, endParam].filter(Boolean).join('&');
+      const url = `/api/reports/sales-by-day${params ? '?' + params : ''}`;
+      const res = await fetch(url);
+      return res.json();
+    },
+    retry: false,
+  });
+  
+  const { data: salesByCategoryData, isLoading: isLoadingSalesByCategory } = useQuery({
+    queryKey: ["/api/reports/sales-by-category", dateRange],
+    queryFn: async () => {
+      const startParam = dateRange.startDate ? `startDate=${dateRange.startDate.toISOString()}` : '';
+      const endParam = dateRange.endDate ? `endDate=${dateRange.endDate.toISOString()}` : '';
+      const params = [startParam, endParam].filter(Boolean).join('&');
+      const url = `/api/reports/sales-by-category${params ? '?' + params : ''}`;
+      const res = await fetch(url);
+      return res.json();
+    },
+    retry: false,
+  });
+  
+  const { data: salesTrendData, isLoading: isLoadingSalesTrend } = useQuery({
+    queryKey: ["/api/reports/sales-trend", dateRange],
+    queryFn: async () => {
+      const startParam = dateRange.startDate ? `startDate=${dateRange.startDate.toISOString()}` : '';
+      const endParam = dateRange.endDate ? `endDate=${dateRange.endDate.toISOString()}` : '';
+      const params = [startParam, endParam].filter(Boolean).join('&');
+      const url = `/api/reports/sales-trend${params ? '?' + params : ''}`;
+      const res = await fetch(url);
+      return res.json();
+    },
+    retry: false,
+  });
+  
+  const { data: inventoryStatusData, isLoading: isLoadingInventoryStatus } = useQuery({
+    queryKey: ["/api/reports/inventory-status"],
+    retry: false,
+  });
+  
+  const { data: salesDetailData, isLoading: isLoadingSalesDetail } = useQuery({
+    queryKey: ["/api/reports/sales-detail", dateRange],
+    queryFn: async () => {
+      const startParam = dateRange.startDate ? `startDate=${dateRange.startDate.toISOString()}` : '';
+      const endParam = dateRange.endDate ? `endDate=${dateRange.endDate.toISOString()}` : '';
+      const params = [startParam, endParam].filter(Boolean).join('&');
+      const url = `/api/reports/sales-detail${params ? '?' + params : ''}`;
+      const res = await fetch(url);
+      return res.json();
+    },
     retry: false,
   });
   
   // Handle export report
   const handleExportReport = () => {
-    toast({
-      title: "Exportación iniciada",
-      description: "El reporte será descargado en breve",
-    });
-  };
-  
-  // Mock chart data (this would be calculated from real data in a production app)
-  const salesByDayData = {
-    labels: ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"],
-    datasets: [
-      {
-        label: "Ventas por día",
-        data: [4500, 3200, 5100, 4800, 7600, 8200, 6500],
-        backgroundColor: "hsl(var(--chart-1))",
-      },
-    ],
-  };
-  
-  const salesByCategoryData = {
-    labels: ["Lácteos", "Pastelería", "Chocolate", "Harinas", "Otros"],
-    datasets: [
-      {
-        label: "Ventas por categoría",
-        data: [35, 25, 15, 10, 15],
-        backgroundColor: [
-          "hsl(var(--chart-1))",
-          "hsl(var(--chart-2))",
-          "hsl(var(--chart-3))",
-          "hsl(var(--chart-4))",
-          "hsl(var(--chart-5))",
-        ],
-        borderColor: ["#ffffff"],
-        borderWidth: 1,
-      },
-    ],
-  };
-  
-  const salesTrendData = {
-    labels: ["Ene", "Feb", "Mar", "Abr", "May", "Jun"],
-    datasets: [
-      {
-        label: "Ventas 2023",
-        data: [65000, 59000, 80000, 81000, 56000, 85000],
-        borderColor: "hsl(var(--chart-1))",
-        backgroundColor: "transparent",
-        tension: 0.2,
-      },
-    ],
+    // Create a CSV string for sales detail
+    if (salesDetailData && salesDetailData.length > 0) {
+      const headers = ["ID", "Fecha", "Cliente", "Total", "Artículos", "Estado"];
+      
+      // Create CSV content
+      let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n";
+      
+      // Add rows
+      salesDetailData.forEach((sale: any) => {
+        const row = [
+          sale.id,
+          sale.date,
+          `"${sale.customer.replace(/"/g, '""')}"`, // Escape quotes in CSV
+          sale.total,
+          sale.items,
+          sale.status
+        ];
+        csvContent += row.join(",") + "\n";
+      });
+      
+      // Create download link
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `reporte_ventas_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      
+      // Trigger download
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({
+        title: "Exportación completada",
+        description: "El reporte ha sido descargado",
+      });
+    } else {
+      toast({
+        title: "No hay datos para exportar",
+        description: "Seleccione un rango de fechas con datos",
+        variant: "destructive",
+      });
+    }
   };
   
   return (
@@ -196,18 +248,92 @@ export default function ReportsPage() {
             <TabsContent value="tables" className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Datos Detallados</CardTitle>
+                  <CardTitle>Datos Detallados de Ventas</CardTitle>
                   <CardDescription>
-                    Vista tabular de los datos del reporte
+                    Listado detallado de ventas en el período seleccionado
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-center p-10 text-muted-foreground">
-                    <p>Funcionalidad en desarrollo</p>
-                    <p className="text-sm">Los reportes tabulares estarán disponibles próximamente</p>
-                  </div>
+                  {isLoadingSalesDetail ? (
+                    <div className="flex justify-center items-center h-60">
+                      <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
+                    </div>
+                  ) : salesDetailData && salesDetailData.length > 0 ? (
+                    <div className="border rounded-md overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="bg-muted">
+                              <th className="py-3 px-4 text-left font-medium text-sm">ID</th>
+                              <th className="py-3 px-4 text-left font-medium text-sm">Fecha</th>
+                              <th className="py-3 px-4 text-left font-medium text-sm">Cliente</th>
+                              <th className="py-3 px-4 text-left font-medium text-sm">Total</th>
+                              <th className="py-3 px-4 text-left font-medium text-sm">Artículos</th>
+                              <th className="py-3 px-4 text-left font-medium text-sm">Estado</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {salesDetailData.map((sale: any) => (
+                              <tr key={sale.id} className="border-t hover:bg-muted/50">
+                                <td className="py-3 px-4">{sale.id}</td>
+                                <td className="py-3 px-4">{sale.date}</td>
+                                <td className="py-3 px-4">{sale.customer}</td>
+                                <td className="py-3 px-4">${sale.total}</td>
+                                <td className="py-3 px-4">{sale.items}</td>
+                                <td className="py-3 px-4">
+                                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                    sale.status === 'completed' 
+                                      ? 'bg-green-100 text-green-800' 
+                                      : sale.status === 'pending' 
+                                        ? 'bg-yellow-100 text-yellow-800' 
+                                        : 'bg-gray-100 text-gray-800'
+                                  }`}>
+                                    {sale.status === 'completed' ? 'Completada' : 
+                                     sale.status === 'pending' ? 'Pendiente' : 
+                                     sale.status === 'cancelled' ? 'Cancelada' : 
+                                     sale.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center p-10 text-muted-foreground">
+                      <p>No hay datos para mostrar</p>
+                      <p className="text-sm">Seleccione un rango de fechas diferente o verifique que existan ventas</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
+              
+              {reportType === "inventory" && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Estado del Inventario</CardTitle>
+                    <CardDescription>
+                      Resumen del estado actual del inventario
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoadingInventoryStatus ? (
+                      <div className="flex justify-center items-center h-60">
+                        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
+                      </div>
+                    ) : inventoryStatusData ? (
+                      <div className="h-80">
+                        <PieChart data={inventoryStatusData} />
+                      </div>
+                    ) : (
+                      <div className="text-center p-10 text-muted-foreground">
+                        <p>No hay datos de inventario disponibles</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
           </Tabs>
         </main>
