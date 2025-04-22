@@ -52,16 +52,15 @@ export default function ProductDetailsPage() {
     queryKey: [`/api/web/products/${productId}`],
     queryFn: async () => {
       try {
-        // Como no tenemos un endpoint específico para detalles del producto,
-        // obtenemos todos los productos y filtramos por ID
-        const res = await fetch('/api/web/products');
-        if (!res.ok) throw new Error("Error al cargar productos");
-        const products = await res.json();
-        const product = products.find((p: Product) => p.id === parseInt(productId || "0"));
-        
-        if (!product) {
-          throw new Error("Producto no encontrado");
+        // Usar el nuevo endpoint específico para detalles del producto
+        const res = await fetch(`/api/web/products/${productId}`);
+        if (!res.ok) {
+          const error = await res.json();
+          throw new Error(error.message || "Error al cargar producto");
         }
+        
+        const product = await res.json();
+        console.log("Producto obtenido:", product); // Para depuración
         
         return product;
       } catch (error) {
@@ -82,11 +81,11 @@ export default function ProductDetailsPage() {
     : [];
 
   // Establecer unidad por defecto
-  useState(() => {
+  useEffect(() => {
     if (product && !selectedUnit) {
       setSelectedUnit(product.baseUnit);
     }
-  });
+  }, [product, selectedUnit]);
 
   // Calcular precio según la unidad seleccionada
   const getPrice = () => {
@@ -153,17 +152,17 @@ export default function ProductDetailsPage() {
     <CatalogLayout>
       <div className="container mx-auto px-4 py-12">
         {/* Breadcrumbs */}
-        <Breadcrumb className="mb-6">
-          <BreadcrumbItem>
+        <Breadcrumb className="mb-6 flex items-center">
+          <BreadcrumbItem className="inline-flex items-center">
             <BreadcrumbLink href="/web">Inicio</BreadcrumbLink>
           </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
+          <BreadcrumbSeparator className="mx-2" />
+          <BreadcrumbItem className="inline-flex items-center">
             <BreadcrumbLink href="/web/products">Productos</BreadcrumbLink>
           </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink>{product.name}</BreadcrumbLink>
+          <BreadcrumbSeparator className="mx-2" />
+          <BreadcrumbItem className="inline-flex items-center">
+            <BreadcrumbLink className="text-ellipsis overflow-hidden">{product.name}</BreadcrumbLink>
           </BreadcrumbItem>
         </Breadcrumb>
 

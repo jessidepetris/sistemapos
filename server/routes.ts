@@ -1206,6 +1206,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Categorías para catálogo
+  // Obtener un producto específico por ID
+  app.get("/api/web/products/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const product = await storage.getProduct(id);
+      
+      if (!product) {
+        return res.status(404).json({ message: "Producto no encontrado" });
+      }
+      
+      // Verificamos si el producto es visible en el catálogo
+      if (!product.active || !product.webVisible) {
+        return res.status(404).json({ message: "Producto no disponible" });
+      }
+      
+      // Devolvemos los detalles del producto para el catálogo
+      res.json({
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        imageUrl: product.imageUrl,
+        category: product.category,
+        inStock: parseFloat(product.stock.toString()) > 0,
+        isRefrigerated: product.isRefrigerated,
+        baseUnit: product.baseUnit,
+        conversionRates: product.conversionRates
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener producto", error: (error as Error).message });
+    }
+  });
+  
   app.get("/api/web/categories", async (req, res) => {
     try {
       const allProducts = await storage.getAllProducts();
