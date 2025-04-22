@@ -65,6 +65,7 @@ const productFormSchema = insertProductSchema.extend({
   
   // Nuevos campos
   category: z.string().optional(),
+  categoryIds: z.array(z.number()).optional(),
   imageUrl: z.string().optional(),
   supplierCode: z.string().optional(),
   
@@ -167,6 +168,7 @@ export default function ProductsPage() {
       active: true,    // Activo por defecto
       webVisible: false, // No visible en web por defecto
       category: "",
+      categoryIds: [],
       imageUrl: "",
       supplierCode: "",
       conversionRates: [] as any[], // Array para conversiones mejoradas con códigos de barras
@@ -307,6 +309,7 @@ export default function ProductsPage() {
       supplierId: product.supplierId,
       supplierCode: product.supplierCode || "",
       category: product.category || "",
+      categoryIds: product.categoryIds || [],
       imageUrl: product.imageUrl || "",
       isRefrigerated: product.isRefrigerated,
       isBulk: product.isBulk,
@@ -354,6 +357,7 @@ export default function ProductsPage() {
       active: true,
       webVisible: false,
       category: "",
+      categoryIds: [],
       imageUrl: "",
       supplierCode: "",
       conversionRates: [] as any[], // Array para conversiones mejoradas con códigos de barras
@@ -540,6 +544,10 @@ export default function ProductsPage() {
                     <Search size={16} />
                     Códigos
                   </TabsTrigger>
+                  <TabsTrigger value="categories" className="flex items-center gap-2">
+                    <Tag size={16} />
+                    Categorías
+                  </TabsTrigger>
                   <TabsTrigger value="conversions" className="flex items-center gap-2" disabled={!watchIsBulk}>
                     <Scale size={16} />
                     Conversiones
@@ -570,6 +578,14 @@ export default function ProductsPage() {
                     form={form} 
                     barcodesList={barcodesList} 
                     setBarcodesList={setBarcodesList} 
+                  />
+                </TabsContent>
+                
+                {/* Pestaña de Categorías */}
+                <TabsContent value="categories">
+                  <CategoriesTab 
+                    form={form}
+                    productId={editingProductId}
                   />
                 </TabsContent>
                 
