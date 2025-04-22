@@ -1513,35 +1513,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { 
         cartId, 
-        webUserId, 
-        shippingAddress, 
-        billingAddress, 
-        paymentMethod,
-        notes 
+        customerData, 
+        paymentMethod
       } = req.body;
       
-      // Verificar que el carrito existe
-      const cart = await storage.getCart(cartId);
+      // Verificar que existe la sesión
+      const sessionId = req.sessionID;
+      if (!sessionId) {
+        return res.status(400).json({ message: "Sesión no válida" });
+      }
+      
+      // Si no se especifica cartId, buscar el carrito por la sesión
+      let cart;
+      if (cartId) {
+        cart = await storage.getCart(cartId);
+      } else {
+        const carts = await storage.getCartsBySessionId(sessionId);
+        cart = carts.find(c => c.status === "active");
+      }
+      
       if (!cart) {
         return res.status(404).json({ message: "Carrito no encontrado" });
       }
       
-      // Verificar que el usuario web existe
-      const webUser = await storage.getWebUser(webUserId);
-      if (!webUser) {
-        return res.status(404).json({ message: "Usuario no encontrado" });
-      }
-      
       // Obtener items del carrito
-      const cartItems = await storage.getCartItemsByCartId(cartId);
+      const cartItems = await storage.getCartItemsByCartId(cart.id);
       if (cartItems.length === 0) {
         return res.status(400).json({ message: "El carrito está vacío" });
       }
       
       // Crear la orden en el sistema principal
-      // En un sistema real, aquí veríamos cómo manejar el usuario del sistema
-      // que está vinculado a las órdenes web
-      // Por ahora, usamos un ID de usuario fijo (administrador)
+      // Para órdenes web usamos un ID de usuario administrador
       const adminUsers = await storage.getAllUsers();
       const adminUser = adminUsers.find(u => u.role === "admin") || adminUsers[0];
       
@@ -1554,14 +1556,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Crear la orden
       const order = await storage.createOrder({
-        customerId: webUser.customerId,
         userId: adminUser.id,
         total: total.toString(),
         status: "pending",
-        notes,
+        notes: customerData.notes || "",
         deliveryDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // entrega al día siguiente
         isWebOrder: true,
-        source: "web"
+        source: "web",
+        paymentMethod: paymentMethod, // efectivo o transferencia
+        customerData: JSON.stringify(customerData) // almacenamos los datos del cliente en formato JSON
       });
       
       // Crear items de la orden
@@ -1572,47 +1575,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
           quantity: item.quantity,
           unit: item.unit,
           price: item.price,
-          total: (parseFloat(item.price) * parseFloat(item.quantity)).toString()
+          total: (parseFloat(item.price) * parseFloat(item.quantity)).toString(),
+          productName: item.productName // añadimos el nombre del producto para facilitar la visualización
         });
-        
-        // Actualizar stock (lo haremos cuando se confirme la orden)
-        // const product = await storage.getProduct(item.productId);
-        // if (product) {
-        //   const newStock = parseFloat(product.stock.toString()) - parseFloat(item.quantity);
-        //   await storage.updateProduct(item.productId, { stock: newStock.toString() });
-        // }
       }
       
-      // Crear la orden web (detalles adicionales)
-      const webOrder = await storage.createWebOrder({
-        orderId: order.id,
-        webUserId,
-        cartId,
-        shippingAddress,
-        billingAddress,
-        paymentMethod,
-        paymentStatus: "pending",
-        notes,
-        trackingCode: Math.random().toString(36).substring(2, 10).toUpperCase()
-      });
-      
       // Marcar el carrito como convertido
-      await storage.updateCart(cartId, {
+      await storage.updateCart(cart.id, {
         status: "converted",
         updatedAt: new Date()
       });
       
       res.status(201).json({
-        order,
-        webOrder,
-        trackingUrl: `/web/tracking?code=${webOrder.trackingCode}`
+        id: order.id,
+        total: order.total,
+        status: order.status,
+        customerData,
+        paymentMethod,
+        items: await storage.getOrderItemsByOrderId(order.id),
+        timestamp: order.timestamp
       });
     } catch (error) {
       res.status(400).json({ message: "Error al crear orden", error: (error as Error).message });
     }
   });
   
-  // Seguimiento de pedido
+  // Obtener orden por ID
+  app.get("/api/web/orders/:id", async (req, res) => {
+    try {
+      const orderId = parseInt(req.params.id);
+      const order = await storage.getOrder(orderId);
+      
+      if (!order) {
+        return res.status(404).json({ message: "Orden no encontrada" });
+      }
+      
+      // Obtener los items de la orden
+      const items = await storage.getOrderItemsByOrderId(orderId);
+      
+      // Extraer datos del cliente desde el campo JSON
+      let customerData = {};
+      if (order.customerData) {
+        try {
+          customerData = JSON.parse(order.customerData);
+        } catch (e) {
+          console.error("Error al parsear datos del cliente:", e);
+        }
+      }
+      
+      // Verificar si hay una entrega asociada
+      const deliveries = await storage.getAllDeliveries();
+      const delivery = deliveries.find(d => d.orderId === orderId);
+      
+      res.json({
+        id: order.id,
+        status: order.status,
+        notes: order.notes,
+        customerId: order.customerId,
+        timestamp: order.timestamp,
+        total: order.total,
+        customerData,
+        paymentMethod: order.paymentMethod,
+        items
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener la orden", error: (error as Error).message });
+    }
+  });
+
+  // Seguimiento de pedido (mantenemos esta funcionalidad si se necesita)
   app.get("/api/web/tracking/:code", async (req, res) => {
     try {
       const code = req.params.code;

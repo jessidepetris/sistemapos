@@ -26,18 +26,21 @@ interface CartItem {
   cartId: number;
   quantity: string;
   price: string;
+  total: string;
   unit: string;
+  productName: string;
   product?: Product;
 }
 
 interface Cart {
   id: number;
   userId: number | null;
-  items: CartItem[];
-  itemCount: number;
-  totalAmount: number;
-  createdAt: string;
-  updatedAt: string;
+  sessionId: string;
+  status: string;
+  totalItems: number;
+  totalAmount: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 interface AddToCartData {
@@ -48,12 +51,14 @@ interface AddToCartData {
 
 type CartContextType = {
   cart: Cart | null;
+  cartItems: CartItem[];
   isLoading: boolean;
   error: Error | null;
   totalItems: number;
   addToCartMutation: UseMutationResult<Cart, Error, AddToCartData>;
   removeFromCartMutation: UseMutationResult<Cart, Error, number>;
   clearCartMutation: UseMutationResult<void, Error, void>;
+  clearCart: () => Promise<void>;
 };
 
 export const CartContext = createContext<CartContextType | null>(null);
@@ -72,7 +77,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
   });
 
   // Número total de artículos en el carrito
-  const totalItems = cart?.itemCount || 0;
+  const totalItems = cart?.totalItems || 0;
+  
+  // Obtención de items del carrito
+  const { data: cartItems = [] } = useQuery<CartItem[]>({
+    queryKey: ["/api/web/cart/items"],
+    queryFn: async () => {
+      if (!cart) return [];
+      const response = await fetch(`/api/web/cart/items?cartId=${cart.id}`);
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: !!cart,
+  });
 
   // Añadir producto al carrito
   const addToCartMutation = useMutation({
@@ -147,16 +164,30 @@ export function CartProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  // Función para limpiar el carrito
+  const clearCart = async (): Promise<void> => {
+    try {
+      await clearCartMutation.mutateAsync();
+      queryClient.invalidateQueries({ queryKey: ["/api/web/cart"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/web/cart/items"] });
+    } catch (error) {
+      console.error("Error al limpiar el carrito:", error);
+      throw error;
+    }
+  };
+
   return (
     <CartContext.Provider
       value={{
         cart: cart ?? null,
+        cartItems,
         isLoading,
         error,
         totalItems,
         addToCartMutation,
         removeFromCartMutation,
         clearCartMutation,
+        clearCart,
       }}
     >
       {children}
