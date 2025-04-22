@@ -28,6 +28,7 @@ import LogisticsPage from "@/pages/logistics-page";
 import WebHomePage from "@/pages/web/home-page";
 import LoginPage from "@/pages/web/login-page";
 import WebProductsPage from "@/pages/web/products-page";
+import ProductDetailsPage from "@/pages/web/product-details";
 import CartPage from "@/pages/web/cart-page";
 
 function Router() {
