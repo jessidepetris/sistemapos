@@ -27,7 +27,7 @@ import { useWebAuth } from "@/hooks/use-web-auth";
 
 // Schema de inicio de sesión
 const loginSchema = z.object({
-  email: z.string().email({ message: "Email inválido" }),
+  username: z.string().min(3, { message: "El usuario debe tener al menos 3 caracteres" }),
   password: z.string().min(6, { message: "La contraseña debe tener al menos 6 caracteres" }),
 });
 
@@ -64,7 +64,7 @@ export default function LoginPage() {
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: "",
+      username: "",
       password: "",
     },
   });
