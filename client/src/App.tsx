@@ -4,9 +4,11 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
 import { AuthProvider } from "@/hooks/use-auth";
+import { WebAuthProvider } from "@/hooks/use-web-auth";
+import { CartProvider } from "@/hooks/use-cart";
 import { ProtectedRoute } from "@/lib/protected-route";
 
-// Pages
+// Admin Panel Pages
 import Dashboard from "@/pages/dashboard";
 import AuthPage from "@/pages/auth-page";
 import POSPage from "@/pages/pos";
@@ -22,9 +24,14 @@ import UsersPage from "@/pages/users";
 import SettingsPage from "@/pages/settings";
 import LogisticsPage from "@/pages/logistics-page";
 
+// Web Catalog Pages
+import WebHomePage from "@/pages/web/home-page";
+import LoginPage from "@/pages/web/login-page";
+
 function Router() {
   return (
     <Switch>
+      {/* Admin Routes */}
       <Route path="/auth" component={AuthPage} />
       <ProtectedRoute path="/" component={Dashboard} />
       <ProtectedRoute path="/pos" component={POSPage} />
@@ -39,6 +46,27 @@ function Router() {
       <ProtectedRoute path="/reports" component={ReportsPage} />
       <ProtectedRoute path="/users" component={UsersPage} />
       <ProtectedRoute path="/settings" component={SettingsPage} />
+      
+      {/* Web Catalog Routes */}
+      <Route path="/web">
+        <WebHomePage />
+      </Route>
+      <Route path="/web/login">
+        <LoginPage />
+      </Route>
+      <Route path="/web/products">
+        {/* Agregar ProductsPage cuando esté listo */}
+        <WebHomePage />
+      </Route>
+      <Route path="/web/cart">
+        {/* Agregar CartPage cuando esté listo */}
+        <WebHomePage />
+      </Route>
+      <Route path="/web/checkout">
+        {/* Agregar CheckoutPage cuando esté listo */}
+        <WebHomePage />
+      </Route>
+      
       <Route component={NotFound} />
     </Switch>
   );
@@ -48,8 +76,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Router />
-        <Toaster />
+        <WebAuthProvider>
+          <CartProvider>
+            <Router />
+            <Toaster />
+          </CartProvider>
+        </WebAuthProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
