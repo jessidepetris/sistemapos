@@ -1267,29 +1267,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Obtener el carrito actual o crear uno nuevo si no existe
   app.get("/api/web/cart", async (req, res) => {
     try {
+      console.log("TODAS LAS COOKIES:", req.cookies);
+      
       // Obtener sessionId desde cookie o generar uno nuevo
       let sessionId = req.cookies?.cart_session_id;
       
       if (!sessionId) {
+        // Generar un ID de sesión único
         sessionId = Math.random().toString(36).substring(2, 15);
+        console.log("Generando nueva sesión de carrito:", sessionId);
+        
+        // Configurar cookie con configuración permisiva para desarrollo
         res.cookie('cart_session_id', sessionId, { 
           maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
-          httpOnly: true,
-          sameSite: 'lax'
+          httpOnly: false, // Para que el cliente JS pueda leerla
+          sameSite: 'none', // Más permisivo para desarrollo
+          secure: false, // No requerir HTTPS en desarrollo
+          path: '/' // Disponible en todas las rutas
         });
+        console.log("Cookie establecida:", sessionId);
+      } else {
+        console.log("Cookie existente encontrada:", sessionId);
       }
       
       // Buscar un carrito existente para esta sesión con estado active
       const existingCarts = await storage.getCartsBySessionId(sessionId);
+      console.log(`Carritos encontrados para sesión ${sessionId}:`, existingCarts.length);
+      
       let cart = existingCarts.find(c => c.status === 'active');
       
       // Si no existe un carrito activo, crear uno nuevo
       if (!cart) {
+        console.log("Creando nuevo carrito para sesión:", sessionId);
         let webUserId = null;
         
         // Si el usuario está autenticado, asociar el carrito con su cuenta
-        if (req.isAuthenticated() && req.user.webUserId) {
+        if (req.isAuthenticated() && req.user?.webUserId) {
           webUserId = req.user.webUserId;
+          console.log("Usuario autenticado:", webUserId);
         }
         
         cart = await storage.createCart({
@@ -1297,6 +1312,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           sessionId,
           status: 'active'
         });
+        console.log("Nuevo carrito creado:", cart.id);
+      } else {
+        console.log("Carrito existente encontrado:", cart.id);
       }
       
       // Obtener los items del carrito
@@ -1391,10 +1409,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!sessionId) {
         sessionId = Math.random().toString(36).substring(2, 15);
         console.log("Creando nueva sesión de carrito:", sessionId);
+        // Configurar cookie con configuración permisiva para desarrollo
         res.cookie('cart_session_id', sessionId, { 
           maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
-          httpOnly: true,
-          sameSite: 'lax'
+          httpOnly: false, // Para que el cliente JS pueda leerla
+          sameSite: 'none', // Más permisivo para desarrollo
+          secure: false, // No requerir HTTPS en desarrollo
+          path: '/' // Disponible en todas las rutas
         });
       } else {
         console.log("Usando sesión existente:", sessionId);
@@ -1536,6 +1557,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Obtener los ítems del carrito actual
   app.get("/api/web/cart/items", async (req, res) => {
     try {
+      console.log("COOKIES RECIBIDAS en /api/web/cart/items:", req.cookies);
+      
       // Obtener sessionId desde cookie o de la URL
       let sessionId = req.cookies?.cart_session_id;
       
@@ -1543,12 +1566,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!sessionId) {
         console.log("No hay sessionId en la cookie, creando uno nuevo");
         sessionId = Math.random().toString(36).substring(2, 15);
-        // Configurar cookie con SameSite=Lax para permitir redirecciones
-        res.cookie('cart_session_id', sessionId, {
+        // Configurar cookie con configuración permisiva para desarrollo
+        res.cookie('cart_session_id', sessionId, { 
           maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
-          httpOnly: true,
-          sameSite: 'lax',
-          secure: process.env.NODE_ENV === 'production'
+          httpOnly: false, // Para que el cliente JS pueda leerla
+          sameSite: 'none', // Más permisivo para desarrollo
+          secure: false, // No requerir HTTPS en desarrollo
+          path: '/' // Disponible en todas las rutas
         });
         console.log("Nueva cookie cart_session_id creada:", sessionId);
         
