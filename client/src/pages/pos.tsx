@@ -588,12 +588,12 @@ export default function POSPage() {
                 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Cliente</label>
-                  <Select value={selectedCustomerId?.toString() || ""} onValueChange={(value) => setSelectedCustomerId(value ? parseInt(value) : null)}>
+                  <Select value={selectedCustomerId?.toString() || "0"} onValueChange={(value) => setSelectedCustomerId(value === "0" ? null : parseInt(value))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccionar cliente" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Venta sin cliente</SelectItem>
+                      <SelectItem value="0">Venta sin cliente</SelectItem>
                       {Array.isArray(customers) && customers.map((customer: any) => (
                         <SelectItem key={customer.id} value={customer.id.toString()}>
                           {customer.name}
@@ -611,9 +611,9 @@ export default function POSPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="remito">Remito</SelectItem>
-                      <SelectItem value="factura-a">Factura A</SelectItem>
-                      <SelectItem value="factura-b">Factura B</SelectItem>
-                      <SelectItem value="factura-c">Factura C</SelectItem>
+                      <SelectItem value="factura_a">Factura A</SelectItem>
+                      <SelectItem value="factura_b">Factura B</SelectItem>
+                      <SelectItem value="factura_c">Factura C</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
