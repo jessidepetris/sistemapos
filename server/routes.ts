@@ -1275,7 +1275,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.cookie('cart_session_id', sessionId, { 
           maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
           httpOnly: true,
-          sameSite: 'strict'
+          sameSite: 'lax'
         });
       }
       
@@ -1383,11 +1383,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { productId, quantity, unit, notes } = req.body;
       
-      // Obtener sessionId desde cookie
+      // Obtener sessionId desde cookie o generar uno nuevo si no existe
       let sessionId = req.cookies?.cart_session_id;
       
       if (!sessionId) {
-        return res.status(400).json({ message: "No hay una sesión de carrito activa" });
+        sessionId = Math.random().toString(36).substring(2, 15);
+        res.cookie('cart_session_id', sessionId, { 
+          maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
+          httpOnly: true,
+          sameSite: 'lax'
+        });
       }
       
       // Buscar un carrito existente para esta sesión
