@@ -206,10 +206,18 @@ export class MemStorage implements IStorage {
   private cartItems: Map<number, CartItem>;
   private webUsers: Map<number, WebUser>;
   
+  // Category maps
+  private productCategories: Map<number, ProductCategory>;
+  private productCategoryRelations: Map<number, ProductCategoryRelation>;
+  
   // Web counters
   private cartIdCounter: number;
   private cartItemIdCounter: number;
   private webUserIdCounter: number;
+  
+  // Category counters
+  private productCategoryIdCounter: number;
+  private productCategoryRelationIdCounter: number;
   
   sessionStore: session.Store;
 
@@ -260,10 +268,18 @@ export class MemStorage implements IStorage {
     this.cartItems = new Map();
     this.webUsers = new Map();
     
+    // Inicializar mapas de categorías
+    this.productCategories = new Map();
+    this.productCategoryRelations = new Map();
+    
     // Inicializar contadores web
     this.cartIdCounter = 1;
     this.cartItemIdCounter = 1;
     this.webUserIdCounter = 1;
+    
+    // Inicializar contadores de categorías
+    this.productCategoryIdCounter = 1;
+    this.productCategoryRelationIdCounter = 1;
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000 // prune expired entries every 24h
@@ -1106,6 +1122,149 @@ export class MemStorage implements IStorage {
     }
     
     this.cartItems.delete(id);
+  }
+  
+  // Web User methods
+  async getWebUserByUsername(username: string): Promise<WebUser | undefined> {
+    return Array.from(this.webUsers.values()).find(
+      (user) => user.username === username
+    );
+  }
+
+  async createWebUser(insertWebUser: InsertWebUser): Promise<WebUser> {
+    const id = this.webUserIdCounter++;
+    const webUser: WebUser = { ...insertWebUser, id };
+    this.webUsers.set(id, webUser);
+    return webUser;
+  }
+  
+  // Product Categories
+  async getProductCategory(id: number): Promise<ProductCategory | undefined> {
+    return this.productCategories.get(id);
+  }
+  
+  async getAllProductCategories(): Promise<ProductCategory[]> {
+    return Array.from(this.productCategories.values());
+  }
+  
+  async getProductCategoriesByParentId(parentId: number | null): Promise<ProductCategory[]> {
+    return Array.from(this.productCategories.values())
+      .filter(category => {
+        if (parentId === null) {
+          return category.parentId === null || category.parentId === undefined;
+        }
+        return category.parentId === parentId;
+      });
+  }
+  
+  async createProductCategory(category: InsertProductCategory): Promise<ProductCategory> {
+    const id = this.productCategoryIdCounter++;
+    const newCategory: ProductCategory = { ...category, id };
+    this.productCategories.set(id, newCategory);
+    return newCategory;
+  }
+  
+  async updateProductCategory(id: number, categoryData: Partial<ProductCategory>): Promise<ProductCategory> {
+    const category = await this.getProductCategory(id);
+    if (!category) {
+      throw new Error(`Categoría con ID ${id} no encontrada`);
+    }
+    
+    const updatedCategory = { ...category, ...categoryData };
+    this.productCategories.set(id, updatedCategory);
+    return updatedCategory;
+  }
+  
+  async deleteProductCategory(id: number): Promise<void> {
+    const exists = this.productCategories.has(id);
+    if (!exists) {
+      throw new Error(`Categoría con ID ${id} no encontrada`);
+    }
+    
+    // Verificar si hay categorías hijas que dependen de esta
+    const hasChildren = Array.from(this.productCategories.values())
+      .some(category => category.parentId === id);
+      
+    if (hasChildren) {
+      throw new Error(`No se puede eliminar la categoría porque tiene subcategorías asignadas`);
+    }
+    
+    // Eliminar las relaciones de productos con esta categoría
+    const relationKeysToDelete: number[] = [];
+    this.productCategoryRelations.forEach((relation, key) => {
+      if (relation.categoryId === id) {
+        relationKeysToDelete.push(key);
+      }
+    });
+    
+    relationKeysToDelete.forEach(key => {
+      this.productCategoryRelations.delete(key);
+    });
+    
+    this.productCategories.delete(id);
+  }
+  
+  // Product Category Relations
+  async getProductCategoriesByProductId(productId: number): Promise<ProductCategory[]> {
+    const categoryIds = Array.from(this.productCategoryRelations.values())
+      .filter(relation => relation.productId === productId)
+      .map(relation => relation.categoryId);
+      
+    return Array.from(this.productCategories.values())
+      .filter(category => categoryIds.includes(category.id));
+  }
+  
+  async getProductsByCategory(categoryId: number): Promise<Product[]> {
+    const productIds = Array.from(this.productCategoryRelations.values())
+      .filter(relation => relation.categoryId === categoryId)
+      .map(relation => relation.productId);
+      
+    return Array.from(this.products.values())
+      .filter(product => productIds.includes(product.id));
+  }
+  
+  async addProductToCategory(productId: number, categoryId: number): Promise<ProductCategoryRelation> {
+    // Verificar si el producto existe
+    const productExists = this.products.has(productId);
+    if (!productExists) {
+      throw new Error(`Producto con ID ${productId} no encontrado`);
+    }
+    
+    // Verificar si la categoría existe
+    const categoryExists = this.productCategories.has(categoryId);
+    if (!categoryExists) {
+      throw new Error(`Categoría con ID ${categoryId} no encontrada`);
+    }
+    
+    // Verificar si ya existe la relación
+    const alreadyExists = Array.from(this.productCategoryRelations.values())
+      .some(relation => relation.productId === productId && relation.categoryId === categoryId);
+      
+    if (alreadyExists) {
+      throw new Error(`El producto ya está asignado a esta categoría`);
+    }
+    
+    const id = this.productCategoryRelationIdCounter++;
+    const relation: ProductCategoryRelation = {
+      id,
+      productId,
+      categoryId
+    };
+    
+    this.productCategoryRelations.set(id, relation);
+    return relation;
+  }
+  
+  async removeProductFromCategory(productId: number, categoryId: number): Promise<void> {
+    // Buscar la relación para eliminarla
+    const relationKey = Array.from(this.productCategoryRelations.entries())
+      .find(([_, relation]) => relation.productId === productId && relation.categoryId === categoryId)?.[0];
+      
+    if (!relationKey) {
+      throw new Error(`Relación entre producto ${productId} y categoría ${categoryId} no encontrada`);
+    }
+    
+    this.productCategoryRelations.delete(relationKey);
   }
 }
 
