@@ -163,6 +163,8 @@ export default function ProductsPage() {
       isRefrigerated: false,
       isBulk: false,
       isComposite: false,
+      active: true,    // Activo por defecto
+      webVisible: false, // No visible en web por defecto
       category: "",
       imageUrl: "",
       supplierCode: "",
@@ -308,6 +310,8 @@ export default function ProductsPage() {
       isRefrigerated: product.isRefrigerated,
       isBulk: product.isBulk,
       isComposite: product.isComposite || false,
+      active: product.active !== undefined ? product.active : true,
+      webVisible: product.webVisible || false,
       conversionRates: productConversions,
       conversionUnit: "",
       conversionFactor: 0,
@@ -346,6 +350,8 @@ export default function ProductsPage() {
       isRefrigerated: false,
       isBulk: false,
       isComposite: false,
+      active: true,
+      webVisible: false,
       category: "",
       imageUrl: "",
       supplierCode: "",
@@ -400,6 +406,7 @@ export default function ProductsPage() {
                   <TableHead>Precio</TableHead>
                   <TableHead>Stock</TableHead>
                   <TableHead>Proveedor</TableHead>
+                  <TableHead>Estado</TableHead>
                   <TableHead>Características</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -444,6 +451,24 @@ export default function ProductsPage() {
                         </div>
                       </TableCell>
                       <TableCell>{product.supplierCode || "-"}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {product.active ? (
+                            <Badge variant="secondary" className="text-green-600 border-green-200 bg-green-100">
+                              Activo
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-gray-600 border-gray-200 bg-gray-100">
+                              Inactivo
+                            </Badge>
+                          )}
+                          {product.webVisible && (
+                            <Badge variant="secondary" className="text-blue-600 border-blue-200 bg-blue-100">
+                              Web
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
                           {product.isRefrigerated && (
