@@ -311,7 +311,20 @@ export default function AccountsPage() {
                           {transactions.map((transaction: any) => (
                             <TableRow key={transaction.id}>
                               <TableCell>{formatDate(transaction.timestamp)}</TableCell>
-                              <TableCell>{transaction.description}</TableCell>
+                              <TableCell>
+                                {transaction.relatedSaleId ? (
+                                  <button 
+                                    className="text-blue-600 hover:underline font-medium"
+                                    onClick={() => {
+                                      window.open(`/invoices?id=${transaction.relatedSaleId}`, '_blank');
+                                    }}
+                                  >
+                                    {transaction.description}
+                                  </button>
+                                ) : (
+                                  transaction.description
+                                )}
+                              </TableCell>
                               <TableCell>
                                 <Badge 
                                   variant={transaction.type === "credit" ? "outline" : "secondary"}

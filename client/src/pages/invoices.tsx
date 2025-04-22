@@ -29,6 +29,35 @@ export default function InvoicesPage() {
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   
+  // Check for invoice ID in URL parameters
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const invoiceId = params.get('id');
+    
+    if (invoiceId) {
+      // Convert to number
+      const numericId = parseInt(invoiceId);
+      if (!isNaN(numericId)) {
+        // We'll set this ID to search for the specific invoice
+        // once the invoices data is loaded
+        console.log("Buscando factura/remito con ID:", numericId);
+        setTimeout(() => {
+          const invoice = invoices.find((inv: any) => inv.id === numericId);
+          if (invoice) {
+            setSelectedInvoice(invoice);
+            setIsDetailDialogOpen(true);
+          } else {
+            toast({
+              title: "Factura/remito no encontrado",
+              description: `No se encontró el documento con ID ${numericId}`,
+              variant: "destructive",
+            });
+          }
+        }, 1000); // Small delay to ensure invoices are loaded
+      }
+    }
+  }, [invoices]);
+  
   // Get invoices
   const { data: invoices = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/invoices"],
