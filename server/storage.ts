@@ -1,6 +1,12 @@
 import { users, User, InsertUser, Supplier, InsertSupplier, Customer, InsertCustomer, Product, InsertProduct, Account, InsertAccount, Sale, InsertSale, SaleItem, InsertSaleItem, Order, InsertOrder, OrderItem, InsertOrderItem, Note, InsertNote, AccountTransaction, InsertAccountTransaction, Vehicle, InsertVehicle, DeliveryZone, InsertDeliveryZone, DeliveryRoute, InsertDeliveryRoute, Delivery, InsertDelivery, DeliveryEvent, InsertDeliveryEvent, RouteAssignment, InsertRouteAssignment } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
+import { User, InsertUser, Supplier, InsertSupplier, Customer, InsertCustomer, 
+  Product, InsertProduct, Account, InsertAccount, AccountTransaction, InsertAccountTransaction, 
+  Sale, InsertSale, SaleItem, InsertSaleItem, Order, InsertOrder, OrderItem, InsertOrderItem, 
+  Note, InsertNote, Vehicle, InsertVehicle, DeliveryZone, InsertDeliveryZone, 
+  DeliveryRoute, InsertDeliveryRoute, Delivery, InsertDelivery, DeliveryEvent, InsertDeliveryEvent, 
+  RouteAssignment, InsertRouteAssignment, Cart, InsertCart, CartItem, InsertCartItem, WebUser, InsertWebUser } from "@shared/schema";
 
 const MemoryStore = createMemoryStore(session);
 
@@ -12,6 +18,16 @@ export interface IStorage {
   getAllUsers(): Promise<User[]>;
   updateUser(id: number, user: Partial<User>): Promise<User>;
   deleteUser(id: number): Promise<void>;
+  
+  // Web Cart
+  getCart(id: number): Promise<Cart | undefined>;
+  getCartsBySessionId(sessionId: string): Promise<Cart[]>;
+  createCart(cart: InsertCart): Promise<Cart>;
+  updateCart(id: number, cart: Partial<Cart>): Promise<Cart>;
+  getCartItem(id: number): Promise<CartItem | undefined>;
+  getCartItemsByCartId(cartId: number): Promise<CartItem[]>;
+  createCartItem(item: InsertCartItem): Promise<CartItem>;
+  deleteCartItem(id: number): Promise<void>;
   
   // Suppliers
   getSupplier(id: number): Promise<Supplier | undefined>;
@@ -170,6 +186,16 @@ export class MemStorage implements IStorage {
   private deliveryIdCounter: number;
   private deliveryEventIdCounter: number;
   private routeAssignmentIdCounter: number;
+  
+  // Web maps
+  private carts: Map<number, Cart>;
+  private cartItems: Map<number, CartItem>;
+  private webUsers: Map<number, WebUser>;
+  
+  // Web counters
+  private cartIdCounter: number;
+  private cartItemIdCounter: number;
+  private webUserIdCounter: number;
   
   sessionStore: session.Store;
 
