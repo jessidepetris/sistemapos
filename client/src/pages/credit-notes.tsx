@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader,
-  DialogTitle
+  DialogTitle, DialogDescription
 } from "@/components/ui/dialog";
 import {
   Form, FormControl, FormField,
@@ -24,12 +24,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { insertNoteSchema } from "@shared/schema";
-import { Calendar, Eye, FileEdit, Plus, Search } from "lucide-react";
+import { Calendar, Eye, FileEdit, Plus, Search, Printer, ExternalLink } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
+import { Link } from "wouter";
 
 const noteFormSchema = insertNoteSchema.extend({
   amount: z.coerce.number().min(0.01, "El monto debe ser mayor a 0"),
@@ -536,54 +537,152 @@ export default function CreditNotesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Detalle de Nota de {selectedNote?.type === "credit" ? "Crédito" : "Débito"} #{selectedNote?.id}
+              Nota de {selectedNote?.type === "credit" ? "Crédito" : "Débito"} #{selectedNote?.id}
             </DialogTitle>
+            <DialogDescription>
+              Emitida el {selectedNote?.timestamp ? formatDate(selectedNote.timestamp) : ""}
+            </DialogDescription>
           </DialogHeader>
           
           {selectedNote && (
             <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Tipo</p>
-                  <Badge 
-                    variant={selectedNote.type === "credit" ? "default" : "secondary"} 
-                    className={
-                      selectedNote.type === "credit" 
-                        ? "bg-green-100 text-green-800" 
-                        : "bg-blue-100 text-blue-800"
-                    }
-                  >
-                    {selectedNote.type === "credit" ? "Crédito" : "Débito"}
-                  </Badge>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Fecha</p>
-                  <p className="font-medium">{formatDate(selectedNote.timestamp)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Cliente</p>
-                  <p className="font-medium">{selectedNote.customer?.name || "Sin cliente"}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Monto</p>
-                  <p className="font-medium">${parseFloat(selectedNote.amount).toFixed(2)}</p>
-                </div>
-                {selectedNote.relatedSaleId && (
-                  <div className="col-span-2">
-                    <p className="text-sm text-muted-foreground">Venta Relacionada</p>
-                    <p className="font-medium">#{selectedNote.relatedSaleId}</p>
+              <div className="bg-muted rounded-lg p-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-muted-foreground text-sm">Tipo</span>
+                    <Badge 
+                      variant={selectedNote.type === "credit" ? "default" : "secondary"} 
+                      className={
+                        selectedNote.type === "credit" 
+                          ? "bg-green-100 text-green-800 w-fit" 
+                          : "bg-blue-100 text-blue-800 w-fit"
+                      }
+                    >
+                      {selectedNote.type === "credit" ? "Crédito" : "Débito"}
+                    </Badge>
                   </div>
-                )}
-                <div className="col-span-2">
-                  <p className="text-sm text-muted-foreground">Motivo</p>
-                  <p className="font-medium">{selectedNote.reason}</p>
-                </div>
-                {selectedNote.notes && (
-                  <div className="col-span-2">
-                    <p className="text-sm text-muted-foreground">Notas Adicionales</p>
-                    <p>{selectedNote.notes}</p>
+                  
+                  <div className="flex flex-col gap-1">
+                    <span className="text-muted-foreground text-sm">Monto</span>
+                    <span className="font-medium text-lg">
+                      ${parseFloat(selectedNote.amount).toFixed(2)}
+                    </span>
                   </div>
-                )}
+                </div>
+              </div>
+              
+              <div className="flex flex-col gap-1">
+                <span className="text-muted-foreground text-sm">Cliente</span>
+                <div className="flex items-center">
+                  <span className="font-medium">
+                    {selectedNote.customer?.name || "Sin cliente asociado"}
+                  </span>
+                  {selectedNote.customer?.hasAccount && (
+                    <Badge variant="outline" className="ml-2 bg-amber-50 text-amber-800 border-amber-200">
+                      Cuenta Corriente
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              
+              {selectedNote.relatedSale && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-muted-foreground text-sm">Venta Relacionada</span>
+                  <div className="flex items-center">
+                    <span className="font-medium">
+                      Venta #{selectedNote.relatedSale.id} - ${parseFloat(selectedNote.relatedSale.total).toFixed(2)}
+                    </span>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-8 ml-2" 
+                      asChild
+                    >
+                      <Link to={`/sales/${selectedNote.relatedSale.id}`}>
+                        <Eye className="h-3.5 w-3.5 mr-1" />
+                        Ver
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex flex-col gap-1">
+                <span className="text-muted-foreground text-sm">Motivo</span>
+                <span className="font-medium">
+                  {selectedNote.reason}
+                </span>
+              </div>
+              
+              {selectedNote.notes && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-muted-foreground text-sm">Notas Adicionales</span>
+                  <span className="font-medium">
+                    {selectedNote.notes}
+                  </span>
+                </div>
+              )}
+              
+              {selectedNote.accountTransaction && (
+                <div className="border rounded-lg p-4 mt-2">
+                  <h4 className="text-sm font-medium mb-2">Impacto en Cuenta Corriente</h4>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-muted-foreground text-xs">Transacción</span>
+                      <span className="font-medium">
+                        #{selectedNote.accountTransaction.id}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-muted-foreground text-xs">Tipo</span>
+                      <Badge 
+                        variant={selectedNote.accountTransaction.type === "credit" ? "default" : "secondary"} 
+                        className={
+                          selectedNote.accountTransaction.type === "credit" 
+                            ? "bg-green-100 text-green-800 w-fit" 
+                            : "bg-blue-100 text-blue-800 w-fit"
+                        }
+                      >
+                        {selectedNote.accountTransaction.type === "credit" ? "Crédito" : "Débito"}
+                      </Badge>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-muted-foreground text-xs">Monto</span>
+                      <span className="font-medium">
+                        ${parseFloat(selectedNote.accountTransaction.amount).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-muted-foreground text-xs">Descripción</span>
+                      <span className="font-medium truncate">
+                        {selectedNote.accountTransaction.description}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex justify-end mt-2">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      asChild
+                    >
+                      <Link to={`/accounts/${selectedNote.customer?.id}`}>
+                        <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                        Ver Cuenta Corriente
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex flex-col gap-1 text-sm text-muted-foreground mt-2">
+                <div className="flex justify-between">
+                  <span>Creado por:</span>
+                  <span>{selectedNote.user?.fullName || selectedNote.user?.username || "Usuario"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Fecha de emisión:</span>
+                  <span>{formatDate(selectedNote.timestamp)}</span>
+                </div>
               </div>
             </div>
           )}
@@ -594,6 +693,11 @@ export default function CreditNotesPage() {
               onClick={() => setIsDetailDialogOpen(false)}
             >
               Cerrar
+            </Button>
+            
+            <Button>
+              <Printer className="mr-2 h-4 w-4" />
+              Imprimir
             </Button>
           </DialogFooter>
         </DialogContent>
