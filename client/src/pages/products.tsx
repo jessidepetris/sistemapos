@@ -1228,7 +1228,25 @@ export default function ProductsPage() {
                                 checked={field.value}
                                 onCheckedChange={(checked) => {
                                   field.onChange(checked);
-                                  if (!checked) {
+                                  if (checked) {
+                                    // Si se marca como compuesto
+                                    toast({
+                                      title: "Producto Compuesto",
+                                      description: "Ahora puede agregar componentes para calcular automáticamente el costo del producto",
+                                    });
+                                    
+                                    // Si hay componentes, calcular el costo automáticamente
+                                    if (componentsList.length > 0) {
+                                      const compositeCost = calculateCompositeCost();
+                                      if (compositeCost !== null) {
+                                        form.setValue("cost", compositeCost);
+                                        calculateSellingPrice();
+                                      }
+                                    }
+                                    
+                                    // Cambiar a la pestaña de componentes automáticamente
+                                    setActiveTab("components");
+                                  } else {
                                     // Si se desmarca, limpiamos los componentes
                                     setComponentsList([]);
                                     form.setValue("components", []);
@@ -1237,6 +1255,12 @@ export default function ProductsPage() {
                                     if (activeTab === "components") {
                                       setActiveTab("attributes");
                                     }
+                                    
+                                    toast({
+                                      title: "Producto Simple",
+                                      description: "El producto ya no es compuesto, ahora debe establecer el costo manualmente",
+                                      variant: "default"
+                                    });
                                   }
                                 }}
                               />
@@ -1313,6 +1337,36 @@ export default function ProductsPage() {
                         )}
                       />
                       
+                      <FormField
+                        control={form.control}
+                        name="componentUnit"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Unidad</FormLabel>
+                            <Select 
+                              value={field.value} 
+                              onValueChange={field.onChange}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Seleccionar unidad" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="unidad">Unidad</SelectItem>
+                                <SelectItem value="kg">Kilogramo</SelectItem>
+                                <SelectItem value="g">Gramo</SelectItem>
+                                <SelectItem value="l">Litro</SelectItem>
+                                <SelectItem value="ml">Mililitro</SelectItem>
+                                <SelectItem value="m">Metro</SelectItem>
+                                <SelectItem value="cm">Centímetro</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
                       <div className="flex items-end">
                         <Button
                           type="button"
@@ -1332,9 +1386,25 @@ export default function ProductsPage() {
                         <div className="space-y-2">
                           {componentsList.map((component, index) => (
                             <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
-                              <span>
-                                {component.productName} - {component.quantity} {component.unit}
-                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-medium">
+                                  {component.productName} - {component.quantity} {component.unit}
+                                </span>
+                                {(() => {
+                                  // Buscar el producto componente para obtener su costo
+                                  const componentProduct = products?.find((p: any) => p.id === component.productId);
+                                  if (componentProduct && componentProduct.cost) {
+                                    const unitCost = parseFloat(componentProduct.cost);
+                                    const totalCost = unitCost * parseFloat(component.quantity);
+                                    return (
+                                      <span className="text-xs text-muted-foreground">
+                                        Costo: ${unitCost.toFixed(2)} x {component.quantity} = ${totalCost.toFixed(2)}
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </div>
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -1345,6 +1415,19 @@ export default function ProductsPage() {
                               </Button>
                             </div>
                           ))}
+                          
+                          {/* Resumen del costo total */}
+                          <div className="mt-2 pt-2 border-t border-border">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">Costo Total:</span>
+                              <span className="font-bold text-primary">
+                                ${calculateCompositeCost()?.toFixed(2) || "0.00"}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              El costo total se calcula automáticamente sumando el costo de todos los componentes.
+                            </p>
+                          </div>
                         </div>
                       </div>
                     )}
