@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import CatalogLayout from "./catalog-layout";
@@ -74,12 +74,18 @@ export default function ProductDetailsPage() {
   const availableUnits = useMemo(() => {
     if (!product) return [];
     
-    return [
+    console.log("Producto:", product);
+    console.log("Tasas de conversión:", product.conversionRates);
+    
+    const units = [
       product.baseUnit,
       ...(product.conversionRates 
         ? Object.keys(product.conversionRates as Record<string, any>)
         : [])
     ];
+    
+    console.log("Unidades disponibles:", units);
+    return units;
   }, [product]);
 
   // Establecer unidad por defecto
