@@ -1202,9 +1202,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Categorías para catálogo
   app.get("/api/web/categories", async (req, res) => {
     try {
-      const categories = await storage.getAllProductCategories();
+      const allProducts = await storage.getAllProducts();
+      
+      // Extraer categorías únicas de los productos activos y visibles en la web
+      const categories = Array.from(
+        new Set(
+          allProducts
+            .filter(product => product.active && product.webVisible)
+            .map(product => product.category)
+            .filter(Boolean) // Eliminar categorías null o undefined
+        )
+      ).map((categoryName, index) => ({
+        id: index + 1,
+        name: categoryName
+      }));
+      
       res.json(categories);
     } catch (error) {
+      console.error("Error al obtener categorías:", error);
       res.status(500).json({ message: "Error al obtener categorías", error: (error as Error).message });
     }
   });

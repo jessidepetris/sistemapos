@@ -27,36 +27,26 @@ export default function CatalogLayout({ children }: CatalogLayoutProps) {
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center">
           <div className="mr-4 hidden md:flex">
-            <Link href="/web">
-              <a className="mr-6 flex items-center space-x-2">
-                <span className="font-bold text-xl">Punto Pastelero</span>
-              </a>
-            </Link>
+            <div className="mr-6 flex items-center space-x-2">
+              <Link href="/web" className="font-bold text-xl">
+                Punto Pastelero
+              </Link>
+            </div>
             <nav className="flex items-center space-x-6 text-sm font-medium">
-              <Link href="/web">
-                <a className="transition-colors hover:text-primary">
-                  Inicio
-                </a>
+              <Link href="/web" className="transition-colors hover:text-primary">
+                Inicio
               </Link>
-              <Link href="/web/products">
-                <a className="transition-colors hover:text-primary">
-                  Productos
-                </a>
+              <Link href="/web/products" className="transition-colors hover:text-primary">
+                Productos
               </Link>
-              <Link href="/web/categories">
-                <a className="transition-colors hover:text-primary">
-                  Categorías
-                </a>
+              <Link href="/web/categories" className="transition-colors hover:text-primary">
+                Categorías
               </Link>
-              <Link href="/web/about">
-                <a className="transition-colors hover:text-primary">
-                  Acerca de
-                </a>
+              <Link href="/web/about" className="transition-colors hover:text-primary">
+                Acerca de
               </Link>
-              <Link href="/web/contact">
-                <a className="transition-colors hover:text-primary">
-                  Contacto
-                </a>
+              <Link href="/web/contact" className="transition-colors hover:text-primary">
+                Contacto
               </Link>
             </nav>
           </div>
@@ -77,10 +67,8 @@ export default function CatalogLayout({ children }: CatalogLayoutProps) {
           </Button>
 
           {/* Logo for mobile */}
-          <Link href="/web" className="md:hidden">
-            <a className="ml-2 flex items-center space-x-2">
-              <span className="font-bold">Punto Pastelero</span>
-            </a>
+          <Link href="/web" className="md:hidden ml-2 font-bold">
+            Punto Pastelero
           </Link>
 
           {/* Right side items */}
@@ -92,19 +80,21 @@ export default function CatalogLayout({ children }: CatalogLayoutProps) {
               </Button>
             </div>
             <nav className="flex items-center space-x-2">
-              <Link href="/web/cart">
-                <a className="relative">
-                  <Button variant="ghost" size="icon">
-                    <ShoppingCart className="h-5 w-5" />
-                    {totalItems > 0 && (
-                      <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-primary text-white text-xs flex items-center justify-center">
-                        {totalItems}
-                      </span>
-                    )}
-                    <span className="sr-only">Carrito</span>
-                  </Button>
-                </a>
-              </Link>
+              <div className="relative">
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={() => setLocation('/web/cart')}
+                >
+                  <ShoppingCart className="h-5 w-5" />
+                  {totalItems > 0 && (
+                    <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-primary text-white text-xs flex items-center justify-center">
+                      {totalItems}
+                    </span>
+                  )}
+                  <span className="sr-only">Carrito</span>
+                </Button>
+              </div>
               
               {user ? (
                 <DropdownMenu>
@@ -115,14 +105,14 @@ export default function CatalogLayout({ children }: CatalogLayoutProps) {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem>
-                      <Link href="/web/account">
-                        <a className="w-full">Mi cuenta</a>
+                    <DropdownMenuItem asChild>
+                      <Link href="/web/account" className="w-full">
+                        Mi cuenta
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem>
-                      <Link href="/web/orders">
-                        <a className="w-full">Mis pedidos</a>
+                    <DropdownMenuItem asChild>
+                      <Link href="/web/orders" className="w-full">
+                        Mis pedidos
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => logoutMutation.mutate()}>
@@ -133,7 +123,7 @@ export default function CatalogLayout({ children }: CatalogLayoutProps) {
               ) : (
                 <Button variant="ghost" size="sm" asChild>
                   <Link href="/web/login">
-                    <a>Iniciar sesión</a>
+                    Iniciar sesión
                   </Link>
                 </Button>
               )}
@@ -147,30 +137,20 @@ export default function CatalogLayout({ children }: CatalogLayoutProps) {
         <div className="fixed inset-0 top-16 z-50 grid h-[calc(100vh-4rem)] grid-flow-row auto-rows-max overflow-auto p-6 pb-32 shadow-md animate-in slide-in-from-bottom-80 md:hidden">
           <div className="relative z-20 rounded-md bg-popover p-4 text-popover-foreground shadow-md">
             <nav className="grid gap-2">
-              <Link href="/web">
-                <a className="flex w-full items-center py-2 text-lg font-semibold">
-                  Inicio
-                </a>
+              <Link href="/web" className="flex w-full items-center py-2 text-lg font-semibold">
+                Inicio
               </Link>
-              <Link href="/web/products">
-                <a className="flex w-full items-center py-2 text-lg font-semibold">
-                  Productos
-                </a>
+              <Link href="/web/products" className="flex w-full items-center py-2 text-lg font-semibold">
+                Productos
               </Link>
-              <Link href="/web/categories">
-                <a className="flex w-full items-center py-2 text-lg font-semibold">
-                  Categorías
-                </a>
+              <Link href="/web/categories" className="flex w-full items-center py-2 text-lg font-semibold">
+                Categorías
               </Link>
-              <Link href="/web/about">
-                <a className="flex w-full items-center py-2 text-lg font-semibold">
-                  Acerca de
-                </a>
+              <Link href="/web/about" className="flex w-full items-center py-2 text-lg font-semibold">
+                Acerca de
               </Link>
-              <Link href="/web/contact">
-                <a className="flex w-full items-center py-2 text-lg font-semibold">
-                  Contacto
-                </a>
+              <Link href="/web/contact" className="flex w-full items-center py-2 text-lg font-semibold">
+                Contacto
               </Link>
             </nav>
           </div>
@@ -191,15 +171,11 @@ export default function CatalogLayout({ children }: CatalogLayoutProps) {
             </p>
           </div>
           <div className="flex gap-4">
-            <Link href="/web/terms">
-              <a className="text-sm text-muted-foreground underline underline-offset-4">
-                Términos
-              </a>
+            <Link href="/web/terms" className="text-sm text-muted-foreground underline underline-offset-4">
+              Términos
             </Link>
-            <Link href="/web/privacy">
-              <a className="text-sm text-muted-foreground underline underline-offset-4">
-                Privacidad
-              </a>
+            <Link href="/web/privacy" className="text-sm text-muted-foreground underline underline-offset-4">
+              Privacidad
             </Link>
           </div>
         </div>

@@ -237,16 +237,16 @@ export default function WebProductsPage() {
                 <SelectValue placeholder="Todas las categorías" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todas las categorías</SelectItem>
+                <SelectItem value="all">Todas las categorías</SelectItem>
                 {categories?.length > 0 
                   ? categories.map((category: any) => (
-                      <SelectItem key={category.id} value={category.name}>
-                        {category.name}
+                      <SelectItem key={category.id} value={category.name || `category-${category.id}`}>
+                        {category.name || `Categoría ${category.id}`}
                       </SelectItem>
                     ))
                   : productCategories.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {category}
+                      <SelectItem key={category} value={category || "sin-categoria"}>
+                        {category || "Sin categoría"}
                       </SelectItem>
                     ))
                 }
