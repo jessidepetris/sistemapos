@@ -141,8 +141,12 @@ export const sales = pgTable("sales", {
   userId: integer("user_id").notNull().references(() => users.id),
   total: numeric("total", { precision: 10, scale: 2 }).notNull(),
   paymentMethod: text("payment_method").notNull(),
+  paymentDetails: text("payment_details"),  // JSON stringificado con detalles del pago
+  documentType: text("document_type").default("remito"),
+  invoiceNumber: text("invoice_number"),
   status: text("status").notNull().default("completed"),
   notes: text("notes"),
+  printOptions: json("print_options"), // Opciones para impresión y envío
 });
 
 export const insertSaleSchema = createInsertSchema(sales).pick({
@@ -150,8 +154,12 @@ export const insertSaleSchema = createInsertSchema(sales).pick({
   userId: true,
   total: true,
   paymentMethod: true,
+  paymentDetails: true,
+  documentType: true,
+  invoiceNumber: true,
   status: true,
   notes: true,
+  printOptions: true,
 });
 
 // Sale items table
@@ -164,6 +172,11 @@ export const saleItems = pgTable("sale_items", {
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
   discount: numeric("discount", { precision: 10, scale: 2 }).default("0"),
   total: numeric("total", { precision: 10, scale: 2 }).notNull(),
+  // Campos para tracking de conversiones
+  isConversion: boolean("is_conversion").default(false),
+  conversionFactor: numeric("conversion_factor", { precision: 10, scale: 3 }).default("1"),
+  conversionUnit: text("conversion_unit"),
+  conversionBarcode: text("conversion_barcode"),
 });
 
 export const insertSaleItemSchema = createInsertSchema(saleItems).pick({
@@ -174,6 +187,10 @@ export const insertSaleItemSchema = createInsertSchema(saleItems).pick({
   price: true,
   discount: true,
   total: true,
+  isConversion: true,
+  conversionFactor: true,
+  conversionUnit: true,
+  conversionBarcode: true,
 });
 
 // Orders table (for customer orders)

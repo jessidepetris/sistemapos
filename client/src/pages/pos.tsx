@@ -286,13 +286,49 @@ export default function POSPage() {
   // Finalize sale
   const finalizeSale = () => {
     if (!user) return;
+
+    // Validación para pago mixto
+    if (paymentMethod === 'mixed') {
+      const totalPagos = mixedPayment.cash + mixedPayment.card + mixedPayment.transfer + mixedPayment.account;
+      if (Math.abs(totalPagos - cartTotal) > 0.01) { // Tolerancia para errores de punto flotante
+        toast({
+          title: "Error en el pago",
+          description: "El total de los pagos mixtos debe ser igual al total de la venta",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+    
+    // Preparamos datos adicionales según el tipo de pago
+    let paymentDetails = {};
+    
+    if (paymentMethod === 'card') {
+      paymentDetails = { cardType };
+    } else if (paymentMethod === 'mixed') {
+      paymentDetails = { 
+        mixedPayment: {
+          cash: mixedPayment.cash,
+          card: mixedPayment.card,
+          transfer: mixedPayment.transfer,
+          account: mixedPayment.account
+        }
+      };
+    }
     
     const saleData = {
       userId: user.id,
       customerId: selectedCustomerId,
       total: cartTotal,
       paymentMethod,
+      paymentDetails: JSON.stringify(paymentDetails),
+      documentType,
+      notes: observations,
       status: "completed",
+      printOptions: {
+        printTicket,
+        sendEmail
+      },
       items: cart.map(item => ({
         productId: item.productId,
         quantity: item.quantity,
@@ -306,6 +342,16 @@ export default function POSPage() {
         conversionBarcode: item.conversionBarcode || null
       }))
     };
+    
+    // Verificamos si hay que generar factura
+    const requiresInvoice = documentType.startsWith('factura');
+    
+    if (requiresInvoice) {
+      toast({
+        title: "Generando factura electrónica",
+        description: "Procesando facturación con AFIP...",
+      });
+    }
     
     processSaleMutation.mutate(saleData);
   };
@@ -741,14 +787,30 @@ export default function POSPage() {
                 <h3 className="font-medium mb-3">Opciones de impresión</h3>
                 <div className="space-y-2">
                   <div className="flex items-center space-x-2">
-                    <Checkbox id="print-ticket" defaultChecked />
-                    <label htmlFor="print-ticket" className="text-sm">
+                    <Checkbox 
+                      id="print-ticket" 
+                      checked={printTicket}
+                      onCheckedChange={(checked) => setPrintTicket(checked as boolean)}
+                    />
+                    <label 
+                      htmlFor="print-ticket" 
+                      className="text-sm cursor-pointer"
+                      onClick={() => setPrintTicket(!printTicket)}
+                    >
                       Imprimir ticket
                     </label>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <Checkbox id="send-email" />
-                    <label htmlFor="send-email" className="text-sm">
+                    <Checkbox 
+                      id="send-email" 
+                      checked={sendEmail}
+                      onCheckedChange={(checked) => setSendEmail(checked as boolean)}
+                    />
+                    <label 
+                      htmlFor="send-email" 
+                      className="text-sm cursor-pointer"
+                      onClick={() => setSendEmail(!sendEmail)}
+                    >
                       Enviar por email
                     </label>
                   </div>
