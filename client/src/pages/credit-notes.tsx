@@ -61,6 +61,12 @@ export default function CreditNotesPage() {
     retry: false,
   });
   
+  // Get customer accounts
+  const { data: customersAccounts } = useQuery({
+    queryKey: ["/api/accounts"],
+    retry: false,
+  });
+  
   // Get sales for reference
   const { data: sales } = useQuery({
     queryKey: ["/api/sales"],
@@ -85,11 +91,25 @@ export default function CreditNotesPage() {
       const res = await apiRequest("POST", "/api/notes", data);
       return await res.json();
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
       toast({ 
         title: "Nota creada correctamente",
         description: `La nota de ${noteType === "credit" ? "crédito" : "débito"} ha sido registrada`
       });
+      
+      // Si se creó una transacción en la cuenta corriente, mostrar mensaje adicional
+      if (response.accountTransaction) {
+        const transactionType = noteType === "credit" ? "crédito" : "débito";
+        toast({ 
+          title: "Cuenta corriente actualizada",
+          description: `Se ha registrado un movimiento de ${transactionType} en la cuenta del cliente`,
+        });
+        
+        // Actualizar cuentas corrientes además de notas
+        queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      }
+      
       form.reset();
       setIsDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ["/api/notes"] });
@@ -153,6 +173,36 @@ export default function CreditNotesPage() {
   const onSubmit = (data: NoteFormValues) => {
     if (!user) return;
     
+    // Verificaciones adicionales
+    if (data.reason === "Otro" && !data.notes) {
+      toast({
+        title: "Información incompleta",
+        description: "Debe especificar el motivo en el campo de notas adicionales",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Si es una nota de débito y está asociada a un cliente con cuenta corriente,
+    // verificar el impacto en el saldo disponible
+    if (data.type === "debit" && data.customerId) {
+      const customer = customers?.find((c: any) => c.id === data.customerId);
+      const account = customer?.hasAccount ? 
+        (customersAccounts?.find((acc: any) => acc.customerId === data.customerId)) : null;
+      
+      if (account && account.balance) {
+        const newBalance = parseFloat(account.balance) - data.amount;
+        
+        // Si supera el límite, mostrar confirmación
+        if (account.hasLimit && account.creditLimit && newBalance < -parseFloat(account.creditLimit)) {
+          if (!confirm(`Esta operación excederá el límite de crédito del cliente (${account.creditLimit}). ¿Desea continuar?`)) {
+            return;
+          }
+        }
+      }
+    }
+    
+    // Procesar la solicitud
     createNoteMutation.mutate({
       ...data,
       userId: user.id,

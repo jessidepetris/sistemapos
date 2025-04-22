@@ -550,7 +550,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const notes = await storage.getAllNotes();
       
-      // Enrich with customer and user data
+      // Enrich with customer, user, and related sale data
       const enrichedNotes = await Promise.all(
         notes.map(async (note) => {
           let customer = null;
@@ -560,16 +560,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           const user = await storage.getUser(note.userId);
           
+          let relatedSale = null;
+          if (note.relatedSaleId) {
+            relatedSale = await storage.getSale(note.relatedSaleId);
+          }
+          
+          // Si hay venta relacionada y está asociada a un cliente, obtenemos los datos
+          if (relatedSale && relatedSale.customerId) {
+            const saleCustomer = await storage.getCustomer(relatedSale.customerId);
+            if (saleCustomer) {
+              relatedSale.customer = saleCustomer;
+            }
+          }
+          
+          // Si hay una cuenta de cliente, verificamos si hay transacción asociada
+          let accountTransaction = null;
+          if (note.customerId && customer?.hasAccount) {
+            const account = await storage.getAccountByCustomerId(note.customerId);
+            if (account) {
+              // Buscar transacciones que tengan relatedNoteId igual al ID de esta nota
+              const transactions = await storage.getAccountTransactions(account.id);
+              accountTransaction = transactions.find(t => t.relatedNoteId === note.id);
+            }
+          }
+          
           return {
             ...note,
             customer,
-            user
+            user: user ? { ...user, password: undefined } : null,
+            relatedSale,
+            accountTransaction
           };
         })
       );
       
       res.json(enrichedNotes);
     } catch (error) {
+      console.error("Error al obtener notas:", error);
       res.status(500).json({ message: "Error al obtener notas", error: (error as Error).message });
     }
   });
@@ -594,6 +621,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date()
       });
       
+      let accountTransaction = null;
+      
       // If the customer has an account, create a transaction
       if (customerId) {
         const customer = await storage.getCustomer(customerId);
@@ -608,7 +637,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               newBalance -= parseFloat(amount);
             }
             
-            await storage.createAccountTransaction({
+            // Crear transacción en cuenta corriente
+            accountTransaction = await storage.createAccountTransaction({
               accountId: account.id,
               amount,
               type: type === "credit" ? "credit" : "debit",
@@ -617,13 +647,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
               userId: req.user.id
             });
             
-            await storage.updateAccount(account.id, { balance: newBalance, lastUpdated: new Date() });
+            // Actualizar saldo en cuenta
+            await storage.updateAccount(account.id, { 
+              balance: newBalance.toString(), 
+              lastUpdated: new Date() 
+            });
+            
+            // Enriquecer la nota con información del cliente
+            note.customer = customer;
           }
         }
       }
       
-      res.status(201).json(note);
+      // Devolver nota y la transacción si se creó
+      res.status(201).json({
+        ...note,
+        accountTransaction
+      });
     } catch (error) {
+      console.error("Error al crear nota:", error);
       res.status(400).json({ message: "Error al crear nota", error: (error as Error).message });
     }
   });
