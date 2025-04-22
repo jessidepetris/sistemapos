@@ -27,6 +27,13 @@ import { insertCustomerSchema } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Plus, Search, Users } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const customerFormSchema = insertCustomerSchema.extend({});
 
@@ -43,6 +50,12 @@ export default function CustomersPage() {
     queryKey: ["/api/customers"],
     retry: false,
   });
+  
+  // Get users for seller selection
+  const { data: users } = useQuery({
+    queryKey: ["/api/users"],
+    retry: false,
+  });
 
   // Form definition
   const form = useForm<CustomerFormValues>({
@@ -52,8 +65,12 @@ export default function CustomersPage() {
       phone: "",
       email: "",
       address: "",
+      city: "",
+      province: "",
       notes: "",
       hasAccount: false,
+      sellerId: undefined,
+      invoiceType: "remito",
     },
   });
 
@@ -125,7 +142,9 @@ export default function CustomersPage() {
         customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (customer.phone && customer.phone.includes(searchQuery)) ||
         (customer.email && customer.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (customer.address && customer.address.toLowerCase().includes(searchQuery.toLowerCase()))
+        (customer.address && customer.address.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (customer.city && customer.city.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (customer.province && customer.province.toLowerCase().includes(searchQuery.toLowerCase()))
       )
     : customers;
 
@@ -146,8 +165,12 @@ export default function CustomersPage() {
       phone: customer.phone || "",
       email: customer.email || "",
       address: customer.address || "",
+      city: customer.city || "",
+      province: customer.province || "",
       notes: customer.notes || "",
       hasAccount: customer.hasAccount || false,
+      sellerId: customer.sellerId,
+      invoiceType: customer.invoiceType || "remito",
     });
     setIsDialogOpen(true);
   };
@@ -160,10 +183,21 @@ export default function CustomersPage() {
       phone: "",
       email: "",
       address: "",
+      city: "",
+      province: "",
       notes: "",
       hasAccount: false,
+      sellerId: undefined,
+      invoiceType: "remito",
     });
     setIsDialogOpen(true);
+  };
+
+  // Get seller name from ID
+  const getSellerName = (sellerId: number) => {
+    if (!users) return "-";
+    const seller = users.find((user: any) => user.id === sellerId);
+    return seller ? seller.fullName : "-";
   };
 
   return (
@@ -203,16 +237,17 @@ export default function CustomersPage() {
                     <TableRow>
                       <TableHead>Nombre</TableHead>
                       <TableHead>Teléfono</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Dirección</TableHead>
+                      <TableHead>Localidad</TableHead>
+                      <TableHead>Provincia</TableHead>
                       <TableHead>Cuenta</TableHead>
+                      <TableHead>Vendedor</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {isLoading ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center">
+                        <TableCell colSpan={7} className="text-center">
                           <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
@@ -221,8 +256,8 @@ export default function CustomersPage() {
                         <TableRow key={customer.id}>
                           <TableCell className="font-medium">{customer.name}</TableCell>
                           <TableCell>{customer.phone || "-"}</TableCell>
-                          <TableCell>{customer.email || "-"}</TableCell>
-                          <TableCell className="max-w-xs truncate">{customer.address || "-"}</TableCell>
+                          <TableCell>{customer.city || "-"}</TableCell>
+                          <TableCell>{customer.province || "-"}</TableCell>
                           <TableCell>
                             {customer.hasAccount ? (
                               <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
@@ -230,6 +265,7 @@ export default function CustomersPage() {
                               </Badge>
                             ) : "-"}
                           </TableCell>
+                          <TableCell>{customer.sellerId ? getSellerName(customer.sellerId) : "-"}</TableCell>
                           <TableCell className="text-right">
                             <Button
                               variant="ghost"
@@ -242,7 +278,7 @@ export default function CustomersPage() {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-10">
+                        <TableCell colSpan={7} className="text-center py-10">
                           <div className="flex flex-col items-center justify-center text-center">
                             <Users className="h-12 w-12 text-muted-foreground mb-4" />
                             <h3 className="text-lg font-medium mb-2">
@@ -274,7 +310,7 @@ export default function CustomersPage() {
       
       {/* Create/Edit Customer Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>
               {editingCustomer ? "Editar Cliente" : "Nuevo Cliente"}
@@ -340,6 +376,92 @@ export default function CustomersPage() {
                   </FormItem>
                 )}
               />
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="city"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Localidad</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Localidad" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="province"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Provincia</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Provincia" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="sellerId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Vendedor</FormLabel>
+                      <Select 
+                        onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)}
+                        value={field.value?.toString()}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccione un vendedor" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="">Sin vendedor asignado</SelectItem>
+                          {users?.map((user: any) => (
+                            <SelectItem key={user.id} value={user.id.toString()}>
+                              {user.fullName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="invoiceType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tipo de Facturación</FormLabel>
+                      <Select 
+                        onValueChange={field.onChange}
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Tipo de facturación" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="remito">Remito</SelectItem>
+                          <SelectItem value="factura_c">Factura C</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               
               <FormField
                 control={form.control}
