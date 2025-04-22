@@ -373,7 +373,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               type: "debit",
               description: `${docTypeText} ${docNumber}`,
               relatedSaleId: sale.id,
-              userId: req.user.id
+              userId: req.user.id,
+              balanceAfter: newBalance
             });
             
             await storage.updateAccount(account.id, { balance: newBalance, lastUpdated: new Date() });
