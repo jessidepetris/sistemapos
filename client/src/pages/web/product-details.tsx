@@ -71,14 +71,16 @@ export default function ProductDetailsPage() {
   });
 
   // Determinar unidades disponibles
-  const availableUnits = product
-    ? [
-        product.baseUnit,
-        ...(product.conversionRates 
-          ? Object.keys(product.conversionRates)
-          : [])
-      ]
-    : [];
+  const availableUnits = useMemo(() => {
+    if (!product) return [];
+    
+    return [
+      product.baseUnit,
+      ...(product.conversionRates 
+        ? Object.keys(product.conversionRates as Record<string, any>)
+        : [])
+    ];
+  }, [product]);
 
   // Establecer unidad por defecto
   useEffect(() => {
