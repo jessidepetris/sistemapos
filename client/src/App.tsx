@@ -32,6 +32,8 @@ import ProductDetailsPage from "@/pages/web/product-details";
 import CartPage from "@/pages/web/cart-page";
 import CheckoutPage from "@/pages/web/checkout-page";
 import OrderConfirmationPage from "@/pages/web/order-confirmation-page";
+import AccountPage from "@/pages/web/account-page";
+import WebOrdersPage from "@/pages/web/orders-page";
 
 function Router() {
   return (
@@ -73,6 +75,12 @@ function Router() {
       </Route>
       <Route path="/web/order-confirmation/:orderId">
         <OrderConfirmationPage />
+      </Route>
+      <Route path="/web/account">
+        <AccountPage />
+      </Route>
+      <Route path="/web/orders">
+        <WebOrdersPage />
       </Route>
       
       <Route component={NotFound} />
