@@ -269,7 +269,14 @@ export function GeneralTab({ form, suppliers }: GeneralTabProps) {
                     <FormControl>
                       <Checkbox
                         checked={field.value}
-                        onCheckedChange={field.onChange}
+                        onCheckedChange={(checked) => {
+                          field.onChange(checked);
+                          
+                          // Si se marca como compuesto, cambiar a la pestaña de componentes
+                          if (checked && typeof props.onTabChange === 'function') {
+                            props.onTabChange('components');
+                          }
+                        }}
                       />
                     </FormControl>
                     <div className="space-y-1 leading-none">

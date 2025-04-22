@@ -48,6 +48,23 @@ export function ComponentsTab({
 }: ComponentsTabProps) {
   const { toast } = useToast();
 
+  // Calcular costo total basado en los componentes
+  const calculateTotalCost = (components: any[]) => {
+    let totalCost = 0;
+    
+    for (const component of components) {
+      // Buscar el producto en la lista de productos para obtener su costo
+      const selectedProduct = products?.find((p) => p.id === component.productId);
+      if (selectedProduct && selectedProduct.cost) {
+        const componentCost = parseFloat(selectedProduct.cost);
+        const quantity = parseFloat(component.quantity);
+        totalCost += componentCost * quantity;
+      }
+    }
+    
+    return totalCost;
+  };
+  
   // Agregar componente
   const addComponent = () => {
     const productId = form.getValues("componentProductId");
@@ -100,13 +117,18 @@ export function ComponentsTab({
       productId,
       productName: selectedProduct.name,
       quantity: parseFloat(quantity),
-      unit
+      unit,
+      cost: selectedProduct.cost || 0
     };
     const newComponentsList = [...componentsList, newComponent];
     setComponentsList(newComponentsList);
     
     // Actualizar el valor en el formulario
     form.setValue("components", newComponentsList);
+    
+    // Actualizar automáticamente el costo total del producto compuesto
+    const totalCost = calculateTotalCost(newComponentsList);
+    form.setValue("cost", totalCost);
     
     // Limpiar los campos
     form.setValue("componentProductId", undefined);
@@ -119,6 +141,10 @@ export function ComponentsTab({
     const newComponentsList = componentsList.filter((_, index) => index !== indexToRemove);
     setComponentsList(newComponentsList);
     form.setValue("components", newComponentsList);
+    
+    // Actualizar automáticamente el costo total del producto compuesto
+    const totalCost = calculateTotalCost(newComponentsList);
+    form.setValue("cost", totalCost);
   };
 
   return (
@@ -225,27 +251,69 @@ export function ComponentsTab({
                 No hay componentes agregados
               </div>
             ) : (
-              <div className="space-y-2">
-                {componentsList.map((component, index) => (
-                  <div 
-                    key={index} 
-                    className="flex items-center justify-between p-3 border rounded-md"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{component.productName}</span>
-                      <span className="text-muted-foreground">
-                        {component.quantity} {component.unit}
-                      </span>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  {componentsList.map((component, index) => {
+                    // Buscar el producto en la lista de productos para obtener su costo actualizado
+                    const selectedProduct = products?.find((p) => p.id === component.productId);
+                    const componentCost = selectedProduct?.cost ? parseFloat(selectedProduct.cost) : 0;
+                    const quantity = parseFloat(component.quantity);
+                    const totalComponentCost = componentCost * quantity;
+                    
+                    return (
+                      <div 
+                        key={index} 
+                        className="flex items-center justify-between p-3 border rounded-md"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{component.productName}</span>
+                            <span className="text-muted-foreground">
+                              {component.quantity} {component.unit}
+                            </span>
+                          </div>
+                          <div className="text-sm text-muted-foreground mt-1">
+                            Costo unitario: ${componentCost.toFixed(2)} × {quantity} = ${totalComponentCost.toFixed(2)}
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeComponent(index)}
+                        >
+                          <Trash size={16} className="text-destructive" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                {/* Resumen de costos */}
+                <div className="mt-4 p-4 bg-muted rounded-md">
+                  <h4 className="font-medium mb-2">Resumen de Costos</h4>
+                  <div className="space-y-1">
+                    {componentsList.map((component, index) => {
+                      const selectedProduct = products?.find((p) => p.id === component.productId);
+                      const componentCost = selectedProduct?.cost ? parseFloat(selectedProduct.cost) : 0;
+                      const quantity = parseFloat(component.quantity);
+                      const totalComponentCost = componentCost * quantity;
+                      
+                      return (
+                        <div key={index} className="flex justify-between text-sm">
+                          <span>{component.productName} ({component.quantity} {component.unit})</span>
+                          <span>${totalComponentCost.toFixed(2)}</span>
+                        </div>
+                      );
+                    })}
+                    <div className="border-t mt-2 pt-2 font-medium flex justify-between">
+                      <span>Costo Total:</span>
+                      <span>${calculateTotalCost(componentsList).toFixed(2)}</span>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeComponent(index)}
-                    >
-                      <Trash size={16} className="text-destructive" />
-                    </Button>
                   </div>
-                ))}
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    Nota: El costo total se actualiza automáticamente en el campo "Costo"
+                  </div>
+                </div>
               </div>
             )}
           </div>
