@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Sidebar } from "@/components/ui/sidebar";
+import Sidebar from "@/components/layout/sidebar";
 import { TopNavbar } from "@/components/ui/top-navbar";
 import { useAuth } from "@/hooks/use-auth";
 import { Redirect } from "wouter";
@@ -20,10 +20,7 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
-      <Sidebar 
-        isOpen={sidebarOpen} 
-        onClose={() => setSidebarOpen(false)} 
-      />
+      <Sidebar />
       
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
