@@ -28,10 +28,10 @@ export default function CartPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user } = useWebAuth();
-  const { cart, isLoading, removeFromCartMutation } = useCart();
+  const { cart, cartItems, isLoading, removeFromCartMutation } = useCart();
 
   // Si no hay carrito creado o está vacío
-  const isCartEmpty = !cart || cart.items.length === 0;
+  const isCartEmpty = !cart || cartItems.length === 0;
 
   // Calcular totales
   const subtotal = cart?.totalAmount || 0;
@@ -98,7 +98,7 @@ export default function CartPage() {
             <div className="md:col-span-2">
               <Card>
                 <CardHeader>
-                  <CardTitle>Productos ({cart.items.length})</CardTitle>
+                  <CardTitle>Productos ({cartItems.length})</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <Table>
@@ -113,7 +113,7 @@ export default function CartPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {cart.items.map((item) => {
+                      {cartItems.map((item) => {
                         const product = item.product;
                         const itemPrice = parseFloat(item.price);
                         const quantity = parseFloat(item.quantity);
@@ -195,7 +195,7 @@ export default function CartPage() {
                 <CardFooter className="flex justify-between">
                   <Button variant="outline" asChild>
                     <Link href="/web/products">
-                      <a>Seguir comprando</a>
+                      Seguir comprando
                     </Link>
                   </Button>
                 </CardFooter>
@@ -235,7 +235,7 @@ export default function CartPage() {
                   
                   {!user && (
                     <p className="text-sm text-muted-foreground mt-4 text-center">
-                      Debes <Link href="/web/login"><a className="text-primary underline">iniciar sesión</a></Link> para completar tu compra
+                      Debes <Link href="/web/login" className="text-primary underline">iniciar sesión</Link> para completar tu compra
                     </p>
                   )}
                 </CardContent>
