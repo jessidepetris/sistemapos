@@ -74,16 +74,22 @@ export default function POSPage() {
       return await res.json();
     },
     onSuccess: () => {
-      toast({
-        title: "Venta completada",
-        description: "La venta se ha procesado correctamente",
-      });
-      setCart([]);
-      setSelectedCustomerId(null);
-      setCheckoutDialogOpen(false);
+      // Invalidar consultas para actualizar los datos
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/recent-sales"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/recent-activity"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/inventory-alerts"] });
+      
+      toast({
+        title: "Venta completada",
+        description: "La venta se ha procesado correctamente y el stock ha sido actualizado"
+      });
+      
+      // Limpiar estado
+      setCart([]);
+      setSelectedCustomerId(null);
+      setCheckoutDialogOpen(false);
     },
     onError: (error) => {
       toast({
@@ -353,7 +359,22 @@ export default function POSPage() {
       });
     }
     
-    processSaleMutation.mutate(saleData);
+    processSaleMutation.mutate(saleData, {
+      onSuccess: () => {
+        // Invalidar la caché de productos para refrescar los stocks
+        queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+        
+        // Mostrar notificación de éxito
+        toast({
+          title: "Venta finalizada exitosamente",
+          description: "El stock ha sido actualizado automáticamente"
+        });
+        
+        // Cerrar el diálogo y limpiar el carrito
+        setCheckoutDialogOpen(false);
+        setCart([]);
+      }
+    });
   };
   
   return (
