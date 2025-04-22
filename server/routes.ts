@@ -1231,6 +1231,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Carrito de compra
+  // Obtener el carrito actual o crear uno nuevo si no existe
+  app.get("/api/web/cart", async (req, res) => {
+    try {
+      // Obtener sessionId desde cookie o generar uno nuevo
+      let sessionId = req.cookies?.cart_session_id;
+      
+      if (!sessionId) {
+        sessionId = Math.random().toString(36).substring(2, 15);
+        res.cookie('cart_session_id', sessionId, { 
+          maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
+          httpOnly: true,
+          sameSite: 'strict'
+        });
+      }
+      
+      // Buscar un carrito existente para esta sesión con estado active
+      const existingCarts = await storage.getCartsBySessionId(sessionId);
+      let cart = existingCarts.find(c => c.status === 'active');
+      
+      // Si no existe un carrito activo, crear uno nuevo
+      if (!cart) {
+        let webUserId = null;
+        
+        // Si el usuario está autenticado, asociar el carrito con su cuenta
+        if (req.isAuthenticated() && req.user.webUserId) {
+          webUserId = req.user.webUserId;
+        }
+        
+        cart = await storage.createCart({
+          webUserId,
+          sessionId,
+          status: 'active'
+        });
+      }
+      
+      // Obtener los items del carrito
+      const cartItems = await storage.getCartItemsByCartId(cart.id);
+      
+      // Enriquecer con información de productos
+      const enrichedItems = await Promise.all(
+        cartItems.map(async (item) => {
+          const product = await storage.getProduct(item.productId);
+          return {
+            ...item,
+            product
+          };
+        })
+      );
+      
+      // Calcular totales
+      const totalItems = cartItems.reduce((sum, item) => sum + parseFloat(item.quantity), 0);
+      const totalAmount = cartItems.reduce((sum, item) => sum + (parseFloat(item.price) * parseFloat(item.quantity)), 0);
+      
+      // Responder con el carrito completo
+      res.json({
+        ...cart,
+        items: enrichedItems,
+        itemCount: totalItems,
+        totalAmount
+      });
+      
+    } catch (error) {
+      console.error("Error al obtener carrito:", error);
+      res.status(500).json({ message: "Error al obtener carrito", error: (error as Error).message });
+    }
+  });
+
   app.post("/api/web/carts", async (req, res) => {
     try {
       const { webUserId, sessionId } = req.body;
@@ -1279,15 +1346,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.post("/api/web/cart-items", async (req, res) => {
+  app.post("/api/web/cart/items", async (req, res) => {
     try {
-      const { cartId, productId, quantity, unit, notes } = req.body;
+      const { productId, quantity, unit, notes } = req.body;
       
-      // Verificar que el carrito existe
-      const cart = await storage.getCart(cartId);
-      if (!cart) {
-        return res.status(404).json({ message: "Carrito no encontrado" });
+      // Obtener sessionId desde cookie
+      let sessionId = req.cookies?.cart_session_id;
+      
+      if (!sessionId) {
+        return res.status(400).json({ message: "No hay una sesión de carrito activa" });
       }
+      
+      // Buscar un carrito existente para esta sesión
+      const existingCarts = await storage.getCartsBySessionId(sessionId);
+      let cart = existingCarts.find(c => c.status === 'active');
+      
+      // Si no existe un carrito activo, crear uno nuevo
+      if (!cart) {
+        let webUserId = null;
+        
+        // Si el usuario está autenticado, asociar el carrito con su cuenta
+        if (req.isAuthenticated() && req.user.webUserId) {
+          webUserId = req.user.webUserId;
+        }
+        
+        cart = await storage.createCart({
+          webUserId,
+          sessionId,
+          status: 'active'
+        });
+      }
+      
+      const cartId = cart.id;
       
       // Verificar que el producto existe y tiene stock
       const product = await storage.getProduct(productId);
@@ -1356,7 +1446,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.delete("/api/web/cart-items/:id", async (req, res) => {
+  app.delete("/api/web/cart/items/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const cartItem = await storage.getCartItem(id);
@@ -1556,6 +1646,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Configuración del catálogo
+  // Vaciar carrito
+  app.delete("/api/web/cart", async (req, res) => {
+    try {
+      // Obtener sessionId desde cookie
+      let sessionId = req.cookies?.cart_session_id;
+      
+      if (!sessionId) {
+        return res.status(400).json({ message: "No hay una sesión de carrito activa" });
+      }
+      
+      // Buscar un carrito existente para esta sesión
+      const existingCarts = await storage.getCartsBySessionId(sessionId);
+      let cart = existingCarts.find(c => c.status === 'active');
+      
+      if (!cart) {
+        return res.status(404).json({ message: "No se encontró un carrito activo" });
+      }
+      
+      // Obtener los items del carrito
+      const cartItems = await storage.getCartItemsByCartId(cart.id);
+      
+      // Eliminar todos los items
+      for (const item of cartItems) {
+        await storage.deleteCartItem(item.id);
+      }
+      
+      // Actualizar el carrito
+      await storage.updateCart(cart.id, {
+        totalAmount: "0",
+        totalItems: 0,
+        updatedAt: new Date()
+      });
+      
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ message: "Error al vaciar el carrito", error: (error as Error).message });
+    }
+  });
+  
   app.get("/api/web/catalog-settings", async (req, res) => {
     try {
       const settings = await storage.getCatalogSettings();

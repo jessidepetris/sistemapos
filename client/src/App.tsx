@@ -60,6 +60,9 @@ function Router() {
       <Route path="/web/products">
         <WebProductsPage />
       </Route>
+      <Route path="/web/products/:productId">
+        <ProductDetailsPage />
+      </Route>
       <Route path="/web/cart">
         <CartPage />
       </Route>
