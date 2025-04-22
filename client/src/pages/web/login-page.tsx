@@ -99,7 +99,7 @@ export default function LoginPage() {
     registerMutation.mutate(registerData, {
       onSuccess: () => {
         setActiveTab("login");
-        loginForm.setValue("email", data.email);
+        loginForm.setValue("username", data.email); // Usar el email como nombre de usuario
         loginForm.setValue("password", data.password);
       },
     });
@@ -128,12 +128,12 @@ export default function LoginPage() {
                     <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
                       <FormField
                         control={loginForm.control}
-                        name="email"
+                        name="username"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Email</FormLabel>
+                            <FormLabel>Nombre de usuario</FormLabel>
                             <FormControl>
-                              <Input placeholder="tu@email.com" {...field} />
+                              <Input placeholder="tu_usuario" {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
