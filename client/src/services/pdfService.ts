@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
 
 export const PDFService = {
-  async generateInvoicePDF(sale: any, items: any[], customer: any) {
+  async generateInvoicePDF(sale: any, items: any[], customer: any): Promise<boolean> {
     try {
       // Crear un documento PDF directamente sin usar imagen
       const pdf = new jsPDF({
@@ -174,12 +174,20 @@ export const PDFService = {
       const documentType = sale.documentType || 'documento';
       const documentId = sale.id || Date.now();
       const fileName = `${documentType.replace('_', '')}_${documentId}.pdf`;
-      pdf.save(fileName);
       
-      return true;
+      // Crear una promesa para manejar el guardado del PDF
+      return new Promise<boolean>((resolve) => {
+        try {
+          pdf.save(fileName);
+          resolve(true);
+        } catch (err) {
+          console.error('Error al guardar PDF:', err);
+          resolve(false);
+        }
+      });
     } catch (error) {
       console.error('Error al generar PDF:', error);
-      return false;
+      return Promise.resolve(false);
     }
   }
 };

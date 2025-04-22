@@ -75,23 +75,25 @@ export default function InvoicesPage() {
   };
   
   // Export invoice as PDF
-  const handleExportInvoice = (invoice: any) => {
+  const handleExportInvoice = async (invoice: any) => {
     // Buscar la factura en la lista
     const invoiceData = invoices.find((inv: any) => inv.id === invoice.id);
     
     if (invoiceData) {
-      const success = PDFService.generateInvoicePDF(
-        invoiceData,
-        invoiceData.items || [],
-        invoiceData.customer || null
-      );
-      
-      if (success) {
+      try {
+        // Generamos el PDF con el servicio centralizado
+        await PDFService.generateInvoicePDF(
+          invoiceData,
+          invoiceData.items || [],
+          invoiceData.customer || null
+        );
+        
         toast({
           title: "Exportando remito",
           description: `Remito #${invoice.id} exportado como PDF`,
         });
-      } else {
+      } catch (error) {
+        console.error("Error al generar PDF:", error);
         toast({
           title: "Error al exportar",
           description: "No se pudo generar el PDF del remito",

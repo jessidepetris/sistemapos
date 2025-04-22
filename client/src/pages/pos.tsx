@@ -918,12 +918,42 @@ export default function POSPage() {
                       customer={completedSale.customer}
                     />
                   ) : (
-                    <div className="flex justify-center">
-                      <ThermalTicket
-                        sale={completedSale}
-                        items={completedSale.items}
-                        customer={completedSale.customer}
-                      />
+                    <div className="receipt-preview p-6 bg-white rounded-lg border border-dashed">
+                      <div className="text-center mb-4">
+                        <h3 className="font-mono font-bold text-lg">PUNTO PASTELERO</h3>
+                        <p className="font-mono text-sm">Avenida Siempre Viva 123, Springfield</p>
+                        <p className="font-mono text-sm">(555) 123-4567</p>
+                        <p className="font-mono text-sm">CUIT: 30-12345678-9</p>
+                      </div>
+                      <div className="border-t border-dashed my-4"></div>
+                      <div className="font-mono text-sm">
+                        <p><b>Fecha:</b> {new Date(completedSale.timestamp).toLocaleString()}</p>
+                        <p><b>Ticket #:</b> {completedSale.id || 'N/A'}</p>
+                        <p><b>Comprobante:</b> {completedSale.documentType}</p>
+                        <p><b>Cliente:</b> {completedSale.customer?.name || 'Consumidor Final'}</p>
+                        <p><b>Vendedor:</b> {completedSale.userId || 'N/A'}</p>
+                      </div>
+                      <div className="border-t border-dashed my-4"></div>
+                      <div className="font-mono text-sm">
+                        <p className="font-bold">PRODUCTOS</p>
+                        {completedSale.items.map((item: any, index: number) => (
+                          <div key={index} className="my-2">
+                            <div className="font-bold">{item.name}</div>
+                            <div>{item.quantity} x ${parseFloat(item.price).toFixed(2)} = ${parseFloat(item.total).toFixed(2)}</div>
+                            {item.isConversion && (
+                              <div className="text-xs">Presentación: {item.unit} (Factor: {item.conversionFactor})</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="border-t border-dashed my-4"></div>
+                      <div className="font-mono text-sm text-right">
+                        <p className="font-bold">TOTAL: ${parseFloat(completedSale.total).toFixed(2)}</p>
+                      </div>
+                      <div className="font-mono text-xs text-center mt-4">
+                        <p>Gracias por su compra!</p>
+                        <p>Punto Pastelero</p>
+                      </div>
                     </div>
                   )}
                 </div>
