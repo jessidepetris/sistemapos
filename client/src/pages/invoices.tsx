@@ -19,6 +19,7 @@ import { Calendar, Download, FileText, Plus, Printer, Search } from "lucide-reac
 import { DatePicker } from "@/components/ui/date-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import InvoiceDetail from "@/components/invoices/InvoiceDetail";
+import { PDFService } from "@/services/pdfService";
 
 export default function InvoicesPage() {
   const { toast } = useToast();
@@ -74,11 +75,36 @@ export default function InvoicesPage() {
   };
   
   // Export invoice as PDF
-  const handleExportInvoice = (invoiceId: number) => {
-    toast({
-      title: "Exportando remito",
-      description: `Remito #${invoiceId} exportado como PDF`,
-    });
+  const handleExportInvoice = (invoice: any) => {
+    // Buscar la factura en la lista
+    const invoiceData = invoices.find((inv: any) => inv.id === invoice.id);
+    
+    if (invoiceData) {
+      const success = PDFService.generateInvoicePDF(
+        invoiceData,
+        invoiceData.items || [],
+        invoiceData.customer || null
+      );
+      
+      if (success) {
+        toast({
+          title: "Exportando remito",
+          description: `Remito #${invoice.id} exportado como PDF`,
+        });
+      } else {
+        toast({
+          title: "Error al exportar",
+          description: "No se pudo generar el PDF del remito",
+          variant: "destructive"
+        });
+      }
+    } else {
+      toast({
+        title: "Error al exportar",
+        description: "No se encontró el remito especificado",
+        variant: "destructive"
+      });
+    }
   };
   
   return (
@@ -200,7 +226,7 @@ export default function InvoicesPage() {
                                   <Button 
                                     variant="ghost" 
                                     size="icon" 
-                                    onClick={() => handleExportInvoice(invoice.id)}
+                                    onClick={() => handleExportInvoice(invoice)}
                                     title="Exportar PDF"
                                   >
                                     <Download className="h-4 w-4" />

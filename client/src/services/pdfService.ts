@@ -4,132 +4,171 @@ import { toPng } from 'html-to-image';
 export const PDFService = {
   async generateInvoicePDF(sale: any, items: any[], customer: any) {
     try {
-      // Crear un elemento temporal para renderizar la factura
-      const tempDiv = document.createElement('div');
-      tempDiv.style.position = 'absolute';
-      tempDiv.style.left = '-9999px';
-      document.body.appendChild(tempDiv);
-      
-      // Renderizar el contenido de la factura (versión simplificada)
-      tempDiv.innerHTML = `
-        <div style="font-family: Arial, sans-serif; padding: 20px; width: 210mm;">
-          <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
-            <div>
-              <h1 style="margin: 0; color: #333; font-size: 24px;">PUNTO PASTELERO</h1>
-              <p style="margin: 5px 0; color: #666;">Avenida Siempre Viva 123, Springfield</p>
-              <p style="margin: 5px 0; color: #666;">(555) 123-4567</p>
-              <p style="margin: 5px 0; color: #666;">CUIT: 30-12345678-9</p>
-            </div>
-            <div style="text-align: right;">
-              <h2 style="margin: 0; font-size: 18px;">${sale.documentType.startsWith('factura') 
-                ? sale.documentType.replace('_', ' ').toUpperCase() 
-                : 'REMITO'}</h2>
-              <p style="margin: 5px 0; color: #666;">N°: ${sale.id || '-------'}</p>
-              <p style="margin: 5px 0; color: #666;">Fecha: ${new Date(sale.timestamp).toLocaleDateString()}</p>
-            </div>
-          </div>
-          
-          <div style="margin-bottom: 20px; padding: 10px; background-color: #f5f5f5; border-radius: 4px;">
-            <h3 style="margin: 0 0 10px 0; font-size: 14px; text-transform: uppercase; color: #666;">Datos del cliente</h3>
-            <p style="margin: 5px 0;"><strong>Cliente:</strong> ${customer?.name || 'Consumidor Final'}</p>
-            ${customer ? `
-              <p style="margin: 5px 0;"><strong>CUIT/DNI:</strong> ${customer.taxId || customer.documentId || '-'}</p>
-              <p style="margin: 5px 0;"><strong>Dirección:</strong> ${customer.address || '-'}</p>
-              <p style="margin: 5px 0;"><strong>Teléfono:</strong> ${customer.phone || '-'}</p>
-            ` : ''}
-          </div>
-          
-          <div style="margin-bottom: 20px;">
-            <h3 style="margin: 0 0 10px 0; font-size: 14px; text-transform: uppercase; color: #666;">Detalle de productos</h3>
-            <table style="width: 100%; border-collapse: collapse;">
-              <thead>
-                <tr style="border-bottom: 1px solid #ddd;">
-                  <th style="padding: 8px; text-align: left;">Descripción</th>
-                  <th style="padding: 8px; text-align: right;">Cantidad</th>
-                  <th style="padding: 8px; text-align: right;">Precio Unit.</th>
-                  <th style="padding: 8px; text-align: right;">Subtotal</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${items.map((item) => `
-                  <tr style="border-bottom: 1px dashed #ddd;">
-                    <td style="padding: 8px;">
-                      ${item.name}
-                      ${item.isConversion ? `
-                        <div style="font-size: 12px; color: #666;">
-                          Presentación: ${item.unit} (Factor: ${item.conversionFactor})
-                        </div>
-                      ` : ''}
-                    </td>
-                    <td style="padding: 8px; text-align: right;">${item.quantity} ${item.unit}</td>
-                    <td style="padding: 8px; text-align: right;">$${parseFloat(item.price).toFixed(2)}</td>
-                    <td style="padding: 8px; text-align: right;">$${parseFloat(item.total).toFixed(2)}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-          
-          <div style="display: flex; justify-content: flex-end; margin-bottom: 20px;">
-            <div style="width: 250px;">
-              <div style="display: flex; justify-content: space-between; padding: 8px 0;">
-                <span style="font-weight: 500;">Subtotal:</span>
-                <span>$${parseFloat(sale.total).toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; padding: 8px 0; color: #666;">
-                <span>IVA (21%):</span>
-                <span>$${(parseFloat(sale.total) * 0.21 / 1.21).toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; padding: 8px 0; font-weight: bold; font-size: 18px; border-top: 1px solid #ddd; margin-top: 8px;">
-                <span>TOTAL:</span>
-                <span>$${parseFloat(sale.total).toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-          
-          <div style="text-align: center; font-size: 12px; color: #666; border-top: 1px solid #ddd; padding-top: 16px;">
-            <p style="margin: 4px 0;">Este documento no tiene valor fiscal.</p>
-            <p style="margin: 4px 0;">¡Gracias por su compra!</p>
-          </div>
-        </div>
-      `;
-      
-      // Capturar el elemento como imagen
-      const dataUrl = await toPng(tempDiv, { quality: 0.95 });
-      
-      // Limpiar el elemento temporal
-      document.body.removeChild(tempDiv);
-      
-      // Crear un nuevo documento PDF (A4)
+      // Crear un documento PDF directamente sin usar imagen
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: 'a4'
       });
       
-      // Obtener dimensiones y ajustar la imagen al PDF
-      const imgProps = pdf.getImageProperties(dataUrl);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = imgProps.width;
-      const imgHeight = imgProps.height;
+      // Configuración de márgenes y dimensiones
+      const pageWidth = pdf.internal.pageSize.width;
+      const margin = 20;
+      const contentWidth = pageWidth - (margin * 2);
+      let yPos = 20; // Posición Y inicial
       
-      // Calcular escala para que el ancho se ajuste al PDF
-      const scale = pdfWidth / imgWidth;
-      const scaledHeight = imgHeight * scale;
+      // Funciones auxiliares para posicionamiento
+      const mm = (px: number) => px * 0.35; // Conversión aproximada px a mm
+      const centerText = (text: string, y: number, fontSize = 10) => {
+        pdf.setFontSize(fontSize);
+        const textWidth = pdf.getTextWidth(text);
+        pdf.text(text, (pageWidth - textWidth) / 2, y);
+      };
       
-      // Si la altura escalada es mayor que la página, ajustar nuevamente
-      const finalScale = scaledHeight > pdfHeight ? pdfHeight / scaledHeight * scale : scale;
-      const finalWidth = imgWidth * finalScale;
-      const finalHeight = imgHeight * finalScale;
+      // Añadir encabezado
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(16);
+      pdf.text('PUNTO PASTELERO', margin, yPos);
       
-      // Agregar la imagen al PDF
-      pdf.addImage(dataUrl, 'PNG', 
-        (pdfWidth - finalWidth) / 2, // Centrar horizontalmente
-        10, // Margen superior
-        finalWidth, 
-        finalHeight
-      );
+      // Logo de la empresa (si lo tuviéramos)
+      // pdf.addImage(logoData, 'PNG', pageWidth - 50, 15, 30, 15);
+      
+      // Información de la empresa
+      yPos += 10;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      pdf.text('Avenida Siempre Viva 123, Springfield', margin, yPos);
+      yPos += 5;
+      pdf.text('Teléfono: (555) 123-4567', margin, yPos);
+      yPos += 5;
+      pdf.text('CUIT: 30-12345678-9', margin, yPos);
+      
+      // Tipo de documento y número
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(12);
+      const docType = sale.documentType.startsWith('factura') 
+          ? sale.documentType.replace('_', ' ').toUpperCase() 
+          : 'REMITO';
+      pdf.text(docType, pageWidth - margin - pdf.getTextWidth(docType), 25);
+      
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      const docNumber = `N°: ${sale.id || '-------'}`;
+      pdf.text(docNumber, pageWidth - margin - pdf.getTextWidth(docNumber), 30);
+      
+      const docDate = `Fecha: ${new Date(sale.timestamp).toLocaleDateString()}`;
+      pdf.text(docDate, pageWidth - margin - pdf.getTextWidth(docDate), 35);
+      
+      // Línea separadora
+      yPos += 10;
+      pdf.setDrawColor(200, 200, 200);
+      pdf.line(margin, yPos, pageWidth - margin, yPos);
+      
+      // Datos del cliente
+      yPos += 10;
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(11);
+      pdf.text('DATOS DEL CLIENTE', margin, yPos);
+      
+      yPos += 7;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      pdf.text(`Cliente: ${customer?.name || 'Consumidor Final'}`, margin, yPos);
+      
+      if (customer) {
+        yPos += 5;
+        pdf.text(`CUIT/DNI: ${customer.taxId || customer.documentId || '-'}`, margin, yPos);
+        yPos += 5;
+        pdf.text(`Dirección: ${customer.address || '-'}`, margin, yPos);
+        yPos += 5;
+        pdf.text(`Teléfono: ${customer.phone || '-'}`, margin, yPos);
+      }
+      
+      // Línea separadora
+      yPos += 7;
+      pdf.line(margin, yPos, pageWidth - margin, yPos);
+      
+      // Detalles de productos
+      yPos += 10;
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(11);
+      pdf.text('DETALLE DE PRODUCTOS', margin, yPos);
+      
+      // Encabezados de tabla
+      yPos += 7;
+      pdf.setFillColor(240, 240, 240);
+      pdf.rect(margin, yPos - 5, contentWidth, 7, 'F');
+      
+      pdf.setFontSize(9);
+      pdf.text('Descripción', margin + 2, yPos);
+      pdf.text('Cantidad', margin + 90, yPos);
+      pdf.text('Precio Unit.', margin + 120, yPos);
+      pdf.text('Subtotal', pageWidth - margin - 15, yPos, { align: 'right' });
+      
+      // Filas de productos
+      yPos += 5;
+      pdf.setFont('helvetica', 'normal');
+      
+      items.forEach((item) => {
+        if (yPos > 250) { // Control de paginación
+          pdf.addPage();
+          yPos = 20;
+        }
+        
+        // Descripción con posible presentación
+        pdf.text(item.name, margin + 2, yPos);
+        
+        if (item.isConversion) {
+          yPos += 4;
+          pdf.setFontSize(8);
+          pdf.text(`Presentación: ${item.unit} (Factor: ${item.conversionFactor})`, margin + 5, yPos);
+          pdf.setFontSize(9);
+        }
+        
+        // Cantidad y unidad
+        pdf.text(`${item.quantity} ${item.unit}`, margin + 90, yPos);
+        
+        // Precio unitario
+        const precioUnitario = `$${parseFloat(item.price).toFixed(2)}`;
+        pdf.text(precioUnitario, margin + 120, yPos);
+        
+        // Subtotal
+        const subtotal = `$${parseFloat(item.total).toFixed(2)}`;
+        pdf.text(subtotal, pageWidth - margin - 2, yPos, { align: 'right' });
+        
+        yPos += item.isConversion ? 8 : 6;
+        
+        // Línea separadora entre productos
+        pdf.setDrawColor(220, 220, 220);
+        pdf.line(margin, yPos - 2, pageWidth - margin, yPos - 2);
+      });
+      
+      // Totales
+      yPos += 5;
+      const totalesX = pageWidth - margin - 60;
+      const valoresX = pageWidth - margin - 2;
+      
+      pdf.text('Subtotal:', totalesX, yPos);
+      pdf.text(`$${parseFloat(sale.total).toFixed(2)}`, valoresX, yPos, { align: 'right' });
+      
+      yPos += 6;
+      pdf.text('IVA (21%):', totalesX, yPos);
+      pdf.text(`$${(parseFloat(sale.total) * 0.21 / 1.21).toFixed(2)}`, valoresX, yPos, { align: 'right' });
+      
+      yPos += 6;
+      pdf.setDrawColor(150, 150, 150);
+      pdf.line(totalesX, yPos - 2, valoresX, yPos - 2);
+      
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('TOTAL:', totalesX, yPos + 5);
+      pdf.text(`$${parseFloat(sale.total).toFixed(2)}`, valoresX, yPos + 5, { align: 'right' });
+      
+      // Pie de página
+      yPos = pdf.internal.pageSize.height - 20;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      centerText('Este documento no tiene valor fiscal.', yPos);
+      centerText('¡Gracias por su compra!', yPos + 4);
       
       // Guardar el PDF
       const documentType = sale.documentType || 'documento';

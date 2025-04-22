@@ -951,15 +951,43 @@ export default function POSPage() {
                       // Imprimir en impresora térmica
                       if (receiptRef.current) {
                         try {
-                          const printWindow = window.open('', '_blank');
-                          if (printWindow) {
-                            printWindow.document.write(`
+                          // Crear un elemento iFrame temporal para imprimir
+                          const iframe = document.createElement('iframe');
+                          iframe.style.display = 'none';
+                          document.body.appendChild(iframe);
+                          
+                          // Acceder al documento dentro del iframe
+                          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                          
+                          if (iframeDoc) {
+                            // Escribir contenido del ticket en el iframe
+                            iframeDoc.open();
+                            iframeDoc.write(`
+                              <!DOCTYPE html>
                               <html>
                                 <head>
-                                  <title>Imprimir Ticket</title>
+                                  <title>Ticket - Punto Pastelero</title>
                                   <style>
-                                    body { font-family: monospace; }
-                                    .receipt { width: 80mm; margin: 0 auto; }
+                                    @page { size: 80mm auto; margin: 0mm; }
+                                    body { 
+                                      font-family: 'Courier New', monospace; 
+                                      font-size: 12px;
+                                      margin: 0;
+                                      padding: 10px;
+                                      width: 80mm;
+                                    }
+                                    .receipt { width: 100%; }
+                                    .receipt-header { text-align: center; margin-bottom: 10px; }
+                                    .receipt-header h1 { font-size: 16px; margin: 0; }
+                                    .receipt-header p { margin: 0; font-size: 12px; }
+                                    .receipt-items { margin: 10px 0; }
+                                    .receipt-items table { width: 100%; border-collapse: collapse; }
+                                    .receipt-items th { border-bottom: 1px solid #000; text-align: left; }
+                                    .receipt-items td, .receipt-items th { padding: 3px 0; }
+                                    .receipt-total { margin-top: 10px; border-top: 1px dashed #000; padding-top: 5px; }
+                                    .receipt-total table { width: 100%; }
+                                    .receipt-total td { text-align: right; }
+                                    .receipt-footer { text-align: center; margin-top: 10px; font-size: 10px; }
                                   </style>
                                 </head>
                                 <body>
@@ -969,13 +997,26 @@ export default function POSPage() {
                                   <script>
                                     window.onload = function() {
                                       window.print();
-                                      setTimeout(function() { window.close(); }, 500);
+                                      setTimeout(function() { 
+                                        window.parent.postMessage('print-finished', '*');
+                                      }, 1000);
                                     };
                                   </script>
                                 </body>
                               </html>
                             `);
-                            printWindow.document.close();
+                            iframeDoc.close();
+                            
+                            // Escuchar el mensaje cuando termine la impresión
+                            const handleMessage = (event: MessageEvent) => {
+                              if (event.data === 'print-finished') {
+                                // Eliminar el iframe después de imprimir
+                                document.body.removeChild(iframe);
+                                window.removeEventListener('message', handleMessage);
+                              }
+                            };
+                            
+                            window.addEventListener('message', handleMessage);
                           }
                         } catch (error) {
                           console.error('Error al imprimir:', error);
