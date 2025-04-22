@@ -564,8 +564,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Update product stock
           const product = await storage.getProduct(item.productId);
           if (product) {
+            // Verificar si el producto es compuesto (un combo)
+            if (product.isComposite && product.components) {
+              console.log(`Venta de producto compuesto: ${product.name}`);
+              
+              // Parseamos los componentes si están en formato string
+              let components = [];
+              try {
+                components = typeof product.components === 'string' 
+                  ? JSON.parse(product.components) 
+                  : product.components;
+              } catch (error) {
+                console.error("Error al parsear componentes del producto:", error);
+                components = [];
+              }
+              
+              // Por cada componente, reducimos su stock proporcionalmente
+              for (const component of components) {
+                const componentProduct = await storage.getProduct(component.productId);
+                if (componentProduct) {
+                  // Calcular la cantidad total a reducir (cantidad de venta * cantidad por componente)
+                  const quantityToDeduct = parseFloat(item.quantity) * parseFloat(component.quantity);
+                  const newComponentStock = parseFloat(componentProduct.stock.toString()) - quantityToDeduct;
+                  
+                  // Actualizar el stock del componente
+                  await storage.updateProduct(component.productId, { stock: newComponentStock });
+                  
+                  console.log(`  - Componente: ${componentProduct.name}, Cantidad por unidad: ${component.quantity} ${component.unit}`);
+                  console.log(`    Cantidad vendida: ${item.quantity}, Stock descontado: ${quantityToDeduct}`);
+                  console.log(`    Nuevo stock del componente: ${newComponentStock}`);
+                }
+              }
+              
+              // No descontamos stock del producto compuesto mismo, ya que se gestiona a través de sus componentes
+              console.log(`Stock del producto compuesto no reducido directamente`);
+            }
             // Si el item tiene información de conversión, aplicamos el factor
-            if (item.isConversion && item.conversionFactor) {
+            else if (item.isConversion && item.conversionFactor) {
               // Descontamos proporcionalmente según el factor de conversión
               // Por ejemplo, si vendemos una presentación de 500g (factor 0.5) con cantidad 2,
               // descontamos 2 * 0.5 = 1kg del stock principal
@@ -577,7 +612,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                            Cantidad: ${item.quantity}, Factor: ${item.conversionFactor}, 
                            Stock descontado: ${stockToDeduct} ${product.baseUnit}`);
             } else {
-              // Descuento normal para productos estándar
+              // Descuento normal para productos estándar (no compuestos)
               const newStock = parseFloat(product.stock.toString()) - parseFloat(item.quantity);
               await storage.updateProduct(item.productId, { stock: newStock });
             }
