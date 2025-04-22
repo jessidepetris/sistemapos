@@ -778,7 +778,7 @@ export default function CreditNotesPage() {
                     <FormLabel>Cliente{noteType === "credit" ? "" : " (opcional)"}</FormLabel>
                     <Select 
                       value={field.value?.toString()} 
-                      onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)}
+                      onValueChange={(value) => field.onChange(value && value !== "0" ? parseInt(value) : undefined)}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -807,7 +807,7 @@ export default function CreditNotesPage() {
                     <FormLabel>Venta Relacionada (opcional)</FormLabel>
                     <Select 
                       value={field.value?.toString()} 
-                      onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)}
+                      onValueChange={(value) => field.onChange(value && value !== "0" ? parseInt(value) : undefined)}
                     >
                       <FormControl>
                         <SelectTrigger>
