@@ -619,6 +619,475 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ======= ENDPOINTS DE LOGÍSTICA ======= //
+
+  // Vehículos
+  app.get("/api/vehicles", async (req, res) => {
+    try {
+      const vehicles = await storage.getAllVehicles();
+      res.json(vehicles);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener vehículos", error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/vehicles", async (req, res) => {
+    try {
+      const vehicle = await storage.createVehicle(req.body);
+      res.status(201).json(vehicle);
+    } catch (error) {
+      res.status(400).json({ message: "Error al crear vehículo", error: (error as Error).message });
+    }
+  });
+
+  app.put("/api/vehicles/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const vehicle = await storage.updateVehicle(id, req.body);
+      res.json(vehicle);
+    } catch (error) {
+      res.status(400).json({ message: "Error al actualizar vehículo", error: (error as Error).message });
+    }
+  });
+
+  app.delete("/api/vehicles/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteVehicle(id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ message: "Error al eliminar vehículo", error: (error as Error).message });
+    }
+  });
+
+  // Zonas de entrega
+  app.get("/api/delivery-zones", async (req, res) => {
+    try {
+      const zones = await storage.getAllDeliveryZones();
+      res.json(zones);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener zonas de entrega", error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/delivery-zones", async (req, res) => {
+    try {
+      const zone = await storage.createDeliveryZone(req.body);
+      res.status(201).json(zone);
+    } catch (error) {
+      res.status(400).json({ message: "Error al crear zona de entrega", error: (error as Error).message });
+    }
+  });
+
+  app.put("/api/delivery-zones/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const zone = await storage.updateDeliveryZone(id, req.body);
+      res.json(zone);
+    } catch (error) {
+      res.status(400).json({ message: "Error al actualizar zona de entrega", error: (error as Error).message });
+    }
+  });
+
+  app.delete("/api/delivery-zones/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteDeliveryZone(id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ message: "Error al eliminar zona de entrega", error: (error as Error).message });
+    }
+  });
+
+  // Rutas de entrega
+  app.get("/api/delivery-routes", async (req, res) => {
+    try {
+      const routes = await storage.getAllDeliveryRoutes();
+      res.json(routes);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener rutas de entrega", error: (error as Error).message });
+    }
+  });
+
+  app.get("/api/delivery-routes/by-zone/:zoneId", async (req, res) => {
+    try {
+      const zoneId = parseInt(req.params.zoneId);
+      const routes = await storage.getDeliveryRoutesByZone(zoneId);
+      res.json(routes);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener rutas de entrega", error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/delivery-routes", async (req, res) => {
+    try {
+      const route = await storage.createDeliveryRoute(req.body);
+      res.status(201).json(route);
+    } catch (error) {
+      res.status(400).json({ message: "Error al crear ruta de entrega", error: (error as Error).message });
+    }
+  });
+
+  app.put("/api/delivery-routes/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const route = await storage.updateDeliveryRoute(id, req.body);
+      res.json(route);
+    } catch (error) {
+      res.status(400).json({ message: "Error al actualizar ruta de entrega", error: (error as Error).message });
+    }
+  });
+
+  app.delete("/api/delivery-routes/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteDeliveryRoute(id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ message: "Error al eliminar ruta de entrega", error: (error as Error).message });
+    }
+  });
+
+  // Entregas
+  app.get("/api/deliveries", async (req, res) => {
+    try {
+      const deliveries = await storage.getAllDeliveries();
+      
+      // Enriquecemos la respuesta con información de clientes y rutas
+      const enrichedDeliveries = await Promise.all(
+        deliveries.map(async (delivery) => {
+          let customer = null;
+          if (delivery.customerId) {
+            customer = await storage.getCustomer(delivery.customerId);
+          }
+          
+          let route = null;
+          if (delivery.routeId) {
+            route = await storage.getDeliveryRoute(delivery.routeId);
+          }
+          
+          let driver = null;
+          if (delivery.driverId) {
+            const driverData = await storage.getUser(delivery.driverId);
+            if (driverData) {
+              // No incluimos la contraseña
+              const { password, ...safeDriver } = driverData;
+              driver = safeDriver;
+            }
+          }
+          
+          let vehicle = null;
+          if (delivery.vehicleId) {
+            vehicle = await storage.getVehicle(delivery.vehicleId);
+          }
+          
+          const events = await storage.getDeliveryEventsByDelivery(delivery.id);
+          
+          return {
+            ...delivery,
+            customer,
+            route,
+            driver,
+            vehicle,
+            events
+          };
+        })
+      );
+      
+      res.json(enrichedDeliveries);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener entregas", error: (error as Error).message });
+    }
+  });
+
+  app.get("/api/deliveries/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const delivery = await storage.getDelivery(id);
+      
+      if (!delivery) {
+        return res.status(404).json({ message: "Entrega no encontrada" });
+      }
+      
+      // Enriquecemos la respuesta con información de clientes y rutas
+      let customer = null;
+      if (delivery.customerId) {
+        customer = await storage.getCustomer(delivery.customerId);
+      }
+      
+      let route = null;
+      if (delivery.routeId) {
+        route = await storage.getDeliveryRoute(delivery.routeId);
+      }
+      
+      let driver = null;
+      if (delivery.driverId) {
+        const driverData = await storage.getUser(delivery.driverId);
+        if (driverData) {
+          // No incluimos la contraseña
+          const { password, ...safeDriver } = driverData;
+          driver = safeDriver;
+        }
+      }
+      
+      let vehicle = null;
+      if (delivery.vehicleId) {
+        vehicle = await storage.getVehicle(delivery.vehicleId);
+      }
+      
+      const events = await storage.getDeliveryEventsByDelivery(delivery.id);
+      
+      const enrichedDelivery = {
+        ...delivery,
+        customer,
+        route,
+        driver,
+        vehicle,
+        events
+      };
+      
+      res.json(enrichedDelivery);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener entrega", error: (error as Error).message });
+    }
+  });
+
+  app.get("/api/deliveries/by-status/:status", async (req, res) => {
+    try {
+      const status = req.params.status;
+      const deliveries = await storage.getDeliveriesByStatus(status);
+      res.json(deliveries);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener entregas por estado", error: (error as Error).message });
+    }
+  });
+
+  app.get("/api/deliveries/by-driver/:driverId", async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.driverId);
+      const deliveries = await storage.getDeliveriesByDriver(driverId);
+      res.json(deliveries);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener entregas por conductor", error: (error as Error).message });
+    }
+  });
+
+  app.get("/api/deliveries/by-customer/:customerId", async (req, res) => {
+    try {
+      const customerId = parseInt(req.params.customerId);
+      const deliveries = await storage.getDeliveriesByCustomer(customerId);
+      res.json(deliveries);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener entregas por cliente", error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/deliveries", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: "No autorizado" });
+      }
+      
+      // Incluimos el usuario que crea la entrega
+      const delivery = await storage.createDelivery({
+        ...req.body,
+        userId: req.user.id
+      });
+      
+      res.status(201).json(delivery);
+    } catch (error) {
+      res.status(400).json({ message: "Error al crear entrega", error: (error as Error).message });
+    }
+  });
+
+  app.put("/api/deliveries/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const delivery = await storage.updateDelivery(id, req.body);
+      res.json(delivery);
+    } catch (error) {
+      res.status(400).json({ message: "Error al actualizar entrega", error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/deliveries/:id/status", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: "No autorizado" });
+      }
+      
+      const id = parseInt(req.params.id);
+      const { status } = req.body;
+      
+      if (!status) {
+        return res.status(400).json({ message: "Se requiere el status" });
+      }
+      
+      const delivery = await storage.updateDeliveryStatus(id, status, req.user.id);
+      res.json(delivery);
+    } catch (error) {
+      res.status(400).json({ message: "Error al actualizar estado de entrega", error: (error as Error).message });
+    }
+  });
+
+  app.delete("/api/deliveries/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteDelivery(id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ message: "Error al eliminar entrega", error: (error as Error).message });
+    }
+  });
+
+  // Eventos de entrega
+  app.get("/api/delivery-events/by-delivery/:deliveryId", async (req, res) => {
+    try {
+      const deliveryId = parseInt(req.params.deliveryId);
+      const events = await storage.getDeliveryEventsByDelivery(deliveryId);
+      
+      // Enriquecemos con información del usuario
+      const enrichedEvents = await Promise.all(
+        events.map(async (event) => {
+          let user = null;
+          if (event.userId) {
+            const userData = await storage.getUser(event.userId);
+            if (userData) {
+              // No incluimos la contraseña
+              const { password, ...safeUser } = userData;
+              user = safeUser;
+            }
+          }
+          
+          return {
+            ...event,
+            user
+          };
+        })
+      );
+      
+      res.json(enrichedEvents);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener eventos de entrega", error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/delivery-events", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: "No autorizado" });
+      }
+      
+      // Incluimos el usuario que crea el evento
+      const event = await storage.createDeliveryEvent({
+        ...req.body,
+        userId: req.user.id
+      });
+      
+      res.status(201).json(event);
+    } catch (error) {
+      res.status(400).json({ message: "Error al crear evento de entrega", error: (error as Error).message });
+    }
+  });
+
+  // Asignaciones de rutas
+  app.get("/api/route-assignments", async (req, res) => {
+    try {
+      const dateParam = req.query.date as string;
+      let assignments;
+      
+      if (dateParam) {
+        const date = new Date(dateParam);
+        assignments = await storage.getRouteAssignmentsByDate(date);
+      } else {
+        // Sin fecha, usamos la fecha actual
+        assignments = await storage.getRouteAssignmentsByDate(new Date());
+      }
+      
+      // Enriquecemos con información de rutas, vehículos y conductores
+      const enrichedAssignments = await Promise.all(
+        assignments.map(async (assignment) => {
+          const route = await storage.getDeliveryRoute(assignment.routeId);
+          
+          let driver = null;
+          const driverData = await storage.getUser(assignment.driverId);
+          if (driverData) {
+            // No incluimos la contraseña
+            const { password, ...safeDriver } = driverData;
+            driver = safeDriver;
+          }
+          
+          const vehicle = await storage.getVehicle(assignment.vehicleId);
+          
+          return {
+            ...assignment,
+            route,
+            driver,
+            vehicle
+          };
+        })
+      );
+      
+      res.json(enrichedAssignments);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener asignaciones de rutas", error: (error as Error).message });
+    }
+  });
+
+  app.get("/api/route-assignments/by-driver/:driverId", async (req, res) => {
+    try {
+      const driverId = parseInt(req.params.driverId);
+      const assignments = await storage.getRouteAssignmentsByDriver(driverId);
+      
+      // Enriquecemos con información de rutas y vehículos
+      const enrichedAssignments = await Promise.all(
+        assignments.map(async (assignment) => {
+          const route = await storage.getDeliveryRoute(assignment.routeId);
+          const vehicle = await storage.getVehicle(assignment.vehicleId);
+          
+          return {
+            ...assignment,
+            route,
+            vehicle
+          };
+        })
+      );
+      
+      res.json(enrichedAssignments);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener asignaciones por conductor", error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/route-assignments", async (req, res) => {
+    try {
+      const assignment = await storage.createRouteAssignment(req.body);
+      res.status(201).json(assignment);
+    } catch (error) {
+      res.status(400).json({ message: "Error al crear asignación de ruta", error: (error as Error).message });
+    }
+  });
+
+  app.put("/api/route-assignments/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const assignment = await storage.updateRouteAssignment(id, req.body);
+      res.json(assignment);
+    } catch (error) {
+      res.status(400).json({ message: "Error al actualizar asignación de ruta", error: (error as Error).message });
+    }
+  });
+
+  app.delete("/api/route-assignments/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteRouteAssignment(id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ message: "Error al eliminar asignación de ruta", error: (error as Error).message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
