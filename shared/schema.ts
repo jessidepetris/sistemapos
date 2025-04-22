@@ -286,15 +286,19 @@ export const accountTransactions = pgTable("account_transactions", {
   userId: integer("user_id").notNull().references(() => users.id),
 });
 
-export const insertAccountTransactionSchema = createInsertSchema(accountTransactions).pick({
-  accountId: true,
-  amount: true,
-  type: true,
-  relatedSaleId: true,
-  relatedNoteId: true,
-  description: true,
-  userId: true,
-});
+export const insertAccountTransactionSchema = createInsertSchema(accountTransactions)
+  .pick({
+    accountId: true,
+    amount: true,
+    type: true,
+    relatedSaleId: true,
+    relatedNoteId: true,
+    description: true,
+    userId: true,
+  })
+  .extend({
+    userId: z.coerce.number().optional(),
+  });
 
 // Tabla para los componentes de productos compuestos (combos)
 export const productComponents = pgTable("product_components", {

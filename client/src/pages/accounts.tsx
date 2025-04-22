@@ -145,12 +145,23 @@ export default function AccountsPage() {
     createAccountMutation.mutate(data);
   };
   
-  const onAddTransactionSubmit = (data: TransactionFormValues) => {
-    addTransactionMutation.mutate({
+  // Get current user
+  const { data: currentUser } = useQuery({
+    queryKey: ["/api/user"],
+    retry: false,
+  });
+
+  const onAddTransactionSubmit = (data: TransactionFormValues) => {    
+    const transactionData = {
       ...data,
       accountId: selectedAccount!,
       type: transactionType,
-    });
+      userId: currentUser?.id || 1, // Usamos el ID 1 como fallback (admin)
+    };
+    
+    console.log("Enviando transacción:", transactionData);
+    
+    addTransactionMutation.mutate(transactionData);
   };
   
   // Handle opening transaction dialog
