@@ -30,6 +30,12 @@ export default function InvoicesPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   
   // Check for invoice ID in URL parameters
+  // Get invoices
+  const { data: invoices = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/invoices"],
+    retry: false,
+  });
+  
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const invoiceId = params.get('id');
@@ -56,13 +62,7 @@ export default function InvoicesPage() {
         }, 1000); // Small delay to ensure invoices are loaded
       }
     }
-  }, [invoices]);
-  
-  // Get invoices
-  const { data: invoices = [], isLoading } = useQuery<any[]>({
-    queryKey: ["/api/invoices"],
-    retry: false,
-  });
+  }, [invoices, toast]);
   
   // Date formatting
   const formatDate = (dateString: string) => {
