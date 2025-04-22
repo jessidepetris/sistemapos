@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth } from "./auth";
+import { setupAuth, hashPassword } from "./auth";
 import { z } from "zod";
 import passport from "passport";
 
@@ -1117,10 +1117,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         customerAssociated = customer.id;
       }
       
+      // Importamos la función de hashPassword de auth.ts para hashear la contraseña
+      // Usando la función hashPassword que ya está importada en la parte superior
+      const hashedPassword = await hashPassword(password);
+      
       // Crear usuario web (reutilizamos la tabla de usuarios)
       const webUser = await storage.createUser({
         username,
-        password, // En un sistema real, esto debería estar hasheado
+        password: hashedPassword, // Ahora sí está hasheado correctamente
         fullName,
         role: "cliente", // Rol específico para usuarios web
         active: true
