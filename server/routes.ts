@@ -265,7 +265,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "No autorizado" });
       }
       
-      const { customerId, total, paymentMethod, status, items } = req.body;
+      const { 
+        customerId, 
+        total, 
+        paymentMethod, 
+        paymentDetails,
+        documentType,
+        notes,
+        printOptions,
+        status, 
+        items 
+      } = req.body;
+      
+      // Crear número de factura si es necesario
+      let invoiceNumber = null;
+      if (documentType && documentType.startsWith('factura')) {
+        // En una implementación real, aquí se conectaría con AFIP
+        // para generar el número real de factura electrónica
+        // Por ahora generamos uno de prueba con formato: A-00001-00000001
+        const tipoFactura = documentType === 'factura_a' ? 'A' : 'B';
+        const puntoVenta = '00001';
+        const numero = Math.floor(Math.random() * 1000000).toString().padStart(8, '0');
+        invoiceNumber = `${tipoFactura}-${puntoVenta}-${numero}`;
+      }
       
       // Create sale
       const sale = await storage.createSale({
@@ -273,8 +295,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.id,
         total,
         paymentMethod,
+        paymentDetails,
+        documentType: documentType || 'remito',
+        invoiceNumber,
         status,
-        timestamp: new Date()
+        notes,
+        printOptions
       });
       
       // Create sale items
@@ -287,7 +313,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             unit: item.unit,
             price: item.price,
             discount: item.discount || 0,
-            total: item.total
+            total: item.total,
+            isConversion: item.isConversion || false,
+            conversionFactor: item.conversionFactor || 1,
+            conversionUnit: item.conversionUnit || null,
+            conversionBarcode: item.conversionBarcode || null
           });
           
           // Update product stock
@@ -361,11 +391,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Get sale items
           const items = await storage.getSaleItemsBySaleId(sale.id);
           
+          // Parse payment details if exists
+          let paymentDetailsObj = null;
+          if (sale.paymentDetails) {
+            try {
+              paymentDetailsObj = JSON.parse(sale.paymentDetails);
+            } catch (e) {
+              console.error("Error parsing payment details", e);
+            }
+          }
+          
+          // Parse print options if exists
+          let printOptionsObj = sale.printOptions || { printTicket: true, sendEmail: false };
+          
           return {
             ...sale,
             customer,
             user,
-            items
+            items,
+            paymentDetailsObj,
+            printOptionsObj,
+            // Información adicional para la impresión del comprobante
+            businessName: "Punto Pastelero",
+            businessAddress: "Av. Colón 1234, Córdoba, Argentina",
+            businessPhone: "+54 351 123-4567",
+            businessEmail: "ventas@puntopastelero.com",
+            // Tipo de factura según documentType para impresión
+            invoiceType: sale.documentType === 'factura_a' ? 'A' : 
+                        sale.documentType === 'factura_b' ? 'B' : 'R'
           };
         })
       );
