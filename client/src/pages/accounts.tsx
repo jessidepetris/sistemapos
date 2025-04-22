@@ -398,7 +398,13 @@ export default function AccountsPage() {
                             <Loader2 className="h-4 w-4 animate-spin" />
                           </div>
                         ) : (
-                          customers?.filter((c: any) => !c.hasAccount).map((customer: any) => (
+                          customers?.filter((customer: any) => {
+                            // Verificar si el cliente ya tiene una cuenta
+                            const hasExistingAccount = accounts?.some((account: any) => 
+                              account.customerId === customer.id
+                            );
+                            return !hasExistingAccount;
+                          }).map((customer: any) => (
                             <SelectItem key={customer.id} value={customer.id.toString()}>
                               {customer.name}
                             </SelectItem>
