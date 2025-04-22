@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
@@ -14,6 +14,9 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Minus, Plus, Search, ShoppingCart, Trash2, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ThermalTicket } from "@/components/printing/ThermalTicket";
+import { InvoicePDF } from "@/components/printing/InvoicePDF";
+import { InvoiceContent } from "@/components/invoices/InvoiceDetail";
 
 type CartItem = {
   id: number;
@@ -54,6 +57,9 @@ export default function POSPage() {
     transfer: 0,
     account: 0
   });
+  const [completedSale, setCompletedSale] = useState<any | null>(null);
+  const [showReceiptDialog, setShowReceiptDialog] = useState(false);
+  const receiptRef = useRef<HTMLDivElement>(null);
   
   // Get products
   const { data: products, isLoading: isLoadingProducts } = useQuery({
@@ -360,7 +366,7 @@ export default function POSPage() {
     }
     
     processSaleMutation.mutate(saleData, {
-      onSuccess: () => {
+      onSuccess: (data) => {
         // Invalidar la caché de productos para refrescar los stocks
         queryClient.invalidateQueries({ queryKey: ["/api/products"] });
         
@@ -370,7 +376,20 @@ export default function POSPage() {
           description: "El stock ha sido actualizado automáticamente"
         });
         
-        // Cerrar el diálogo y limpiar el carrito
+        // Guardar la venta completada y mostrar el recibo
+        setCompletedSale({
+          ...data,
+          items: cart,
+          timestamp: new Date().toISOString(),
+          paymentMethod,
+          paymentDetails,
+          documentType,
+          notes: observations,
+          customer: customers?.find((c: any) => c.id === selectedCustomerId)
+        });
+        setShowReceiptDialog(true);
+        
+        // Cerrar el diálogo de checkout y limpiar el carrito
         setCheckoutDialogOpen(false);
         setCart([]);
       }
