@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import DashboardLayout from "@/layouts/dashboard-layout";
+import { DashboardLayout } from "@/layouts/dashboard-layout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import VehiclesTab from "./logistics/vehicles-tab";
 import DeliveryZonesTab from "./logistics/delivery-zones-tab";

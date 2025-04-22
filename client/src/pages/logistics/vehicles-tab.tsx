@@ -412,7 +412,7 @@ export default function VehiclesTab() {
                       <div className="flex items-center gap-2">
                         {vehicle.name}
                         {vehicle.refrigerated && (
-                          <RefrigeratorIcon className="h-4 w-4 text-blue-500" title="Refrigerado" />
+                          <RefrigeratorIcon className="h-4 w-4 text-blue-500" aria-label="Refrigerado" />
                         )}
                       </div>
                     </TableCell>

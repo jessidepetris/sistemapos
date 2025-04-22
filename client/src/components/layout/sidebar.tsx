@@ -14,7 +14,8 @@ import {
   Users,
   DollarSign,
   ClipboardList,
-  FileEdit
+  FileEdit,
+  MapPin
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -143,6 +144,11 @@ export default function Sidebar() {
           </SidebarLink>
           <SidebarLink href="/credit-notes" icon={<FileEdit className="h-4 w-4" />} currentPath={location} onClick={closeSidebar}>
             Notas de Crédito/Débito
+          </SidebarLink>
+          
+          <div className="px-4 py-2 text-xs font-semibold text-slate-500 mt-2">LOGÍSTICA</div>
+          <SidebarLink href="/logistics" icon={<MapPin className="h-4 w-4" />} currentPath={location} onClick={closeSidebar}>
+            Logística
           </SidebarLink>
           
           <div className="px-4 py-2 text-xs font-semibold text-slate-500 mt-2">ADMINISTRACIÓN</div>

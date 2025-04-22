@@ -20,6 +20,7 @@ import CreditNotesPage from "@/pages/credit-notes";
 import ReportsPage from "@/pages/reports";
 import UsersPage from "@/pages/users";
 import SettingsPage from "@/pages/settings";
+import LogisticsPage from "@/pages/logistics-page";
 
 function Router() {
   return (
@@ -34,6 +35,7 @@ function Router() {
       <ProtectedRoute path="/invoices" component={InvoicesPage} />
       <ProtectedRoute path="/orders" component={OrdersPage} />
       <ProtectedRoute path="/credit-notes" component={CreditNotesPage} />
+      <ProtectedRoute path="/logistics" component={LogisticsPage} />
       <ProtectedRoute path="/reports" component={ReportsPage} />
       <ProtectedRoute path="/users" component={UsersPage} />
       <ProtectedRoute path="/settings" component={SettingsPage} />
