@@ -13,6 +13,7 @@ import Dashboard from "@/pages/dashboard";
 import AuthPage from "@/pages/auth-page";
 import POSPage from "@/pages/pos";
 import ProductsPage from "@/pages/products-page";
+import CategoriesPage from "@/pages/categories-page";
 import SuppliersPage from "@/pages/suppliers";
 import CustomersPage from "@/pages/customers";
 import AccountsPage from "@/pages/accounts";
@@ -43,6 +44,7 @@ function Router() {
       <ProtectedRoute path="/" component={Dashboard} />
       <ProtectedRoute path="/pos" component={POSPage} />
       <ProtectedRoute path="/products" component={ProductsPage} />
+      <ProtectedRoute path="/categories" component={CategoriesPage} />
       <ProtectedRoute path="/suppliers" component={SuppliersPage} />
       <ProtectedRoute path="/customers" component={CustomersPage} />
       <ProtectedRoute path="/accounts" component={AccountsPage} />

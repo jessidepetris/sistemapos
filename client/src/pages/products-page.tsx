@@ -23,7 +23,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { insertProductSchema } from "@shared/schema";
-import { Package, Plus, RefreshCw, Search, Thermometer, Scale, Calculator } from "lucide-react";
+import { Package, Plus, RefreshCw, Search, Thermometer, Scale, Calculator, Tag } from "lucide-react";
 
 // Importación de los componentes de pestañas
 import { GeneralTab } from "@/components/products/GeneralTab";
@@ -31,6 +31,7 @@ import { PricingTab } from "@/components/products/PricingTab";
 import { BarcodesTab } from "@/components/products/BarcodesTab";
 import { EnhancedConversionsTab } from "@/components/products/EnhancedConversionsTab";
 import { ComponentsTab } from "@/components/products/ComponentsTab";
+import { CategoriesTab } from "@/components/products/CategoriesTab";
 
 // Define a schema for unit conversions with barcodes
 const conversionRateSchema = z.object({
