@@ -1,232 +1,261 @@
-import { useEffect, useState } from "react";
-import { useWebAuth } from "@/hooks/use-web-auth";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle 
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { 
-  UserIcon, 
-  ShoppingBag, 
-  Truck, 
-  Clock, 
-  CheckCircle, 
-  AlertCircle,
-  ChevronRight,
-  LogOut,
-  Package
-} from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 import WebLayout from "@/layouts/web-layout";
-import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from "@/components/ui/table";
-import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import { useWebAuth } from "@/hooks/use-web-auth";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { getQueryFn } from "@/lib/queryClient";
+import { Loader2, Package, Truck, CheckCircle, AlertCircle, Clock, XCircle } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
 
-// Interfaces
+// Interfaces para tipar los datos
 interface OrderItem {
   id: number;
   productId: number;
   orderId: number;
-  quantity: number;
+  quantity: string;
   unit: string;
-  price: number;
-  total: number;
+  price: string;
+  total: string;
   productName: string;
+}
+
+interface CustomerData {
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  province: string;
+  customerId?: number;
+  notes?: string;
 }
 
 interface Order {
   id: number;
-  timestamp: string;
-  customerId: number;
-  total: number;
+  timestamp: Date | string;
+  customerId: number | null;
+  userId: number;
+  total: string;
   status: string;
-  paymentMethod: string;
-  paymentStatus: string;
-  trackingCode?: string;
+  notes: string | null;
+  source: string | null;
+  deliveryDate: Date | string | null;
+  isWebOrder: boolean | null;
+  customerData?: string; // JSON string
   items: OrderItem[];
+  paymentMethod?: string;
+  parsedCustomerData?: CustomerData;
 }
 
-// Función de ayuda para el color del estado del pedido
+// Función para determinar el color del estado
 function getStatusColor(status: string): string {
   switch (status.toLowerCase()) {
-    case 'entregado':
-    case 'completed':
-    case 'delivered':
-      return 'bg-green-100 text-green-800';
-    case 'en proceso':
-    case 'processing':
-    case 'in progress':
-      return 'bg-blue-100 text-blue-800';
-    case 'pendiente':
-    case 'pending':
-      return 'bg-yellow-100 text-yellow-800';
-    case 'cancelado':
-    case 'canceled':
-      return 'bg-red-100 text-red-800';
+    case "pending":
+      return "bg-yellow-100 text-yellow-800 border-yellow-200";
+    case "processing":
+      return "bg-blue-100 text-blue-800 border-blue-200";
+    case "shipped":
+    case "in_transit":
+      return "bg-indigo-100 text-indigo-800 border-indigo-200";
+    case "delivered":
+    case "completed":
+      return "bg-green-100 text-green-800 border-green-200";
+    case "canceled":
+    case "cancelled":
+      return "bg-red-100 text-red-800 border-red-200";
     default:
-      return 'bg-gray-100 text-gray-800';
+      return "bg-gray-100 text-gray-800 border-gray-200";
   }
 }
 
-// Función de ayuda para el icono del estado del pedido
+// Componente para mostrar el icono del estado
 function StatusIcon({ status }: { status: string }) {
-  switch (status.toLowerCase()) {
-    case 'entregado':
-    case 'completed':
-    case 'delivered':
-      return <CheckCircle className="h-5 w-5 text-green-600" />;
-    case 'en proceso':
-    case 'processing':
-    case 'in progress':
-      return <Clock className="h-5 w-5 text-blue-600" />;
-    case 'pendiente':
-    case 'pending':
-      return <Clock className="h-5 w-5 text-yellow-600" />;
-    case 'enviado':
-    case 'shipped':
-      return <Truck className="h-5 w-5 text-purple-600" />;
-    case 'cancelado':
-    case 'canceled':
-      return <AlertCircle className="h-5 w-5 text-red-600" />;
-    default:
-      return <Package className="h-5 w-5 text-gray-600" />;
+  const statusLower = status.toLowerCase();
+  if (statusLower === "delivered" || statusLower === "completed") {
+    return <CheckCircle className="h-5 w-5 text-green-600" />;
+  } else if (statusLower === "in_transit" || statusLower === "shipped") {
+    return <Truck className="h-5 w-5 text-indigo-600" />;
+  } else if (statusLower === "processing") {
+    return <Package className="h-5 w-5 text-blue-600" />;
+  } else if (statusLower === "pending") {
+    return <Clock className="h-5 w-5 text-yellow-600" />;
+  } else if (statusLower === "canceled" || statusLower === "cancelled") {
+    return <XCircle className="h-5 w-5 text-red-600" />;
+  } else {
+    return <AlertCircle className="h-5 w-5 text-gray-600" />;
   }
 }
 
-// Componente para detalles del pedido
+// Componente para mostrar los detalles de un pedido
 function OrderDetails({ order }: { order: Order }) {
+  // Convertir fecha a formato local
+  const formatDate = (dateString: string | Date | null) => {
+    if (!dateString) return "No disponible";
+    const date = new Date(dateString);
+    return date.toLocaleDateString("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  };
+
+  // Parsear datos de cliente si es necesario
+  const customerData = order.parsedCustomerData || {};
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h3 className="text-lg font-medium">Pedido #{order.id}</h3>
-          <p className="text-sm text-gray-500">
-            {format(new Date(order.timestamp), "d 'de' MMMM, yyyy", { locale: es })}
-          </p>
-        </div>
-        <Badge className={getStatusColor(order.status)}>
-          {order.status}
-        </Badge>
-      </div>
-
-      <Separator />
-
-      <div>
-        <h4 className="font-medium mb-2">Detalles del pedido</h4>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Producto</TableHead>
-              <TableHead className="text-right">Cantidad</TableHead>
-              <TableHead className="text-right">Precio</TableHead>
-              <TableHead className="text-right">Total</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {order.items.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell className="font-medium">{item.productName}</TableCell>
-                <TableCell className="text-right">{item.quantity} {item.unit}</TableCell>
-                <TableCell className="text-right">${item.price.toFixed(2)}</TableCell>
-                <TableCell className="text-right">${item.total.toFixed(2)}</TableCell>
-              </TableRow>
-            ))}
-            <TableRow>
-              <TableCell colSpan={3} className="text-right font-medium">Total:</TableCell>
-              <TableCell className="text-right font-bold">${order.total.toFixed(2)}</TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </div>
-
+      {/* Información del pedido */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <h4 className="font-medium mb-2">Información de pago</h4>
-          <p className="text-sm">
-            <span className="font-medium">Método: </span>
-            {order.paymentMethod}
-          </p>
-          <p className="text-sm">
-            <span className="font-medium">Estado: </span>
-            <Badge variant={order.paymentStatus === 'paid' ? 'default' : 'outline'}>
-              {order.paymentStatus === 'paid' ? 'Pagado' : 'Pendiente'}
-            </Badge>
-          </p>
+          <h4 className="text-sm font-medium text-gray-500 mb-1">Fecha del Pedido</h4>
+          <p className="text-sm">{formatDate(order.timestamp)}</p>
         </div>
-        
-        {order.trackingCode && (
-          <div>
-            <h4 className="font-medium mb-2">Información de envío</h4>
-            <p className="text-sm">
-              <span className="font-medium">Código de seguimiento: </span>
-              {order.trackingCode}
-            </p>
+        <div>
+          <h4 className="text-sm font-medium text-gray-500 mb-1">Método de Pago</h4>
+          <p className="text-sm capitalize">{order.paymentMethod || "No especificado"}</p>
+        </div>
+        <div>
+          <h4 className="text-sm font-medium text-gray-500 mb-1">Fecha de Entrega Estimada</h4>
+          <p className="text-sm">{formatDate(order.deliveryDate)}</p>
+        </div>
+        <div>
+          <h4 className="text-sm font-medium text-gray-500 mb-1">Estado del Pedido</h4>
+          <div className="flex items-center">
+            <StatusIcon status={order.status} />
+            <Badge className={`ml-2 ${getStatusColor(order.status)}`}>
+              {order.status === "pending" ? "Pendiente" : 
+               order.status === "processing" ? "Procesando" : 
+               order.status === "in_transit" ? "En Tránsito" :
+               order.status === "shipped" ? "Enviado" :
+               order.status === "delivered" ? "Entregado" :
+               order.status === "completed" ? "Completado" :
+               order.status === "canceled" || order.status === "cancelled" ? "Cancelado" : 
+               order.status}
+            </Badge>
           </div>
-        )}
+        </div>
+      </div>
+
+      {/* Dirección de entrega */}
+      <div>
+        <h4 className="text-sm font-medium mb-2">Dirección de Entrega</h4>
+        <p className="text-sm">{customerData.name}</p>
+        <p className="text-sm">{customerData.address}</p>
+        <p className="text-sm">{customerData.city}, {customerData.province}</p>
+        <p className="text-sm">{customerData.phone}</p>
+        <p className="text-sm">{customerData.email}</p>
+      </div>
+
+      {/* Notas */}
+      {(order.notes || customerData.notes) && (
+        <div>
+          <h4 className="text-sm font-medium mb-2">Notas</h4>
+          <p className="text-sm">{order.notes || customerData.notes}</p>
+        </div>
+      )}
+
+      {/* Items del pedido */}
+      <div>
+        <h4 className="text-sm font-medium mb-2">Productos</h4>
+        <div className="border rounded-md divide-y">
+          {order.items.map((item) => (
+            <div key={item.id} className="p-3 flex justify-between items-center">
+              <div>
+                <p className="font-medium">{item.productName}</p>
+                <p className="text-sm text-gray-500">
+                  {item.quantity} {item.unit} x {formatCurrency(parseFloat(item.price))}
+                </p>
+              </div>
+              <p className="font-medium">{formatCurrency(parseFloat(item.total))}</p>
+            </div>
+          ))}
+          
+          {/* Total del pedido */}
+          <div className="p-3 flex justify-between items-center bg-gray-50">
+            <p className="font-bold">Total</p>
+            <p className="font-bold">{formatCurrency(parseFloat(order.total))}</p>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
 export default function OrdersPage() {
-  const [location, navigate] = useLocation();
-  const { user, isLoading, logoutMutation } = useWebAuth();
+  const [_, navigate] = useLocation();
+  const { user, isLoading } = useWebAuth();
   const { toast } = useToast();
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
 
-  // Obtener pedidos del usuario
-  const { data: orders, isLoading: ordersLoading } = useQuery<Order[], Error>({
-    queryKey: ["/api/web/orders"],
-    queryFn: getQueryFn(),
-    enabled: !!user,
-  });
-
-  // Si no hay usuario y no está cargando, redirigir al login
+  // Redirección si no está autenticado
   useEffect(() => {
     if (!isLoading && !user) {
       navigate("/web/login");
     }
-  }, [isLoading, user, navigate]);
+  }, [user, isLoading, navigate]);
 
-  const handleLogout = () => {
-    logoutMutation.mutate(undefined, {
-      onSuccess: () => {
-        navigate("/web");
-      },
-    });
+  // Cargar pedidos cuando el usuario está autenticado
+  useEffect(() => {
+    if (user) {
+      loadOrders();
+    }
+  }, [user]);
+
+  const loadOrders = async () => {
+    setLoadingOrders(true);
+    try {
+      const response = await apiRequest("GET", "/api/web/orders");
+      
+      if (response.ok) {
+        const ordersData = await response.json();
+        
+        // Procesar los datos de los pedidos
+        const processedOrders = ordersData.map((order: Order) => {
+          let parsedCustomerData: CustomerData | undefined = undefined;
+          
+          if (order.customerData) {
+            try {
+              parsedCustomerData = JSON.parse(order.customerData);
+            } catch (e) {
+              console.error("Error al parsear datos del cliente:", e);
+            }
+          }
+          
+          return {
+            ...order,
+            parsedCustomerData
+          };
+        });
+        
+        setOrders(processedOrders);
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "No se pudieron cargar los pedidos");
+      }
+    } catch (error) {
+      console.error("Error al cargar pedidos:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Ocurrió un error al cargar tus pedidos",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingOrders(false);
+    }
   };
 
-  if (isLoading || !user) {
+  if (isLoading) {
     return (
       <WebLayout>
-        <div className="container mx-auto py-8 text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
-          <p className="mt-4">Cargando información...</p>
+        <div className="container mx-auto px-4 py-8 flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       </WebLayout>
     );
@@ -234,135 +263,71 @@ export default function OrdersPage() {
 
   return (
     <WebLayout>
-      <div className="container mx-auto py-8 px-4">
-        <h1 className="text-3xl font-bold mb-8">Mis Pedidos</h1>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Panel de navegación lateral */}
-          <div>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <UserIcon className="mr-2 h-5 w-5" />
-                  <span>{user.name}</span>
-                </CardTitle>
-                <CardDescription>{user.email}</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <nav className="space-y-1">
-                  <Button 
-                    variant="ghost" 
-                    className="w-full justify-start" 
-                    onClick={() => navigate("/web/account")}
-                  >
-                    <UserIcon className="mr-2 h-5 w-5" />
-                    Mi Perfil
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    className="w-full justify-start" 
-                    onClick={() => navigate("/web/orders")}
-                  >
-                    <ShoppingBag className="mr-2 h-5 w-5" />
-                    Mis Pedidos
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    className="w-full justify-start text-destructive" 
-                    onClick={handleLogout}
-                  >
-                    <LogOut className="mr-2 h-5 w-5" />
-                    Cerrar Sesión
-                  </Button>
-                </nav>
-              </CardContent>
-            </Card>
-          </div>
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-3xl font-bold mb-2">Mis Pedidos</h1>
+          <p className="text-muted-foreground mb-6">
+            Consulta el estado y detalles de tus pedidos recientes
+          </p>
 
-          {/* Lista de pedidos */}
-          <div className="md:col-span-2">
+          {loadingOrders ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : orders.length === 0 ? (
             <Card>
-              <CardHeader>
-                <CardTitle>Historial de Pedidos</CardTitle>
-                <CardDescription>
-                  Visualiza y da seguimiento a todos tus pedidos anteriores.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {ordersLoading ? (
-                  <div className="text-center py-8">
-                    <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
-                    <p className="mt-4">Cargando pedidos...</p>
-                  </div>
-                ) : orders && orders.length > 0 ? (
-                  <div className="space-y-4">
-                    {orders.map((order) => (
-                      <Card key={order.id} className="overflow-hidden">
-                        <div className="p-4 flex justify-between items-center">
-                          <div className="flex items-center space-x-4">
-                            <div className="p-2 rounded-full bg-gray-100">
-                              <StatusIcon status={order.status} />
-                            </div>
-                            <div>
-                              <h3 className="font-medium">Pedido #{order.id}</h3>
-                              <p className="text-sm text-gray-500">
-                                {format(new Date(order.timestamp), "d 'de' MMMM, yyyy", { locale: es })}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-4">
-                            <div className="text-right">
-                              <p className="font-medium">${order.total.toFixed(2)}</p>
-                              <Badge className={getStatusColor(order.status)}>
-                                {order.status}
-                              </Badge>
-                            </div>
-                            <Sheet>
-                              <SheetTrigger asChild>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon"
-                                  onClick={() => setSelectedOrder(order)}
-                                >
-                                  <ChevronRight className="h-5 w-5" />
-                                </Button>
-                              </SheetTrigger>
-                              <SheetContent className="w-full sm:max-w-md">
-                                <SheetHeader>
-                                  <SheetTitle>Detalles del Pedido</SheetTitle>
-                                  <SheetDescription>
-                                    Información detallada de tu pedido.
-                                  </SheetDescription>
-                                </SheetHeader>
-                                {selectedOrder && <OrderDetails order={selectedOrder} />}
-                                <SheetFooter className="mt-6">
-                                  <SheetClose asChild>
-                                    <Button>Cerrar</Button>
-                                  </SheetClose>
-                                </SheetFooter>
-                              </SheetContent>
-                            </Sheet>
-                          </div>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 border rounded-md">
-                    <ShoppingBag className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                    <h3 className="text-lg font-medium mb-2">Aún no tienes pedidos</h3>
-                    <p className="text-gray-500 mb-4">Cuando realices pedidos, aparecerán aquí</p>
-                    <Button 
-                      variant="default" 
-                      onClick={() => navigate("/web/products")}
-                    >
-                      Ver Productos
-                    </Button>
-                  </div>
-                )}
+              <CardContent className="flex flex-col items-center justify-center pt-10 pb-10">
+                <Package className="h-12 w-12 text-gray-300 mb-4" />
+                <h3 className="text-lg font-medium mb-2">No tienes pedidos</h3>
+                <p className="text-gray-500 text-center mb-4">
+                  Aún no has realizado ningún pedido en nuestra tienda.
+                </p>
+                <Button asChild>
+                  <a href="/web/products">Ver Productos</a>
+                </Button>
               </CardContent>
             </Card>
-          </div>
+          ) : (
+            <div className="space-y-6">
+              <Accordion type="single" collapsible className="w-full">
+                {orders.map((order) => (
+                  <AccordionItem key={order.id} value={`order-${order.id}`}>
+                    <Card className="mb-2 border-none shadow-none">
+                      <CardHeader className="p-0">
+                        <AccordionTrigger className="px-4 py-2 hover:no-underline">
+                          <div className="flex-1 text-left">
+                            <CardTitle className="flex items-center space-x-2 text-lg">
+                              <span>Pedido #{order.id}</span>
+                              <Badge className={`ml-2 ${getStatusColor(order.status)}`}>
+                                {order.status === "pending" ? "Pendiente" : 
+                                 order.status === "processing" ? "Procesando" : 
+                                 order.status === "in_transit" ? "En Tránsito" :
+                                 order.status === "shipped" ? "Enviado" :
+                                 order.status === "delivered" ? "Entregado" :
+                                 order.status === "completed" ? "Completado" :
+                                 order.status === "canceled" || order.status === "cancelled" ? "Cancelado" : 
+                                 order.status}
+                              </Badge>
+                            </CardTitle>
+                            <div className="text-sm text-muted-foreground mt-1">
+                              {new Date(order.timestamp).toLocaleDateString("es-AR", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric"
+                              })} - {formatCurrency(parseFloat(order.total))}
+                            </div>
+                          </div>
+                        </AccordionTrigger>
+                      </CardHeader>
+                    </Card>
+                    <AccordionContent className="px-4 pt-0">
+                      <OrderDetails order={order} />
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </div>
+          )}
         </div>
       </div>
     </WebLayout>

@@ -1,190 +1,173 @@
-import { useState } from "react";
-import { useWebAuth } from "@/hooks/use-web-auth";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardFooter, 
-  CardHeader, 
-  CardTitle 
-} from "@/components/ui/card";
+import WebLayout from "@/layouts/web-layout";
+import { useWebAuth } from "@/hooks/use-web-auth";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Icons } from "@/components/ui/icons";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  UserIcon, 
-  ShoppingBag, 
-  CreditCard, 
-  MapPin, 
-  LogOut 
-} from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { Separator } from "@/components/ui/separator";
+import { Loader2, SaveIcon, KeyIcon, UserIcon } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import WebLayout from "@/layouts/web-layout";
-import { useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { zodResolver } from "@hookform/resolvers/zod";
 
+// Esquemas de validación
 const profileFormSchema = z.object({
-  name: z.string().min(2, {
-    message: "El nombre debe tener al menos 2 caracteres.",
-  }),
-  email: z.string().email({
-    message: "Por favor ingresa un correo electrónico válido.",
-  }),
-  phone: z.string().min(8, {
-    message: "Por favor ingresa un número telefónico válido.",
-  }),
-  address: z.string().min(5, {
-    message: "Por favor ingresa una dirección válida.",
-  }),
-  city: z.string().min(2, {
-    message: "Por favor ingresa una ciudad válida.",
-  }),
-  province: z.string().min(2, {
-    message: "Por favor ingresa una provincia válida.",
-  }),
+  name: z.string().min(2, { message: "El nombre debe tener al menos 2 caracteres" }),
+  email: z.string().email({ message: "Email inválido" }),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  province: z.string().optional()
 });
 
 const passwordFormSchema = z.object({
-  currentPassword: z.string().min(6, {
-    message: "La contraseña actual debe tener al menos 6 caracteres.",
-  }),
-  newPassword: z.string().min(6, {
-    message: "La nueva contraseña debe tener al menos 6 caracteres.",
-  }),
-  confirmPassword: z.string().min(6, {
-    message: "La confirmación debe tener al menos 6 caracteres.",
-  }),
-}).refine((data) => data.newPassword === data.confirmPassword, {
+  currentPassword: z.string().min(6, { message: "La contraseña debe tener al menos 6 caracteres" }),
+  newPassword: z.string().min(6, { message: "La contraseña debe tener al menos 6 caracteres" }),
+  confirmPassword: z.string().min(6, { message: "La contraseña debe tener al menos 6 caracteres" })
+}).refine(data => data.newPassword === data.confirmPassword, {
   message: "Las contraseñas no coinciden",
-  path: ["confirmPassword"],
+  path: ["confirmPassword"]
 });
 
+type ProfileFormValues = z.infer<typeof profileFormSchema>;
+type PasswordFormValues = z.infer<typeof passwordFormSchema>;
+
 export default function AccountPage() {
-  const [location, navigate] = useLocation();
-  const { user, isLoading, logoutMutation } = useWebAuth();
+  const [_, navigate] = useLocation();
+  const { user, isLoading } = useWebAuth();
   const { toast } = useToast();
   const [updating, setUpdating] = useState(false);
-
-  // Si no hay usuario y no está cargando, redirigir al login
-  if (!isLoading && !user) {
-    navigate("/web/login");
-    return null;
-  }
+  const [changingPassword, setChangingPassword] = useState(false);
 
   // Formulario de perfil
-  const profileForm = useForm<z.infer<typeof profileFormSchema>>({
+  const profileForm = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
-      name: user?.name || "",
-      email: user?.email || "",
-      phone: user?.phone || "",
-      address: user?.address || "",
-      city: user?.city || "",
-      province: user?.province || "",
-    },
+      name: "",
+      email: "",
+      phone: "",
+      address: "",
+      city: "",
+      province: ""
+    }
   });
 
   // Formulario de cambio de contraseña
-  const passwordForm = useForm<z.infer<typeof passwordFormSchema>>({
+  const passwordForm = useForm<PasswordFormValues>({
     resolver: zodResolver(passwordFormSchema),
     defaultValues: {
       currentPassword: "",
       newPassword: "",
-      confirmPassword: "",
-    },
+      confirmPassword: ""
+    }
   });
 
-  // Mutación para actualizar perfil
-  const updateProfileMutation = useMutation({
-    mutationFn: async (data: z.infer<typeof profileFormSchema>) => {
-      const res = await apiRequest("PUT", "/api/web/user/profile", data);
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Error al actualizar el perfil");
-      }
-      return await res.json();
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(["/api/web/user"], data);
-      toast({
-        title: "Perfil actualizado",
-        description: "Tu información se ha actualizado correctamente",
+  // Redirección si no está autenticado
+  useEffect(() => {
+    if (!isLoading && !user) {
+      navigate("/web/login");
+    }
+  }, [user, isLoading, navigate]);
+
+  // Cargar datos del usuario en el formulario
+  useEffect(() => {
+    if (user) {
+      profileForm.reset({
+        name: user.fullName || user.name || "",
+        email: user.email || "",
+        phone: user.phone || "",
+        address: user.address || "",
+        city: user.city || "",
+        province: user.province || ""
       });
-    },
-    onError: (error: Error) => {
+    }
+  }, [user, profileForm]);
+
+  // Enviar actualización de perfil
+  const onSubmitProfile = async (data: ProfileFormValues) => {
+    if (!user) return;
+    
+    setUpdating(true);
+    try {
+      const response = await apiRequest(
+        "PUT", 
+        "/api/web/user/profile", 
+        data
+      );
+      
+      if (response.ok) {
+        toast({
+          title: "Perfil actualizado",
+          description: "Tu información ha sido actualizada correctamente",
+          variant: "default",
+        });
+        
+        // Recargar la página para actualizar la información de usuario
+        window.location.reload();
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Error al actualizar el perfil");
+      }
+    } catch (error) {
       toast({
-        title: "Error al actualizar",
-        description: error.message,
+        title: "Error",
+        description: error instanceof Error ? error.message : "Ocurrió un error al actualizar el perfil",
         variant: "destructive",
       });
-    },
-  });
+    } finally {
+      setUpdating(false);
+    }
+  };
 
-  // Mutación para cambiar contraseña
-  const changePasswordMutation = useMutation({
-    mutationFn: async (data: z.infer<typeof passwordFormSchema>) => {
-      const res = await apiRequest("PUT", "/api/web/user/password", {
-        currentPassword: data.currentPassword,
-        newPassword: data.newPassword,
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Error al cambiar la contraseña");
+  // Enviar cambio de contraseña
+  const onSubmitPassword = async (data: PasswordFormValues) => {
+    if (!user) return;
+    
+    setChangingPassword(true);
+    try {
+      const response = await apiRequest(
+        "PUT", 
+        "/api/web/user/password", 
+        {
+          currentPassword: data.currentPassword,
+          newPassword: data.newPassword
+        }
+      );
+      
+      if (response.ok) {
+        toast({
+          title: "Contraseña actualizada",
+          description: "Tu contraseña ha sido actualizada correctamente",
+          variant: "default",
+        });
+        
+        // Resetear el formulario
+        passwordForm.reset();
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Error al actualizar la contraseña");
       }
-      return true;
-    },
-    onSuccess: () => {
-      passwordForm.reset();
+    } catch (error) {
       toast({
-        title: "Contraseña actualizada",
-        description: "Tu contraseña se ha actualizado correctamente",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error al cambiar la contraseña",
-        description: error.message,
+        title: "Error",
+        description: error instanceof Error ? error.message : "Ocurrió un error al actualizar la contraseña",
         variant: "destructive",
       });
-    },
-  });
-
-  const handleProfileSubmit = (data: z.infer<typeof profileFormSchema>) => {
-    updateProfileMutation.mutate(data);
-  };
-
-  const handlePasswordSubmit = (data: z.infer<typeof passwordFormSchema>) => {
-    changePasswordMutation.mutate(data);
-  };
-
-  const handleLogout = () => {
-    logoutMutation.mutate(undefined, {
-      onSuccess: () => {
-        navigate("/web");
-      },
-    });
+    } finally {
+      setChangingPassword(false);
+    }
   };
 
   if (isLoading) {
     return (
       <WebLayout>
-        <div className="container mx-auto py-8 text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
-          <p className="mt-4">Cargando información...</p>
+        <div className="container mx-auto px-4 py-8 flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       </WebLayout>
     );
@@ -192,236 +175,193 @@ export default function AccountPage() {
 
   return (
     <WebLayout>
-      <div className="container mx-auto py-8 px-4">
-        <h1 className="text-3xl font-bold mb-8">Mi Cuenta</h1>
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-3xl font-bold mb-2">Mi Cuenta</h1>
+          <p className="text-muted-foreground mb-6">Gestiona tu información personal y preferencias</p>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Panel de navegación lateral */}
-          <div>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <UserIcon className="mr-2 h-5 w-5" />
-                  <span>{user?.name}</span>
-                </CardTitle>
-                <CardDescription>{user?.email}</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <nav className="space-y-1">
-                  <Button 
-                    variant="ghost" 
-                    className="w-full justify-start" 
-                    onClick={() => navigate("/web/account")}
-                  >
-                    <UserIcon className="mr-2 h-5 w-5" />
-                    Mi Perfil
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    className="w-full justify-start" 
-                    onClick={() => navigate("/web/orders")}
-                  >
-                    <ShoppingBag className="mr-2 h-5 w-5" />
-                    Mis Pedidos
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    className="w-full justify-start text-destructive" 
-                    onClick={handleLogout}
-                  >
-                    <LogOut className="mr-2 h-5 w-5" />
-                    Cerrar Sesión
-                  </Button>
-                </nav>
-              </CardContent>
-            </Card>
-          </div>
+          <Tabs defaultValue="profile" className="w-full">
+            <TabsList className="mb-6">
+              <TabsTrigger value="profile" className="flex items-center">
+                <UserIcon className="h-4 w-4 mr-2" />
+                Información Personal
+              </TabsTrigger>
+              <TabsTrigger value="security" className="flex items-center">
+                <KeyIcon className="h-4 w-4 mr-2" />
+                Seguridad
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="profile">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Información Personal</CardTitle>
+                  <CardDescription>
+                    Actualiza tus datos personales de contacto y despacho
+                  </CardDescription>
+                </CardHeader>
+                <form onSubmit={profileForm.handleSubmit(onSubmitProfile)}>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Nombre completo</Label>
+                        <Input 
+                          id="name" 
+                          {...profileForm.register("name")} 
+                          placeholder="Tu nombre completo" 
+                        />
+                        {profileForm.formState.errors.name && (
+                          <p className="text-sm text-red-500">{profileForm.formState.errors.name.message}</p>
+                        )}
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email</Label>
+                        <Input 
+                          id="email" 
+                          type="email" 
+                          {...profileForm.register("email")} 
+                          placeholder="tu@email.com" 
+                        />
+                        {profileForm.formState.errors.email && (
+                          <p className="text-sm text-red-500">{profileForm.formState.errors.email.message}</p>
+                        )}
+                      </div>
+                    </div>
 
-          {/* Contenido principal */}
-          <div className="md:col-span-2">
-            <Tabs defaultValue="profile" className="w-full">
-              <TabsList className="grid grid-cols-2 mb-6">
-                <TabsTrigger value="profile">Información Personal</TabsTrigger>
-                <TabsTrigger value="password">Cambiar Contraseña</TabsTrigger>
-              </TabsList>
+                    <div className="space-y-2">
+                      <Label htmlFor="phone">Teléfono</Label>
+                      <Input 
+                        id="phone" 
+                        {...profileForm.register("phone")} 
+                        placeholder="(123) 456-7890" 
+                      />
+                    </div>
 
-              {/* Tab de información personal */}
-              <TabsContent value="profile">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Información Personal</CardTitle>
-                    <CardDescription>
-                      Actualiza tu información personal. Esta información se utilizará para
-                      completar tus pedidos y contactarte si es necesario.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Form {...profileForm}>
-                      <form onSubmit={profileForm.handleSubmit(handleProfileSubmit)} className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <FormField
-                            control={profileForm.control}
-                            name="name"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Nombre Completo</FormLabel>
-                                <FormControl>
-                                  <Input placeholder="Tu nombre completo" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={profileForm.control}
-                            name="email"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Correo Electrónico</FormLabel>
-                                <FormControl>
-                                  <Input placeholder="tu@email.com" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={profileForm.control}
-                            name="phone"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Teléfono</FormLabel>
-                                <FormControl>
-                                  <Input placeholder="Tu número de teléfono" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={profileForm.control}
-                            name="address"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Dirección</FormLabel>
-                                <FormControl>
-                                  <Input placeholder="Tu dirección" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={profileForm.control}
-                            name="city"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Ciudad</FormLabel>
-                                <FormControl>
-                                  <Input placeholder="Tu ciudad" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={profileForm.control}
-                            name="province"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Provincia</FormLabel>
-                                <FormControl>
-                                  <Input placeholder="Tu provincia" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                        <Button 
-                          type="submit" 
-                          className="w-full md:w-auto"
-                          disabled={updateProfileMutation.isPending}
-                        >
-                          {updateProfileMutation.isPending && (
-                            <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                          )}
+                    <Separator className="my-4" />
+                    <h3 className="text-lg font-medium">Dirección de Envío</h3>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="address">Dirección</Label>
+                      <Input 
+                        id="address" 
+                        {...profileForm.register("address")} 
+                        placeholder="Calle, número, depto, etc." 
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <Label htmlFor="city">Ciudad</Label>
+                        <Input 
+                          id="city" 
+                          {...profileForm.register("city")} 
+                          placeholder="Tu ciudad" 
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="province">Provincia</Label>
+                        <Input 
+                          id="province" 
+                          {...profileForm.register("province")} 
+                          placeholder="Tu provincia" 
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter>
+                    <Button 
+                      type="submit" 
+                      disabled={updating || !profileForm.formState.isDirty}
+                      className="flex items-center"
+                    >
+                      {updating ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Actualizando...
+                        </>
+                      ) : (
+                        <>
+                          <SaveIcon className="h-4 w-4 mr-2" />
                           Guardar Cambios
-                        </Button>
-                      </form>
-                    </Form>
+                        </>
+                      )}
+                    </Button>
+                  </CardFooter>
+                </form>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="security">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Cambiar Contraseña</CardTitle>
+                  <CardDescription>
+                    Actualiza tu contraseña para mantener tu cuenta segura
+                  </CardDescription>
+                </CardHeader>
+                <form onSubmit={passwordForm.handleSubmit(onSubmitPassword)}>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="currentPassword">Contraseña Actual</Label>
+                      <Input 
+                        id="currentPassword" 
+                        type="password" 
+                        {...passwordForm.register("currentPassword")} 
+                      />
+                      {passwordForm.formState.errors.currentPassword && (
+                        <p className="text-sm text-red-500">{passwordForm.formState.errors.currentPassword.message}</p>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="newPassword">Nueva Contraseña</Label>
+                      <Input 
+                        id="newPassword" 
+                        type="password" 
+                        {...passwordForm.register("newPassword")} 
+                      />
+                      {passwordForm.formState.errors.newPassword && (
+                        <p className="text-sm text-red-500">{passwordForm.formState.errors.newPassword.message}</p>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="confirmPassword">Confirmar Nueva Contraseña</Label>
+                      <Input 
+                        id="confirmPassword" 
+                        type="password" 
+                        {...passwordForm.register("confirmPassword")} 
+                      />
+                      {passwordForm.formState.errors.confirmPassword && (
+                        <p className="text-sm text-red-500">{passwordForm.formState.errors.confirmPassword.message}</p>
+                      )}
+                    </div>
                   </CardContent>
-                </Card>
-              </TabsContent>
-
-              {/* Tab de cambio de contraseña */}
-              <TabsContent value="password">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Cambiar Contraseña</CardTitle>
-                    <CardDescription>
-                      Actualiza tu contraseña para mantener tu cuenta segura.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Form {...passwordForm}>
-                      <form onSubmit={passwordForm.handleSubmit(handlePasswordSubmit)} className="space-y-6">
-                        <FormField
-                          control={passwordForm.control}
-                          name="currentPassword"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Contraseña Actual</FormLabel>
-                              <FormControl>
-                                <Input type="password" placeholder="••••••••" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={passwordForm.control}
-                          name="newPassword"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Nueva Contraseña</FormLabel>
-                              <FormControl>
-                                <Input type="password" placeholder="••••••••" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={passwordForm.control}
-                          name="confirmPassword"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Confirmar Nueva Contraseña</FormLabel>
-                              <FormControl>
-                                <Input type="password" placeholder="••••••••" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <Button 
-                          type="submit" 
-                          className="w-full md:w-auto"
-                          disabled={changePasswordMutation.isPending}
-                        >
-                          {changePasswordMutation.isPending && (
-                            <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                          )}
+                  <CardFooter>
+                    <Button 
+                      type="submit" 
+                      disabled={changingPassword || !passwordForm.formState.isDirty}
+                      className="flex items-center"
+                    >
+                      {changingPassword ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Actualizando...
+                        </>
+                      ) : (
+                        <>
+                          <KeyIcon className="h-4 w-4 mr-2" />
                           Cambiar Contraseña
-                        </Button>
-                      </form>
-                    </Form>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
-          </div>
+                        </>
+                      )}
+                    </Button>
+                  </CardFooter>
+                </form>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </WebLayout>

@@ -10,12 +10,16 @@ import { useToast } from "@/hooks/use-toast";
 // Interfaces para los usuarios web
 interface WebUser {
   id: number;
-  name: string;
-  email: string;
-  address: string | null;
-  phone: string | null;
-  city: string | null;
-  province: string | null;
+  name?: string;
+  fullName: string;
+  username: string;
+  role: string;
+  email?: string;
+  address?: string | null;
+  phone?: string | null;
+  city?: string | null;
+  province?: string | null;
+  customerId?: number;
 }
 
 interface LoginData {
