@@ -1484,6 +1484,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Obtener los ítems del carrito actual
+  app.get("/api/web/cart/items", async (req, res) => {
+    try {
+      // Obtener sessionId desde cookie
+      let sessionId = req.cookies?.cart_session_id;
+      
+      if (!sessionId) {
+        return res.json([]);
+      }
+      
+      // Buscar un carrito existente para esta sesión
+      const existingCarts = await storage.getCartsBySessionId(sessionId);
+      const cart = existingCarts.find(c => c.status === 'active');
+      
+      if (!cart) {
+        return res.json([]);
+      }
+      
+      // Obtener items del carrito
+      const cartItems = await storage.getCartItemsByCartId(cart.id);
+      
+      // Enriquecer con información de productos
+      const enrichedItems = await Promise.all(
+        cartItems.map(async (item) => {
+          const product = await storage.getProduct(item.productId);
+          return {
+            ...item,
+            product
+          };
+        })
+      );
+      
+      res.json(enrichedItems);
+    } catch (error) {
+      console.error("Error al obtener ítems del carrito:", error);
+      res.status(500).json({ message: "Error al obtener ítems del carrito", error: (error as Error).message });
+    }
+  });
+
   app.delete("/api/web/cart/items/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
