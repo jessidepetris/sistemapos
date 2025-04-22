@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { z } from "zod";
+import passport from "passport";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Sets up /api/register, /api/login, /api/logout, /api/user
@@ -1136,14 +1137,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.post("/api/web/login", async (req, res) => {
-    try {
-      const { username, password } = req.body;
+  app.post("/api/web/login", (req, res, next) => {
+    // Usar el mismo mecanismo de autenticación que /api/login
+    passport.authenticate('local', (err, user, info) => {
+      if (err) {
+        return res.status(500).json({ message: "Error al iniciar sesión", error: err.message });
+      }
       
-      // Buscar usuario por username
-      const user = await storage.getUserByUsername(username);
-      
-      if (!user || user.password !== password) {
+      if (!user) {
         return res.status(401).json({ message: "Credenciales inválidas" });
       }
       
@@ -1151,34 +1152,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (user.role !== 'cliente') {
         return res.status(403).json({ message: "Acceso denegado. Usuario no autorizado para el catálogo web" });
       }
-      
-      // Buscar cliente asociado por nombre completo (simplificado, en producción se usaría relación directa)
-      const allCustomers = await storage.getAllCustomers();
-      const customer = allCustomers.find(c => c.name === user.fullName);
-      
-      let customerId = null;
-      if (customer) {
-        customerId = customer.id;
-      }
-      
+
       // Iniciar sesión con Passport
-      req.login(user, (err) => {
+      req.login(user, async (err) => {
         if (err) {
           return res.status(500).json({ message: "Error al iniciar sesión", error: err.message });
         }
         
-        // Responder con los datos del usuario
-        res.json({
-          id: user.id,
-          username: user.username,
-          fullName: user.fullName,
-          role: user.role,
-          customerId
-        });
+        try {
+          // Buscar cliente asociado por nombre completo (simplificado, en producción se usaría relación directa)
+          const allCustomers = await storage.getAllCustomers();
+          const customer = allCustomers.find(c => c.name === user.fullName);
+          
+          let customerId = null;
+          if (customer) {
+            customerId = customer.id;
+          }
+          
+          // Responder con los datos del usuario
+          res.json({
+            id: user.id,
+            username: user.username,
+            fullName: user.fullName,
+            role: user.role,
+            customerId
+          });
+        } catch (error) {
+          res.status(500).json({ message: "Error al iniciar sesión", error: (error as Error).message });
+        }
       });
-    } catch (error) {
-      res.status(500).json({ message: "Error al iniciar sesión", error: (error as Error).message });
-    }
+    })(req, res, next);
   });
   
   // Productos para catálogo
