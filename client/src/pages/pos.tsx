@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +43,17 @@ export default function POSPage() {
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
   const [barcodeInput, setBarcodeInput] = useState("");
+  const [documentType, setDocumentType] = useState("remito");
+  const [observations, setObservations] = useState("");
+  const [printTicket, setPrintTicket] = useState(true);
+  const [sendEmail, setSendEmail] = useState(false);
+  const [cardType, setCardType] = useState("credit");
+  const [mixedPayment, setMixedPayment] = useState({
+    cash: 0,
+    card: 0,
+    transfer: 0,
+    account: 0
+  });
   
   // Get products
   const { data: products, isLoading: isLoadingProducts } = useQuery({
@@ -514,69 +526,270 @@ export default function POSPage() {
       
       {/* Checkout Dialog */}
       <Dialog open={checkoutDialogOpen} onOpenChange={setCheckoutDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Finalizar Venta</DialogTitle>
+            <DialogTitle className="text-xl">Finalizar Venta</DialogTitle>
+            <DialogHeader className="text-muted-foreground text-sm mt-1">
+              Complete los datos para finalizar la venta y generar el comprobante
+            </DialogHeader>
           </DialogHeader>
           
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Cliente (opcional)</label>
-              <Select value={selectedCustomerId?.toString()} onValueChange={(value) => setSelectedCustomerId(parseInt(value))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Venta sin cliente</SelectItem>
-                  {customers?.map((customer: any) => (
-                    <SelectItem key={customer.id} value={customer.id.toString()}>
-                      {customer.name}
-                    </SelectItem>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+            {/* Columna izquierda: Datos de venta */}
+            <div className="space-y-5">
+              <div className="space-y-3">
+                <h3 className="text-base font-medium">Datos de la venta</h3>
+                
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Cliente</label>
+                  <Select value={selectedCustomerId?.toString() || ""} onValueChange={(value) => setSelectedCustomerId(value ? parseInt(value) : null)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar cliente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Venta sin cliente</SelectItem>
+                      {Array.isArray(customers) && customers.map((customer: any) => (
+                        <SelectItem key={customer.id} value={customer.id.toString()}>
+                          {customer.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Tipo de comprobante</label>
+                  <Select value={documentType} onValueChange={setDocumentType}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="remito">Remito</SelectItem>
+                      <SelectItem value="factura-a">Factura A</SelectItem>
+                      <SelectItem value="factura-b">Factura B</SelectItem>
+                      <SelectItem value="factura-c">Factura C</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Método de pago</label>
+                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Efectivo</SelectItem>
+                      <SelectItem value="card">Tarjeta</SelectItem>
+                      <SelectItem value="transfer">Transferencia</SelectItem>
+                      <SelectItem value="account">Cuenta Corriente</SelectItem>
+                      <SelectItem value="mixed">Pago mixto</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {/* Opciones adicionales según el método de pago */}
+                {paymentMethod === 'card' && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Tipo de tarjeta</label>
+                    <Select value={cardType} onValueChange={setCardType}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="credit">Crédito</SelectItem>
+                        <SelectItem value="debit">Débito</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                
+                {paymentMethod === 'mixed' && (
+                  <div className="space-y-3 border rounded-md p-3">
+                    <h4 className="text-sm font-medium">Detalles del pago mixto</h4>
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-xs">Efectivo</label>
+                        <Input 
+                          type="number" 
+                          min="0" 
+                          value={mixedPayment.cash.toString()} 
+                          onChange={(e) => setMixedPayment({
+                            ...mixedPayment,
+                            cash: parseFloat(e.target.value) || 0
+                          })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs">Tarjeta</label>
+                        <Input 
+                          type="number" 
+                          min="0" 
+                          value={mixedPayment.card.toString()} 
+                          onChange={(e) => setMixedPayment({
+                            ...mixedPayment,
+                            card: parseFloat(e.target.value) || 0
+                          })}
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-xs">Transferencia</label>
+                        <Input 
+                          type="number" 
+                          min="0" 
+                          value={mixedPayment.transfer.toString()} 
+                          onChange={(e) => setMixedPayment({
+                            ...mixedPayment,
+                            transfer: parseFloat(e.target.value) || 0
+                          })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs">Cuenta Corriente</label>
+                        <Input 
+                          type="number" 
+                          min="0" 
+                          value={mixedPayment.account.toString()} 
+                          onChange={(e) => setMixedPayment({
+                            ...mixedPayment,
+                            account: parseFloat(e.target.value) || 0
+                          })}
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="mt-2 text-right text-sm">
+                      <span className="text-muted-foreground">Total de pagos: </span>
+                      <span className={`font-medium ${
+                        mixedPayment.cash + mixedPayment.card + mixedPayment.transfer + mixedPayment.account === cartTotal
+                          ? 'text-green-600'
+                          : 'text-orange-600'
+                      }`}>
+                        ${(mixedPayment.cash + mixedPayment.card + mixedPayment.transfer + mixedPayment.account).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Observaciones</label>
+                  <Input 
+                    placeholder="Observaciones para la venta (opcional)" 
+                    value={observations}
+                    onChange={(e) => setObservations(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <div className="flex justify-between text-lg font-semibold">
+                  <span>Total a pagar</span>
+                  <span>${cartTotal.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Columna derecha: Resumen de la venta */}
+            <div className="space-y-4">
+              <div className="border rounded-md">
+                <div className="border-b px-4 py-3">
+                  <h3 className="font-medium">Resumen de productos</h3>
+                </div>
+                
+                <div className="px-4 py-2 max-h-[300px] overflow-y-auto">
+                  {cart.map((item) => (
+                    <div key={item.id} className="py-2 border-b last:border-0">
+                      <div className="flex justify-between">
+                        <div>
+                          <div className="font-medium">{item.name}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {item.quantity} x ${item.price.toFixed(2)} ({item.unit})
+                            {item.isConversion && (
+                              <span className="ml-1 text-xs text-green-600">
+                                Factor: {item.conversionFactor}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="font-medium">${item.total.toFixed(2)}</div>
+                      </div>
+                    </div>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Método de pago</label>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">Efectivo</SelectItem>
-                  <SelectItem value="card">Tarjeta</SelectItem>
-                  <SelectItem value="transfer">Transferencia</SelectItem>
-                  <SelectItem value="account">Cuenta Corriente</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="border-t pt-4">
-              <div className="flex justify-between text-lg font-semibold">
-                <span>Total a pagar</span>
-                <span>${cartTotal.toFixed(2)}</span>
+                </div>
+                
+                <div className="border-t px-4 py-3">
+                  <div className="flex justify-between">
+                    <span className="font-medium">Subtotal</span>
+                    <span>${cartTotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>IVA (incluido)</span>
+                    <span>${(cartTotal * 0.21 / 1.21).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between font-semibold mt-2 text-lg">
+                    <span>Total</span>
+                    <span>${cartTotal.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="border rounded-md p-4">
+                <h3 className="font-medium mb-3">Opciones de impresión</h3>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="print-ticket" defaultChecked />
+                    <label htmlFor="print-ticket" className="text-sm">
+                      Imprimir ticket
+                    </label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="send-email" />
+                    <label htmlFor="send-email" className="text-sm">
+                      Enviar por email
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
           
-          <DialogFooter>
+          <DialogFooter className="flex justify-between mt-6">
             <Button variant="outline" onClick={() => setCheckoutDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button
-              onClick={finalizeSale}
-              disabled={processSaleMutation.isPending}
-            >
-              {processSaleMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Procesando...
-                </>
-              ) : (
-                "Confirmar Venta"
-              )}
-            </Button>
+            <div className="space-x-2">
+              <Button
+                variant="secondary"
+                disabled={processSaleMutation.isPending}
+                onClick={() => {
+                  // Lógica para guardar como borrador
+                  toast({
+                    title: "Venta guardada como borrador",
+                    description: "Podrá completarla más tarde"
+                  });
+                  setCheckoutDialogOpen(false);
+                }}
+              >
+                Guardar borrador
+              </Button>
+              <Button
+                onClick={finalizeSale}
+                disabled={processSaleMutation.isPending}
+              >
+                {processSaleMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Procesando...
+                  </>
+                ) : (
+                  "Finalizar Venta"
+                )}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
