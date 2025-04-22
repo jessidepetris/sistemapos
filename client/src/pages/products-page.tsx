@@ -152,7 +152,7 @@ export default function ProductsPage() {
       name: "",
       description: "",
       baseUnit: "unidad",
-      barcodes: "",
+      barcodes: "", // Entrada como string que se convertirá a array
       price: 0,
       cost: 0,
       stock: 0,
@@ -166,10 +166,10 @@ export default function ProductsPage() {
       category: "",
       imageUrl: "",
       supplierCode: "",
-      conversionRates: [],
+      conversionRates: [] as any[], // Array para conversiones mejoradas con códigos de barras
       conversionUnit: "",
       conversionFactor: 0,
-      components: [],
+      components: [] as any[], // Array para componentes de productos compuestos
       componentProductId: undefined,
       componentQuantity: 0,
       componentUnit: "unidad",
@@ -243,11 +243,11 @@ export default function ProductsPage() {
   });
   
   // Filtered products based on search
-  const filteredProducts = searchQuery
-    ? products?.filter((product: any) =>
+  const filteredProducts = searchQuery && Array.isArray(products)
+    ? products.filter((product: any) =>
         product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (product.description && product.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (product.barcodes && product.barcodes.some((barcode: string) => barcode.includes(searchQuery)))
+        (product.barcodes && Array.isArray(product.barcodes) && product.barcodes.some((barcode: string) => barcode.includes(searchQuery)))
       )
     : products;
   
@@ -335,7 +335,7 @@ export default function ProductsPage() {
       name: "",
       description: "",
       baseUnit: "unidad",
-      barcodes: "",
+      barcodes: "", // Entrada como string que se convertirá a array
       price: 0,
       cost: 0,
       stock: 0,
@@ -349,10 +349,10 @@ export default function ProductsPage() {
       category: "",
       imageUrl: "",
       supplierCode: "",
-      conversionRates: [],
+      conversionRates: [] as any[], // Array para conversiones mejoradas con códigos de barras
       conversionUnit: "",
       conversionFactor: 0,
-      components: [],
+      components: [] as any[], // Array para componentes de productos compuestos
       componentProductId: undefined,
       componentQuantity: 0,
       componentUnit: "unidad",
@@ -526,7 +526,7 @@ export default function ProductsPage() {
                 
                 {/* Pestaña de Información General */}
                 <TabsContent value="general">
-                  <GeneralTab form={form} suppliers={suppliers || []} />
+                  <GeneralTab form={form} suppliers={Array.isArray(suppliers) ? suppliers : []} />
                 </TabsContent>
                 
                 {/* Pestaña de Precios */}
@@ -556,7 +556,7 @@ export default function ProductsPage() {
                 <TabsContent value="components">
                   <ComponentsTab 
                     form={form} 
-                    products={products || []} 
+                    products={Array.isArray(products) ? products : []} 
                     componentsList={componentsList} 
                     setComponentsList={setComponentsList}
                     editingProductId={editingProductId}
