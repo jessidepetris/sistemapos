@@ -85,7 +85,7 @@ export default function VehiclesTab() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const reactQueryClient = useQueryClient();
 
   // Obtener lista de vehículos
   const { data: vehicles, isLoading } = useQuery<Vehicle[]>({
@@ -124,7 +124,7 @@ export default function VehiclesTab() {
         title: "Vehículo creado",
         description: "El vehículo ha sido creado exitosamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
       setIsCreateOpen(false);
       form.reset();
     },
@@ -147,7 +147,7 @@ export default function VehiclesTab() {
         title: "Vehículo actualizado",
         description: "El vehículo ha sido actualizado exitosamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
       setIsEditOpen(false);
       setSelectedVehicle(null);
       form.reset();
@@ -171,7 +171,7 @@ export default function VehiclesTab() {
         title: "Vehículo eliminado",
         description: "El vehículo ha sido eliminado exitosamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
     },
     onError: (error) => {
       toast({

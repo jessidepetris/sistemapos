@@ -99,6 +99,7 @@ const orderFormSchema = z.object({
     required_error: "Por favor seleccione un proveedor",
   }),
   notes: z.string().optional(),
+  currency: z.string().default("ARS"),
   items: z.array(
     z.object({
       productId: z.number({
@@ -107,6 +108,7 @@ const orderFormSchema = z.object({
       quantity: z.string().min(1, "La cantidad es requerida"),
       unitPrice: z.string().optional(),
       notes: z.string().optional(),
+      currency: z.string().default("ARS"),
     })
   ).min(1, "Debe agregar al menos un producto"),
 });
@@ -283,6 +285,7 @@ export default function OrdersPage() {
     const orderData = {
       supplierId: data.supplierId,
       notes: data.notes,
+      currency: data.currency,
       // We're not setting status or total here, they'll be set on the server
     };
     
@@ -292,6 +295,7 @@ export default function OrdersPage() {
       quantity: item.quantity,
       unitPrice: item.unitPrice || undefined,
       notes: item.notes,
+      currency: item.currency,
     }));
     
     createOrderMutation.mutate({
@@ -578,6 +582,31 @@ export default function OrdersPage() {
                 )}
               />
 
+              <FormField
+                control={form.control}
+                name="currency"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Moneda</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value || "ARS"}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccione la moneda" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="ARS">Pesos Argentinos (ARS)</SelectItem>
+                        <SelectItem value="USD">Dólares (USD)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <div>
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-base font-medium">Productos</h3>
@@ -672,7 +701,7 @@ export default function OrdersPage() {
                             name={`items.${index}.unitPrice`}
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Precio Un.</FormLabel>
+                                <FormLabel>Precio Un. ({form.watch("currency")})</FormLabel>
                                 <FormControl>
                                   <Input
                                     type="number"
@@ -839,7 +868,19 @@ export default function OrdersPage() {
                     {viewOrderDetails.details.map((detail) => (
                       <TableRow key={detail.id}>
                         <TableCell>
-                          {products?.find(p => p.id === detail.productId)?.name || `Producto #${detail.productId}`}
+                          {(() => {
+                            const product = products?.find(p => p.id === detail.productId);
+                            // Si encontramos el producto, mostramos su nombre
+                            if (product?.name) {
+                              return product.name;
+                            }
+                            // Si el detalle tiene productName, lo utilizamos
+                            if (detail.productName) {
+                              return detail.productName;
+                            }
+                            // Como último recurso, mostramos el ID
+                            return `Producto #${detail.productId}`;
+                          })()}
                         </TableCell>
                         <TableCell className="text-right font-mono">
                           {parseFloat(detail.quantity.toString()).toFixed(3)}

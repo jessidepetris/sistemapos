@@ -3,7 +3,7 @@ import { DashboardLayout } from "@/layouts/dashboard-layout";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Customer, insertCustomerSchema } from "@shared/schema";
+import { Customer, insertCustomerSchema } from "../../../shared/schema";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -74,6 +74,10 @@ const customerFormSchema = insertCustomerSchema.extend({
   // Add additional validations
   email: z.string().email({ message: "Email inválido" }).optional().or(z.literal("")),
   phone: z.string().min(6, { message: "Teléfono debe tener al menos 6 caracteres" }).optional().or(z.literal("")),
+  creditLimit: z.coerce.number().min(0, "El límite de crédito debe ser mayor o igual a 0").optional(),
+}).extend({
+  hasCurrentAccount: z.boolean().default(true), // Habilitar cuenta corriente por defecto
+  currentBalance: z.string().default("0"), // Saldo inicial en 0
 });
 
 type CustomerFormValues = z.infer<typeof customerFormSchema>;
@@ -103,6 +107,7 @@ export default function CustomersPage() {
         description: "El cliente ha sido creado exitosamente",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       setIsDialogOpen(false);
     },
     onError: (error) => {
@@ -126,6 +131,7 @@ export default function CustomersPage() {
         description: "El cliente ha sido actualizado exitosamente",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       setIsDialogOpen(false);
     },
     onError: (error) => {
@@ -146,8 +152,8 @@ export default function CustomersPage() {
       phone: "",
       address: "",
       documentId: "",
-      hasCurrentAccount: false,
-      currentBalance: "0",
+      hasCurrentAccount: true, // Habilitar cuenta corriente por defecto
+      currentBalance: "0", // Saldo inicial en 0
       notes: "",
     },
   });
@@ -177,8 +183,8 @@ export default function CustomersPage() {
       phone: "",
       address: "",
       documentId: "",
-      hasCurrentAccount: false,
-      currentBalance: "0",
+      hasCurrentAccount: true, // Habilitar cuenta corriente por defecto
+      currentBalance: "0", // Saldo inicial en 0
       notes: "",
     });
     setIsDialogOpen(true);
@@ -206,10 +212,16 @@ export default function CustomersPage() {
     if (isUpdateMode && currentCustomer) {
       updateCustomerMutation.mutate({
         id: currentCustomer.id,
-        data,
+        data: {
+          ...data,
+          hasCurrentAccount: true, // Forzar cuenta corriente habilitada
+        },
       });
     } else {
-      createCustomerMutation.mutate(data);
+      createCustomerMutation.mutate({
+        ...data,
+        hasCurrentAccount: true, // Forzar cuenta corriente habilitada
+      });
     }
   };
 
@@ -296,17 +308,9 @@ export default function CustomersPage() {
                     </TableCell>
                     <TableCell>{customer.documentId || "-"}</TableCell>
                     <TableCell>
-                      {customer.hasCurrentAccount ? (
-                        <Badge className="bg-green-100 text-green-800">
-                          <CheckCircle className="h-3 w-3 mr-1" />
-                          Activa
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-neutral-500">
-                          <XCircle className="h-3 w-3 mr-1" />
-                          Inactiva
-                        </Badge>
-                      )}
+                      <Badge variant={customer.hasCurrentAccount ? "default" : "secondary"}>
+                        {customer.hasCurrentAccount ? "Con Cuenta" : "Sin Cuenta"}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <span
@@ -596,6 +600,23 @@ export default function CustomersPage() {
                         {...field}
                       />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="creditLimit"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Límite de Crédito</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.01" min="0" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Monto máximo que el cliente puede adeudar (0 para sin límite)
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

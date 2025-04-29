@@ -124,8 +124,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     },
     onSuccess: (data) => {
       // Invalidar consultas para forzar recargas de datos
-      queryClient.invalidateQueries({ queryKey: ["/api/web/cart"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/web/cart/items"] });
+      queryClient.reactQuery.invalidateQueries({ queryKey: ["/api/web/cart"] });
+      queryClient.reactQuery.invalidateQueries({ queryKey: ["/api/web/cart/items"] });
       
       toast({
         title: "Producto agregado",
@@ -153,8 +153,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     },
     onSuccess: () => {
       // Invalidar consultas para forzar recargas de datos
-      queryClient.invalidateQueries({ queryKey: ["/api/web/cart"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/web/cart/items"] });
+      queryClient.reactQuery.invalidateQueries({ queryKey: ["/api/web/cart"] });
+      queryClient.reactQuery.invalidateQueries({ queryKey: ["/api/web/cart/items"] });
       
       toast({
         title: "Producto eliminado",
@@ -180,7 +180,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
     },
     onSuccess: () => {
-      queryClient.setQueryData(["/api/web/cart"], { ...cart, items: [], itemCount: 0, totalAmount: 0 });
+      queryClient.reactQuery.setQueryData(["/api/web/cart"], { ...cart, items: [], itemCount: 0, totalAmount: 0 });
       toast({
         title: "Carrito vacío",
         description: "Tu carrito ha sido vaciado",
@@ -199,8 +199,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const clearCart = async (): Promise<void> => {
     try {
       await clearCartMutation.mutateAsync();
-      queryClient.invalidateQueries({ queryKey: ["/api/web/cart"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/web/cart/items"] });
+      queryClient.reactQuery.invalidateQueries({ queryKey: ["/api/web/cart"] });
+      queryClient.reactQuery.invalidateQueries({ queryKey: ["/api/web/cart/items"] });
     } catch (error) {
       console.error("Error al limpiar el carrito:", error);
       throw error;

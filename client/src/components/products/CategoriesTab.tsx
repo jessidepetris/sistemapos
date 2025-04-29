@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { UseFormReturn } from "react-hook-form";
 import {
   Card,
@@ -13,54 +13,86 @@ import {
 } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tag, Plus, X } from "lucide-react";
+import { Tag, Plus, X, ChevronDown, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-interface CategoriesTabProps {
-  form: UseFormReturn<any>;
-  productId: number | null;
-}
-
-type Category = {
+interface Category {
   id: number;
   name: string;
   description: string | null;
   imageUrl: string | null;
   parentId: number | null;
-  displayOrder: number | null;
-  active: boolean | null;
-};
+  displayOrder: number;
+  active: boolean;
+  children?: Category[];
+}
+
+interface CategoriesTabProps {
+  form: UseFormReturn<any>;
+  productId?: number;
+}
 
 export function CategoriesTab({ form, productId }: CategoriesTabProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [expandedCategories, setExpandedCategories] = useState<number[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<Category[]>([]);
 
-  // Obtener categorías
+  // Obtener todas las categorías
   const { data: categories, isLoading: isLoadingCategories } = useQuery({
-    queryKey: ["/api/categories"],
-    queryFn: undefined,
+    queryKey: ["/api/product-categories"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/product-categories");
+      if (!response.ok) throw new Error("Error al cargar categorías");
+      return response.json();
+    },
   });
 
-  // Obtener categorías asociadas al producto si estamos editando
-  const { data: productCategories, isLoading: isLoadingProductCategories } = useQuery({
+  // Obtener categorías del producto si existe
+  const { data: productCategories } = useQuery({
     queryKey: ["/api/products", productId, "categories"],
-    queryFn: productId 
-      ? async () => {
-          const res = await apiRequest("GET", `/api/products/${productId}/categories`);
-          return await res.json();
-        }
-      : () => Promise.resolve([]),
+    queryFn: async () => {
+      if (!productId) return [];
+      const response = await apiRequest("GET", `/api/products/${productId}/categories`);
+      if (!response.ok) throw new Error("Error al cargar categorías del producto");
+      return response.json();
+    },
     enabled: !!productId,
   });
 
-  // Mutation para asociar categorías
+  // Construir árbol de categorías
+  const buildCategoryTree = (categories: Category[]): Category[] => {
+    const categoryMap = new Map<number, Category>();
+    const rootCategories: Category[] = [];
+
+    categories.forEach(category => {
+      categoryMap.set(category.id, { ...category, children: [] });
+    });
+
+    categories.forEach(category => {
+      const categoryWithChildren = categoryMap.get(category.id);
+      if (category.parentId === null) {
+        rootCategories.push(categoryWithChildren!);
+      } else {
+        const parent = categoryMap.get(category.parentId);
+        if (parent) {
+          parent.children!.push(categoryWithChildren!);
+        }
+      }
+    });
+
+    return rootCategories;
+  };
+
+  // Mutación para asignar categoría
   const assignCategoryMutation = useMutation({
-    mutationFn: async ({ productId, categoryId }: { productId: number, categoryId: number }) => {
-      const res = await apiRequest(
-        "POST", 
+    mutationFn: async ({ productId, categoryId }: { productId: number; categoryId: number }) => {
+      const response = await apiRequest(
+        "POST",
         `/api/products/${productId}/categories/${categoryId}`
       );
-      return await res.json();
+      if (!response.ok) throw new Error("Error al asignar categoría");
+      return response.json();
     },
     onSuccess: () => {
       toast({ title: "Categoría asignada correctamente" });
@@ -72,150 +104,155 @@ export function CategoriesTab({ form, productId }: CategoriesTabProps) {
         description: (error as Error).message,
         variant: "destructive",
       });
-    }
+    },
   });
 
-  // Mutation para quitar asociación de categorías
+  // Mutación para quitar categoría
   const removeCategoryMutation = useMutation({
-    mutationFn: async ({ productId, categoryId }: { productId: number, categoryId: number }) => {
-      const res = await apiRequest(
-        "DELETE", 
+    mutationFn: async ({ productId, categoryId }: { productId: number; categoryId: number }) => {
+      const response = await apiRequest(
+        "DELETE",
         `/api/products/${productId}/categories/${categoryId}`
       );
-      return await res.json();
+      if (!response.ok) throw new Error("Error al quitar categoría");
+      return response.json();
     },
     onSuccess: () => {
-      toast({ title: "Categoría eliminada correctamente" });
+      toast({ title: "Categoría quitada correctamente" });
       queryClient.invalidateQueries({ queryKey: ["/api/products", productId, "categories"] });
     },
     onError: (error) => {
       toast({
-        title: "Error al eliminar categoría",
+        title: "Error al quitar categoría",
         description: (error as Error).message,
         variant: "destructive",
       });
-    }
+    },
   });
 
-  // Actualizar estado local cuando se carguen las categorías del producto
+  // Actualizar categorías seleccionadas cuando se cargan las del producto
   useEffect(() => {
     if (productCategories && Array.isArray(productCategories)) {
-      const selectedCats = productCategories.map((cat: Category) => ({
-        id: cat.id,
-        name: cat.name,
-        description: cat.description,
-        imageUrl: cat.imageUrl,
-        parentId: cat.parentId,
-        displayOrder: cat.displayOrder,
-        active: cat.active
-      }));
-      
-      setSelectedCategories(selectedCats);
-      
-      // Actualizar el valor en el formulario
-      const categoryIds = selectedCats.map(cat => cat.id);
+      setSelectedCategories(productCategories);
+      const categoryIds = productCategories.map(cat => cat.id);
       form.setValue("categoryIds", categoryIds);
     }
   }, [productCategories, form]);
 
-  // Función para añadir una categoría al producto
+  const toggleCategory = (categoryId: number) => {
+    setExpandedCategories(prev =>
+      prev.includes(categoryId)
+        ? prev.filter(id => id !== categoryId)
+        : [...prev, categoryId]
+    );
+  };
+
   const handleAddCategory = (category: Category) => {
     if (productId) {
-      // Producto existente: usar la API
       assignCategoryMutation.mutate({ productId, categoryId: category.id });
     } else {
-      // Nuevo producto: actualizar localmente
       if (!selectedCategories.some(cat => cat.id === category.id)) {
         const newSelectedCategories = [...selectedCategories, category];
         setSelectedCategories(newSelectedCategories);
-        
-        // Actualizar el valor en el formulario
         const categoryIds = newSelectedCategories.map(cat => cat.id);
         form.setValue("categoryIds", categoryIds);
       }
     }
   };
 
-  // Función para quitar una categoría del producto
   const handleRemoveCategory = (categoryId: number) => {
     if (productId) {
-      // Producto existente: usar la API
       removeCategoryMutation.mutate({ productId, categoryId });
     } else {
-      // Nuevo producto: actualizar localmente
       const newSelectedCategories = selectedCategories.filter(cat => cat.id !== categoryId);
       setSelectedCategories(newSelectedCategories);
-      
-      // Actualizar el valor en el formulario
       const categoryIds = newSelectedCategories.map(cat => cat.id);
       form.setValue("categoryIds", categoryIds);
     }
   };
 
-  // Función para verificar si una categoría ya está seleccionada
   const isCategorySelected = (categoryId: number) => {
     return selectedCategories.some(cat => cat.id === categoryId);
   };
 
+  const renderCategoryItem = (category: Category, level: number = 0) => {
+    const isExpanded = expandedCategories.includes(category.id);
+    const hasChildren = category.children && category.children.length > 0;
+    const isSelected = isCategorySelected(category.id);
+
+    return (
+      <div key={category.id} style={{ marginLeft: `${level * 20}px` }}>
+        <div className="flex items-center py-1">
+          {hasChildren && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => toggleCategory(category.id)}
+              className="h-6 w-6"
+            >
+              {isExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </Button>
+          )}
+          <Button
+            variant={isSelected ? "secondary" : "ghost"}
+            className="flex-1 justify-start"
+            onClick={() => isSelected ? handleRemoveCategory(category.id) : handleAddCategory(category)}
+          >
+            <Tag className="h-4 w-4 mr-2" />
+            <span className="truncate">{category.name}</span>
+          </Button>
+        </div>
+        {isExpanded && hasChildren && (
+          <div className="ml-6">
+            {category.children!.map(child => renderCategoryItem(child, level + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  if (isLoadingCategories) {
+    return <div className="text-center py-4">Cargando categorías...</div>;
+  }
+
+  const categoryTree = buildCategoryTree(categories || []);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Card>
         <CardContent className="pt-6">
-          <FormField
-            control={form.control}
-            name="categoryIds"
-            render={() => (
-              <FormItem>
-                <FormLabel>Categorías asignadas</FormLabel>
-                <div className="flex flex-wrap gap-2 min-h-[40px] p-2 border rounded-md">
-                  {selectedCategories.length === 0 ? (
-                    <div className="text-muted-foreground text-sm">Sin categorías asignadas</div>
-                  ) : (
-                    selectedCategories.map(category => (
-                      <Badge key={category.id} className="flex items-center gap-1 px-3 py-1.5">
-                        <Tag size={14} />
-                        {category.name}
-                        <button 
-                          type="button" 
-                          onClick={() => handleRemoveCategory(category.id)} 
-                          className="ml-1 hover:text-destructive"
-                        >
-                          <X size={14} />
-                        </button>
-                      </Badge>
-                    ))
-                  )}
-                </div>
-              </FormItem>
-            )}
-          />
+          <h3 className="text-lg font-medium mb-4">Categorías seleccionadas</h3>
+          {selectedCategories.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {selectedCategories.map(category => (
+                <Button
+                  key={category.id}
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => handleRemoveCategory(category.id)}
+                >
+                  <Tag className="h-4 w-4 mr-2" />
+                  {category.name}
+                  <Plus className="h-4 w-4 ml-2 rotate-45" />
+                </Button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-muted-foreground">No hay categorías seleccionadas</p>
+          )}
         </CardContent>
       </Card>
 
       <Card>
         <CardContent className="pt-6">
           <h3 className="text-lg font-medium mb-4">Categorías disponibles</h3>
-          
-          {isLoadingCategories ? (
-            <div className="text-center py-4">Cargando categorías...</div>
-          ) : Array.isArray(categories) && categories.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-              {categories.map((category: Category) => (
-                <Button
-                  key={category.id}
-                  type="button"
-                  variant={isCategorySelected(category.id) ? "secondary" : "outline"}
-                  className="justify-start"
-                  onClick={() => handleAddCategory(category)}
-                  disabled={isCategorySelected(category.id)}
-                >
-                  <div className="flex items-center">
-                    {!isCategorySelected(category.id) && <Plus size={16} className="mr-2" />}
-                    <Tag size={16} className="mr-2" />
-                    <span className="truncate">{category.name}</span>
-                  </div>
-                </Button>
-              ))}
+          {categoryTree.length > 0 ? (
+            <div className="space-y-1">
+              {categoryTree.map(category => renderCategoryItem(category))}
             </div>
           ) : (
             <div className="text-center py-4">

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { DashboardLayout } from "@/layouts/dashboard-layout";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Supplier, insertSupplierSchema } from "@shared/schema";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -87,6 +87,8 @@ export default function SuppliersPage() {
     queryKey: ["/api/suppliers"],
   });
 
+  const reactQueryClient = useQueryClient();
+
   // Create supplier mutation
   const createSupplierMutation = useMutation({
     mutationFn: async (data: SupplierFormValues) => {
@@ -98,7 +100,7 @@ export default function SuppliersPage() {
         title: "Proveedor creado",
         description: "El proveedor ha sido creado exitosamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/suppliers"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/suppliers"] });
       setIsDialogOpen(false);
     },
     onError: (error) => {
@@ -121,7 +123,7 @@ export default function SuppliersPage() {
         title: "Proveedor actualizado",
         description: "El proveedor ha sido actualizado exitosamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/suppliers"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/suppliers"] });
       setIsDialogOpen(false);
     },
     onError: (error) => {

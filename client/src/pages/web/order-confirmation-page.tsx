@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import WebLayout from "./web-layout";
+import { OrderPDF } from "@/components/printing/OrderPDF";
 
 interface OrderItem {
   id: number;
@@ -44,6 +45,7 @@ export default function OrderConfirmationPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  const orderContentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -167,12 +169,16 @@ export default function OrderConfirmationPage() {
           <p className="text-xl text-center text-muted-foreground mb-4">
             Gracias por tu compra. Tu pedido ha sido recibido.
           </p>
-          <p className="text-center text-muted-foreground mb-8">
+          <p className="text-center text-muted-foreground mb-6">
             Hemos enviado un correo de confirmación a{" "}
             <span className="font-medium text-foreground">{order.customerData.email}</span>
           </p>
           
-          <div className="w-full">
+          <div className="w-full mb-6 flex justify-center">
+            {order && <OrderPDF order={order} showPrintButton={true} />}
+          </div>
+          
+          <div className="w-full" ref={orderContentRef}>
             <Card className="mb-6">
               <CardHeader>
                 <CardTitle>Resumen del pedido #{order.id}</CardTitle>

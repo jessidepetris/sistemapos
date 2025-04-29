@@ -1,32 +1,64 @@
 import React from "react";
-import { UseFormReturn } from "react-hook-form";
-import {
-  FormField,
-  FormItem,
-  FormLabel,
-  FormControl,
-  FormMessage,
-  FormDescription,
-} from "@/components/ui/form";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/api";
+import { FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-
-type GeneralTabProps = {
-  form: UseFormReturn<any>;
-  suppliers: any[];
-  onTabChange?: (tabValue: string) => void;
-};
+import { Category, GeneralTabProps, Supplier } from "@/types/products";
+import { ReactNode } from "react";
 
 export function GeneralTab({ form, suppliers, onTabChange }: GeneralTabProps) {
+  // Obtener todas las categorías
+  const { data: categories } = useQuery<Category[]>({
+    queryKey: ["/api/product-categories"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/product-categories");
+      if (!response.ok) throw new Error("Error al cargar categorías");
+      return response.json();
+    },
+  });
+
+  // Construir árbol de categorías
+  const buildCategoryTree = (categories: Category[]): Category[] => {
+    const categoryMap = new Map<number, Category>();
+    const rootCategories: Category[] = [];
+
+    categories?.forEach(category => {
+      categoryMap.set(category.id, { ...category, children: [] });
+    });
+
+    categories?.forEach(category => {
+      const categoryWithChildren = categoryMap.get(category.id);
+      if (category.parentId === null) {
+        rootCategories.push(categoryWithChildren!);
+      } else {
+        const parent = categoryMap.get(category.parentId);
+        if (parent) {
+          parent.children!.push(categoryWithChildren!);
+        }
+      }
+    });
+
+    return rootCategories;
+  };
+
+  const renderCategoryOptions = (categories: Category[], level: number = 0): React.ReactNode[] => {
+    return categories.map(category => (
+      <React.Fragment key={category.id}>
+        <SelectItem value={category.id.toString()}>
+          {"\u00A0".repeat(level * 2)}{level > 0 ? "└ " : ""}{category.name}
+        </SelectItem>
+        {category.children && category.children.length > 0 && 
+          renderCategoryOptions(category.children, level + 1)}
+      </React.Fragment>
+    ));
+  };
+
+  const categoryTree = buildCategoryTree(categories || []);
+
   return (
     <div className="space-y-6">
       <Card>
@@ -58,20 +90,15 @@ export function GeneralTab({ form, suppliers, onTabChange }: GeneralTabProps) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Categoría</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value || ""}>
+                  <Select onValueChange={field.onChange} value={field.value || "none"}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar categoría" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="Ingredientes">Ingredientes</SelectItem>
-                      <SelectItem value="Utensilios">Utensilios</SelectItem>
-                      <SelectItem value="Decoración">Decoración</SelectItem>
-                      <SelectItem value="Moldes">Moldes</SelectItem>
-                      <SelectItem value="Packaging">Packaging</SelectItem>
-                      <SelectItem value="Combos">Combos</SelectItem>
-                      <SelectItem value="Otros">Otros</SelectItem>
+                      <SelectItem value="none">Sin categoría</SelectItem>
+                      {renderCategoryOptions(categoryTree)}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -176,7 +203,31 @@ export function GeneralTab({ form, suppliers, onTabChange }: GeneralTabProps) {
                 <FormItem>
                   <FormLabel>Proveedor</FormLabel>
                   <Select
-                    onValueChange={(value) => field.onChange(value !== "none" ? parseInt(value) : undefined)}
+                    onValueChange={(value) => {
+                      // Actualizar el ID del proveedor
+                      const supplierId = value !== "none" ? parseInt(value) : undefined;
+                      field.onChange(supplierId);
+                      
+                      // Si se seleccionó un proveedor válido, buscar su descuento
+                      if (supplierId) {
+                        const selectedSupplier = suppliers?.find(
+                          (supplier: Supplier) => supplier.id === supplierId
+                        );
+                        
+                        // Si el proveedor tiene descuento, actualizarlo en el formulario
+                        if (selectedSupplier && selectedSupplier.discount !== undefined) {
+                          form.setValue("supplierDiscount", parseFloat(selectedSupplier.discount));
+                          // Si hay descuento, cambiar a la pestaña de precios
+                          onTabChange("pricing");
+                        } else {
+                          // Si no tiene descuento, establecer 0
+                          form.setValue("supplierDiscount", 0);
+                        }
+                      } else {
+                        // Si no hay proveedor, establecer descuento en 0
+                        form.setValue("supplierDiscount", 0);
+                      }
+                    }}
                     value={field.value?.toString()}
                   >
                     <FormControl>
@@ -186,7 +237,7 @@ export function GeneralTab({ form, suppliers, onTabChange }: GeneralTabProps) {
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="none">Sin proveedor</SelectItem>
-                      {suppliers?.map((supplier) => (
+                      {suppliers?.map((supplier: Supplier) => (
                         <SelectItem key={supplier.id} value={supplier.id.toString()}>
                           {supplier.name}
                         </SelectItem>

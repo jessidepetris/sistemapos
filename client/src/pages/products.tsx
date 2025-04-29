@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
@@ -84,6 +84,10 @@ const productFormSchema = insertProductSchema.extend({
   componentProductId: z.number().optional(),
   componentQuantity: z.coerce.number().optional(),
   componentUnit: z.string().optional(),
+  
+  // Nuevo campo para el descuento del proveedor
+  supplierDiscount: z.coerce.number().min(0).max(100).optional().default(0),
+  currency: z.string().optional(),
 });
 
 type ProductFormValues = z.infer<typeof productFormSchema>;
@@ -115,6 +119,8 @@ export default function ProductsPage() {
     retry: false,
   });
   
+  const reactQueryClient = useQueryClient();
+
   // Función para calcular el costo de un producto compuesto basado en sus componentes
   const calculateCompositeCost = () => {
     // Si no es un producto compuesto o no hay componentes, retornar
@@ -143,6 +149,7 @@ export default function ProductsPage() {
   const calculateSellingPrice = () => {
     let cost = form.getValues("cost") || 0;
     const isComposite = form.getValues("isComposite");
+    const currency = form.getValues("currency") || "ARS";
     
     // Si es un producto compuesto, calculamos su costo basado en componentes
     if (isComposite && componentsList.length > 0) {
@@ -152,6 +159,14 @@ export default function ProductsPage() {
         // Actualizamos el campo de costo en el formulario
         form.setValue("cost", compositeCost);
       }
+    }
+    
+    // Aplicar descuento del proveedor al costo si existe
+    const supplierDiscount = form.getValues("supplierDiscount") || 0;
+    if (supplierDiscount > 0) {
+      cost = cost * (1 - (supplierDiscount / 100));
+      // Redondeo a 2 decimales del costo con descuento
+      cost = Math.round(cost * 100) / 100;
     }
     
     const ivaRate = form.getValues("iva") || 0;
@@ -168,6 +183,7 @@ export default function ProductsPage() {
     
     // Actualizar el formulario
     form.setValue("price", roundedPrice);
+    form.setValue("currency", currency);
   };
 
   // Form definition
@@ -186,6 +202,7 @@ export default function ProductsPage() {
       iva: 21,        // 21% por defecto
       shipping: 0,     // 0% por defecto
       profit: 30,      // 30% por defecto
+      supplierDiscount: 0, // 0% por defecto
       isRefrigerated: false,
       isBulk: false,
       isComposite: false,
@@ -199,6 +216,7 @@ export default function ProductsPage() {
       componentProductId: undefined,
       componentQuantity: 0,
       componentUnit: "unidad",
+      currency: "ARS",
     },
   });
   
@@ -366,7 +384,7 @@ export default function ProductsPage() {
       toast({ title: "Producto creado correctamente" });
       form.reset();
       setIsDialogOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/products"] });
     },
     onError: (error) => {
       toast({
@@ -380,17 +398,34 @@ export default function ProductsPage() {
   // Update product mutation
   const updateProductMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number, data: ProductFormValues }) => {
-      const res = await apiRequest("PUT", `/api/products/${id}`, data);
-      return await res.json();
+      console.log(`Enviando PUT a /api/products/${id} con datos:`, data);
+      
+      try {
+        const res = await apiRequest("PUT", `/api/products/${id}`, data);
+        console.log("Respuesta de actualización:", res.status, res.statusText);
+        
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error("Error en la respuesta:", errorText);
+          throw new Error(`Error al actualizar producto: ${res.status} ${res.statusText}`);
+        }
+        
+        return await res.json();
+      } catch (error) {
+        console.error("Error en mutación de actualización:", error);
+        throw error;
+      }
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("Producto actualizado exitosamente:", data);
       toast({ title: "Producto actualizado correctamente" });
       form.reset();
       setIsDialogOpen(false);
       setEditingProductId(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/products"] });
     },
     onError: (error) => {
+      console.error("Error en mutación de actualización:", error);
       toast({
         title: "Error al actualizar el producto",
         description: (error as Error).message,
@@ -407,7 +442,7 @@ export default function ProductsPage() {
     },
     onSuccess: () => {
       toast({ title: "Producto eliminado correctamente" });
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/products"] });
     },
     onError: (error) => {
       toast({
@@ -429,7 +464,10 @@ export default function ProductsPage() {
   
   // Form submission handler
   const onSubmit = (data: ProductFormValues) => {
+    console.log("Formulario enviado:", data);
+    
     if (editingProductId) {
+      console.log("Editando producto con ID:", editingProductId);
       updateProductMutation.mutate({ id: editingProductId, data });
     } else {
       createProductMutation.mutate(data);
@@ -440,29 +478,20 @@ export default function ProductsPage() {
   const handleEditProduct = (product: any) => {
     setEditingProductId(product.id);
     
-    // Inicializar las conversiones desde el producto
-    const productConversions = product.conversionRates 
-      ? (typeof product.conversionRates === 'string' 
-          ? JSON.parse(product.conversionRates) 
-          : product.conversionRates)
-      : [];
+    // Preparar listas para componentes y conversiones
+    const productComponents = product.components ? product.components : [];
+    setComponentsList(productComponents);
     
+    // Preparar conversiones
+    const productConversions = product.conversionRates ? product.conversionRates : [];
     setConversionRates(productConversions);
     
-    // Inicializar la lista de códigos de barras
+    // Preparar códigos de barras
     const productBarcodes = product.barcodes || [];
     setBarcodesList(productBarcodes);
     
-    // Inicializar la lista de componentes para productos compuestos
-    let productComponents: any[] = [];
-    if (product.isComposite && product.components) {
-      const components = typeof product.components === 'string'
-        ? JSON.parse(product.components)
-        : product.components;
-      
-      productComponents = components;
-      setComponentsList(components);
-    }
+    // Establecer pestaña activa
+    setActiveTab("general");
     
     // Format data for form
     form.reset({
@@ -475,6 +504,7 @@ export default function ProductsPage() {
       iva: product.iva || 21,
       shipping: product.shipping || 0,
       profit: product.profit || 30,
+      supplierDiscount: product.supplierDiscount || 0,
       stock: parseFloat(product.stock),
       stockAlert: product.stockAlert ? parseFloat(product.stockAlert) : 0,
       supplierId: product.supplierId,
@@ -491,6 +521,7 @@ export default function ProductsPage() {
       componentProductId: undefined,
       componentQuantity: 0,
       componentUnit: "unidad",
+      currency: product.currency || "ARS",
     });
     
     setIsDialogOpen(true);
@@ -519,6 +550,7 @@ export default function ProductsPage() {
       iva: 21,        // 21% por defecto
       shipping: 0,     // 0% por defecto
       profit: 30,      // 30% por defecto
+      supplierDiscount: 0, // 0% por defecto
       isRefrigerated: false,
       isBulk: false,
       isComposite: false,
@@ -532,6 +564,7 @@ export default function ProductsPage() {
       componentProductId: undefined,
       componentQuantity: 0,
       componentUnit: "unidad",
+      currency: "ARS",
     });
     setIsDialogOpen(true);
   };
@@ -673,33 +706,35 @@ export default function ProductsPage() {
           </DialogHeader>
           
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              
+            <form 
+              onSubmit={(e) => {
+                console.log("Evento onSubmit del formulario activado");
+                e.preventDefault();
+                form.handleSubmit(onSubmit)(e);
+              }} 
+              className="space-y-6"
+            >
               <Tabs defaultValue="general" value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="grid grid-cols-5 mb-4">
                   <TabsTrigger value="general" className="flex items-center gap-2">
                     <Package size={16} />
                     General
                   </TabsTrigger>
-                  <TabsTrigger value="attributes" className="flex items-center gap-2">
-                    <BarChart size={16} />
-                    Atributos
+                  <TabsTrigger value="barcodes" disabled={!form.getValues("name")}>
+                    Códigos de Barras
                   </TabsTrigger>
-                  <TabsTrigger value="barcodes" className="flex items-center gap-2">
-                    <BarChart size={16} />
-                    Códigos
-                  </TabsTrigger>
-                  <TabsTrigger value="conversions" className="flex items-center gap-2" disabled={!watchIsBulk}>
-                    <Scale size={16} />
-                    Conversiones
-                  </TabsTrigger>
-                  <TabsTrigger value="components" className="flex items-center gap-2" disabled={!form.watch("isComposite")}>
-                    <Package size={16} />
-                    Componentes
-                  </TabsTrigger>
+                  {watchIsBulk && (
+                    <TabsTrigger value="conversions">
+                      Conversiones
+                    </TabsTrigger>
+                  )}
+                  {!watchIsBulk && (
+                    <TabsTrigger value="advanced">
+                      Avanzado
+                    </TabsTrigger>
+                  )}
                 </TabsList>
                 
-                {/* Pestaña de Información General */}
                 <TabsContent value="general" className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-6">
@@ -1019,7 +1054,6 @@ export default function ProductsPage() {
                   </div>
                 </TabsContent>
                 
-                {/* Pestaña de Códigos de Barras */}
                 <TabsContent value="barcodes" className="space-y-6">
                   <div className="flex flex-col space-y-4">
                     <h3 className="text-lg font-medium">Códigos de Barras</h3>
@@ -1148,7 +1182,7 @@ export default function ProductsPage() {
                   </div>
                 </TabsContent>
                 
-                <TabsContent value="attributes" className="space-y-6">
+                <TabsContent value="advanced" className="space-y-6">
                   <div className="flex flex-col space-y-4">
                     <h3 className="text-lg font-medium">Atributos del Producto</h3>
                     <p className="text-sm text-muted-foreground">
@@ -1253,7 +1287,7 @@ export default function ProductsPage() {
                                     
                                     // Si estamos en la pestaña de componentes, cambiar a general
                                     if (activeTab === "components") {
-                                      setActiveTab("attributes");
+                                      setActiveTab("advanced");
                                     }
                                     
                                     toast({
@@ -1280,159 +1314,6 @@ export default function ProductsPage() {
                     </div>
                   </div>
                 </TabsContent>
-                
-                <TabsContent value="components" className="space-y-6">
-                  <div className="flex flex-col space-y-4">
-                    <h3 className="text-lg font-medium">Componentes del Producto</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Configure los productos que componen este combo o producto compuesto
-                    </p>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div className="md:col-span-2">
-                        <FormField
-                          control={form.control}
-                          name="componentProductId"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Producto</FormLabel>
-                              <Select 
-                                value={field.value?.toString()} 
-                                onValueChange={(value) => field.onChange(value !== "none" ? parseInt(value) : undefined)}
-                              >
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Seleccionar producto" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {products?.filter((p: any) => !p.isComposite && (!editingProductId || p.id !== editingProductId)).map((product: any) => (
-                                    <SelectItem key={product.id} value={product.id.toString()}>
-                                      {product.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      
-                      <FormField
-                        control={form.control}
-                        name="componentQuantity"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Cantidad</FormLabel>
-                            <FormControl>
-                              <Input 
-                                type="number" 
-                                step="0.01" 
-                                {...field} 
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      
-                      <FormField
-                        control={form.control}
-                        name="componentUnit"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Unidad</FormLabel>
-                            <Select 
-                              value={field.value} 
-                              onValueChange={field.onChange}
-                            >
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Seleccionar unidad" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="unidad">Unidad</SelectItem>
-                                <SelectItem value="kg">Kilogramo</SelectItem>
-                                <SelectItem value="g">Gramo</SelectItem>
-                                <SelectItem value="l">Litro</SelectItem>
-                                <SelectItem value="ml">Mililitro</SelectItem>
-                                <SelectItem value="m">Metro</SelectItem>
-                                <SelectItem value="cm">Centímetro</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      
-                      <div className="flex items-end">
-                        <Button
-                          type="button"
-                          onClick={addComponent}
-                          className="w-full"
-                        >
-                          <Plus className="mr-2 h-4 w-4" />
-                          Agregar
-                        </Button>
-                      </div>
-                    </div>
-                    
-                    {/* Lista de componentes agregados */}
-                    {componentsList.length > 0 && (
-                      <div className="mt-4 border rounded-md p-4">
-                        <h4 className="text-sm font-medium mb-2">Componentes agregados:</h4>
-                        <div className="space-y-2">
-                          {componentsList.map((component, index) => (
-                            <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
-                              <div className="flex flex-col">
-                                <span className="font-medium">
-                                  {component.productName} - {component.quantity} {component.unit}
-                                </span>
-                                {(() => {
-                                  // Buscar el producto componente para obtener su costo
-                                  const componentProduct = products?.find((p: any) => p.id === component.productId);
-                                  if (componentProduct && componentProduct.cost) {
-                                    const unitCost = parseFloat(componentProduct.cost);
-                                    const totalCost = unitCost * parseFloat(component.quantity);
-                                    return (
-                                      <span className="text-xs text-muted-foreground">
-                                        Costo: ${unitCost.toFixed(2)} x {component.quantity} = ${totalCost.toFixed(2)}
-                                      </span>
-                                    );
-                                  }
-                                  return null;
-                                })()}
-                              </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeComponent(index)}
-                              >
-                                <X size={16} className="text-destructive" />
-                              </Button>
-                            </div>
-                          ))}
-                          
-                          {/* Resumen del costo total */}
-                          <div className="mt-2 pt-2 border-t border-border">
-                            <div className="flex items-center justify-between">
-                              <span className="font-medium">Costo Total:</span>
-                              <span className="font-bold text-primary">
-                                ${calculateCompositeCost()?.toFixed(2) || "0.00"}
-                              </span>
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              El costo total se calcula automáticamente sumando el costo de todos los componentes.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </TabsContent>
               </Tabs>
               
               <DialogFooter>
@@ -1445,6 +1326,10 @@ export default function ProductsPage() {
                 </Button>
                 <Button 
                   type="submit"
+                  onClick={(e) => {
+                    console.log("Botón de actualizar clickeado");
+                    // No es necesario llamar a form.handleSubmit aquí porque el type="submit" ya activa el evento onSubmit del formulario
+                  }}
                   disabled={createProductMutation.isPending || updateProductMutation.isPending}
                 >
                   {(createProductMutation.isPending || updateProductMutation.isPending) 

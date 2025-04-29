@@ -15,11 +15,14 @@ import {
   DollarSign,
   ClipboardList,
   FileEdit,
-  MapPin
+  MapPin,
+  ShoppingBag,
+  X,
+  Wallet
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsMobile, useBreakpoint } from "@/hooks/use-mobile";
 
 interface SidebarLinkProps {
   href: string;
@@ -54,19 +57,20 @@ export default function Sidebar() {
   const [location] = useLocation();
   const { user, logoutMutation } = useAuth();
   const isMobile = useIsMobile();
+  const isTablet = useBreakpoint('lg');
   const [isOpen, setIsOpen] = useState(false);
 
-  // Close sidebar on navigation in mobile
+  // Close sidebar on navigation in mobile or tablet
   useEffect(() => {
-    if (isMobile) {
+    if (isMobile || isTablet) {
       setIsOpen(false);
     } else {
       setIsOpen(true);
     }
-  }, [location, isMobile]);
+  }, [location, isMobile, isTablet]);
 
   const closeSidebar = () => {
-    if (isMobile) {
+    if (isMobile || isTablet) {
       setIsOpen(false);
     }
   };
@@ -80,7 +84,7 @@ export default function Sidebar() {
   return (
     <>
       {/* Mobile overlay */}
-      {isMobile && isOpen && (
+      {(isMobile || isTablet) && isOpen && (
         <div 
           className="fixed inset-0 bg-black/30 z-40"
           onClick={() => setIsOpen(false)}
@@ -89,13 +93,19 @@ export default function Sidebar() {
       
       <div 
         className={cn(
-          "bg-white shadow-md h-full flex-shrink-0 z-50",
-          isMobile ? "fixed w-64" : "w-64",
-          isMobile && !isOpen && "hidden"
+          "bg-white shadow-md h-full flex-shrink-0 transition-all duration-300 z-50",
+          (isMobile || isTablet) ? "fixed w-72" : "w-64",
+          (isMobile || isTablet) && !isOpen && "translate-x-[-100%]",
+          (isMobile || isTablet) && isOpen && "translate-x-0"
         )}
       >
-        <div className="p-4 border-b border-slate-200">
+        <div className="p-4 border-b border-slate-200 flex justify-between items-center">
           <h1 className="font-semibold text-xl text-primary">Punto Pastelero</h1>
+          {(isMobile || isTablet) && (
+            <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)} className="lg:hidden">
+              <X className="h-5 w-5" />
+            </Button>
+          )}
         </div>
         
         {/* User info */}
@@ -103,14 +113,14 @@ export default function Sidebar() {
           <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center">
             <Users className="h-5 w-5" />
           </div>
-          <div>
-            <p className="font-medium">{user.fullName}</p>
-            <p className="text-xs text-slate-500 capitalize">{user.role}</p>
+          <div className="overflow-hidden">
+            <p className="font-medium truncate">{user.fullName}</p>
+            <p className="text-xs text-slate-500 capitalize truncate">{user.role}</p>
           </div>
         </div>
         
         {/* Navigation */}
-        <nav className="py-2">
+        <nav className="py-2 overflow-y-auto max-h-[calc(100vh-200px)]">
           <div className="px-4 py-2 text-xs font-semibold text-slate-500">PRINCIPAL</div>
           <SidebarLink href="/" icon={<Home className="h-4 w-4" />} currentPath={location} onClick={closeSidebar}>
             Panel Principal
@@ -126,6 +136,9 @@ export default function Sidebar() {
           <SidebarLink href="/suppliers" icon={<Truck className="h-4 w-4" />} currentPath={location} onClick={closeSidebar}>
             Proveedores
           </SidebarLink>
+          <SidebarLink href="/purchases" icon={<ShoppingBag className="h-4 w-4" />} currentPath={location} onClick={closeSidebar}>
+            Compras
+          </SidebarLink>
           
           <div className="px-4 py-2 text-xs font-semibold text-slate-500 mt-2">CLIENTES</div>
           <SidebarLink href="/customers" icon={<Users className="h-4 w-4" />} currentPath={location} onClick={closeSidebar}>
@@ -133,6 +146,9 @@ export default function Sidebar() {
           </SidebarLink>
           <SidebarLink href="/accounts" icon={<CreditCard className="h-4 w-4" />} currentPath={location} onClick={closeSidebar}>
             Cuentas Corrientes
+          </SidebarLink>
+          <SidebarLink href="/bank-accounts" icon={<Wallet className="h-4 w-4" />} currentPath={location} onClick={closeSidebar}>
+            Cuentas Bancarias
           </SidebarLink>
           
           <div className="px-4 py-2 text-xs font-semibold text-slate-500 mt-2">DOCUMENTOS</div>
@@ -177,13 +193,14 @@ export default function Sidebar() {
       </div>
       
       {/* Mobile toggle button */}
-      {isMobile && (
+      {(isMobile || isTablet) && (
         <button 
-          className="fixed bottom-4 right-4 p-3 bg-primary text-white rounded-full shadow-lg z-50"
+          className="fixed bottom-4 right-4 p-3 bg-primary text-white rounded-full shadow-lg z-50 flex items-center justify-center"
           onClick={() => setIsOpen(!isOpen)}
+          aria-label="Abrir menú"
         >
           {isOpen ? (
-            <span className="h-6 w-6">×</span>
+            <X className="h-5 w-5" />
           ) : (
             <ShoppingCart className="h-5 w-5" />
           )}

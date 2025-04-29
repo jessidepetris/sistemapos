@@ -50,11 +50,12 @@ export function CategoryManager({ onSelectCategory, selectedCategoryId }: Catego
     description: "",
     imageUrl: "",
     active: true,
-    displayOrder: 0
+    displayOrder: 0,
+    slug: ""
   });
   
   // Fetch all categories
-  const { data: categories, isLoading } = useQuery({
+  const { data: categories = [], isLoading } = useQuery<Category[]>({
     queryKey: ["/api/product-categories"],
     queryFn: undefined, // Using the default fetcher
   });
@@ -62,7 +63,12 @@ export function CategoryManager({ onSelectCategory, selectedCategoryId }: Catego
   // Create category mutation
   const createCategoryMutation = useMutation({
     mutationFn: async (data: typeof formData & { parentId: number | null }) => {
+      console.log('Enviando datos al servidor:', data);
       const res = await apiRequest("POST", "/api/product-categories", data);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || errorData.details?.slug || 'Error al crear la categoría');
+      }
       return await res.json();
     },
     onSuccess: () => {
@@ -72,9 +78,10 @@ export function CategoryManager({ onSelectCategory, selectedCategoryId }: Catego
       queryClient.invalidateQueries({ queryKey: ["/api/product-categories"] });
     },
     onError: (error) => {
+      console.error('Error en la mutación:', error);
       toast({
         title: "Error al crear la categoría",
-        description: (error as Error).message,
+        description: error instanceof Error ? error.message : 'Error desconocido',
         variant: "destructive",
       });
     }
@@ -124,7 +131,7 @@ export function CategoryManager({ onSelectCategory, selectedCategoryId }: Catego
   
   // Construir árbol de categorías
   useEffect(() => {
-    if (categories && Array.isArray(categories)) {
+    if (Array.isArray(categories)) {
       // Ordenar categorías por displayOrder si está disponible, o por nombre
       const sortedCategories = [...categories].sort((a, b) => {
         if (a.displayOrder !== null && b.displayOrder !== null) {
@@ -155,7 +162,8 @@ export function CategoryManager({ onSelectCategory, selectedCategoryId }: Catego
       description: "",
       imageUrl: "",
       active: true,
-      displayOrder: 0
+      displayOrder: 0,
+      slug: ""
     });
     setCurrentParentId(null);
   };
@@ -173,7 +181,8 @@ export function CategoryManager({ onSelectCategory, selectedCategoryId }: Catego
       description: category.description || "",
       imageUrl: category.imageUrl || "",
       active: category.active === null ? true : category.active,
-      displayOrder: category.displayOrder || 0
+      displayOrder: category.displayOrder || 0,
+      slug: ""
     });
     setCurrentParentId(category.parentId);
     setIsEditDialogOpen(true);
@@ -185,10 +194,32 @@ export function CategoryManager({ onSelectCategory, selectedCategoryId }: Catego
   };
   
   const handleCreateCategory = () => {
-    createCategoryMutation.mutate({
+    if (!formData.name) {
+      toast({
+        title: "Error",
+        description: "El nombre es requerido",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Generar slug a partir del nombre si no se especifica
+    const slug = formData.slug || formData.name.toLowerCase()
+      .replace(/[áéíóúñü]/g, c => ({ á: 'a', é: 'e', í: 'i', ó: 'o', ú: 'u', ñ: 'n', ü: 'u' })[c] || c)
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    // Crear objeto de datos con el slug generado
+    const categoryData = {
       ...formData,
+      slug,
       parentId: currentParentId
-    });
+    };
+
+    // Mostrar los datos que se van a enviar
+    console.log('Datos de la categoría a crear:', categoryData);
+
+    createCategoryMutation.mutate(categoryData);
   };
   
   const handleUpdateCategory = () => {
@@ -381,7 +412,7 @@ export function CategoryManager({ onSelectCategory, selectedCategoryId }: Catego
             <DialogTitle>Agregar nueva categoría</DialogTitle>
             <DialogDescription>
               {currentParentId 
-                ? `Crear subcategoría en ${categories?.find((c: Category) => c.id === currentParentId)?.name || "categoría padre"}`
+                ? `Crear subcategoría en ${categories.find((c: Category) => c.id === currentParentId)?.name || "categoría padre"}`
                 : "Crear categoría principal"
               }
             </DialogDescription>
@@ -394,7 +425,16 @@ export function CategoryManager({ onSelectCategory, selectedCategoryId }: Catego
                 id="name" 
                 value={formData.name} 
                 onChange={(e) => setFormData({...formData, name: e.target.value})}
-                placeholder="Nombre de la categoría"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="slug">Slug (URL amigable)</Label>
+              <Input 
+                id="slug" 
+                value={formData.slug} 
+                onChange={(e) => setFormData({...formData, slug: e.target.value})}
+                placeholder="Se generará automáticamente"
               />
             </div>
             
@@ -522,10 +562,10 @@ export function CategoryManager({ onSelectCategory, selectedCategoryId }: Catego
                   id="edit-parent"
                   className="w-full p-2 border rounded-md"
                   value={currentParentId === null ? "" : currentParentId}
-                  onChange={(e) => setCurrentParentId(e.target.value === "" ? null : parseInt(e.target.value))}
+                  onChange={(e) => setCurrentParentId(e.target.value === "" ? null : Number(e.target.value))}
                 >
                   <option value="">Sin categoría padre</option>
-                  {categories?.filter((c: Category) => c.id !== currentCategory?.id)
+                  {categories.filter((c: Category) => c.id !== currentCategory?.id)
                     .map((c: Category) => (
                       <option key={c.id} value={c.id}>
                         {c.name}

@@ -10,6 +10,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Package, Truck, CheckCircle, AlertCircle, Clock, XCircle } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { OrderPDF } from "@/components/printing/OrderPDF";
 
 // Interfaces para tipar los datos
 interface OrderItem {
@@ -24,30 +25,31 @@ interface OrderItem {
 }
 
 interface CustomerData {
-  name: string;
-  email: string;
-  phone: string;
-  address: string;
-  city: string;
-  province: string;
-  customerId?: number;
+  name?: string;
+  address?: string;
+  city?: string;
+  province?: string;
+  phone?: string;
+  email?: string;
   notes?: string;
 }
 
 interface Order {
   id: number;
-  timestamp: Date | string;
   customerId: number | null;
+  routeId: number | null;
   userId: number;
-  total: string;
   status: string;
+  timestamp: string | Date;
+  deliveryDate: string | Date | null;
   notes: string | null;
-  source: string | null;
-  deliveryDate: Date | string | null;
-  isWebOrder: boolean | null;
-  customerData?: string; // JSON string
+  total: string;
+  route?: { id: number; name: string } | null;
+  customer?: { id: number; name: string } | null;
   items: OrderItem[];
-  paymentMethod?: string;
+  deliveryMethod: string;
+  paymentMethod: string;
+  customerData?: string; // JSON string
   parsedCustomerData?: CustomerData;
 }
 
@@ -106,10 +108,14 @@ function OrderDetails({ order }: { order: Order }) {
   };
 
   // Parsear datos de cliente si es necesario
-  const customerData = order.parsedCustomerData || {};
+  const customerData = order.parsedCustomerData || {} as CustomerData;
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <OrderPDF order={order} showPrintButton={true} />
+      </div>
+      
       {/* Información del pedido */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -143,17 +149,21 @@ function OrderDetails({ order }: { order: Order }) {
       </div>
 
       {/* Dirección de entrega */}
-      <div>
-        <h4 className="text-sm font-medium mb-2">Dirección de Entrega</h4>
-        <p className="text-sm">{customerData.name}</p>
-        <p className="text-sm">{customerData.address}</p>
-        <p className="text-sm">{customerData.city}, {customerData.province}</p>
-        <p className="text-sm">{customerData.phone}</p>
-        <p className="text-sm">{customerData.email}</p>
-      </div>
+      {(customerData.name || customerData.address) && (
+        <div>
+          <h4 className="text-sm font-medium mb-2">Dirección de Entrega</h4>
+          {customerData.name && <p className="text-sm">{customerData.name}</p>}
+          {customerData.address && <p className="text-sm">{customerData.address}</p>}
+          {customerData.city && customerData.province && (
+            <p className="text-sm">{customerData.city}, {customerData.province}</p>
+          )}
+          {customerData.phone && <p className="text-sm">{customerData.phone}</p>}
+          {customerData.email && <p className="text-sm">{customerData.email}</p>}
+        </div>
+      )}
 
       {/* Notas */}
-      {(order.notes || customerData.notes) && (
+      {(order.notes || (customerData.notes && customerData.notes.length > 0)) && (
         <div>
           <h4 className="text-sm font-medium mb-2">Notas</h4>
           <p className="text-sm">{order.notes || customerData.notes}</p>

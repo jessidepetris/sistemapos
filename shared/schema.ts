@@ -30,6 +30,8 @@ export const suppliers = pgTable("suppliers", {
   notes: text("notes"),
   // Campo para la fecha de última actualización de precios
   lastPriceUpdate: timestamp("last_price_update"),
+  // Campo para el porcentaje de descuento que ofrece el proveedor
+  discount: numeric("discount", { precision: 5, scale: 2 }).default("0"),
 });
 
 export const insertSupplierSchema = createInsertSchema(suppliers).pick({
@@ -40,6 +42,7 @@ export const insertSupplierSchema = createInsertSchema(suppliers).pick({
   address: true,
   notes: true,
   lastPriceUpdate: true,
+  discount: true,
 });
 
 // Customers table
@@ -78,8 +81,10 @@ export const products = pgTable("products", {
   baseUnit: text("base_unit").notNull(),
   barcodes: text("barcodes").array(),
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+  wholesalePrice: numeric("wholesale_price", { precision: 10, scale: 2 }),
   cost: numeric("cost", { precision: 10, scale: 2 }),
   stock: numeric("stock", { precision: 10, scale: 2 }).notNull().default("0"),
+  reservedStock: numeric("reserved_stock", { precision: 10, scale: 2 }).notNull().default("0"),
   stockAlert: numeric("stock_alert", { precision: 10, scale: 2 }),
   supplierId: integer("supplier_id").references(() => suppliers.id),
   // Código de proveedor para facilitar la actualización de precios
@@ -100,9 +105,13 @@ export const products = pgTable("products", {
   // Valores relacionados con el cálculo de precios
   iva: numeric("iva", { precision: 5, scale: 2 }).default("21"),
   shipping: numeric("shipping", { precision: 5, scale: 2 }).default("0"),
-  profit: numeric("profit", { precision: 5, scale: 2 }).default("30"),
+  profit: numeric("profit", { precision: 5, scale: 2 }).default("55"),
+  wholesaleProfit: numeric("wholesale_profit", { precision: 5, scale: 2 }).default("35"),
   // Componentes para productos compuestos (almacenados como JSON)
   components: json("components"),
+  // Fecha de última actualización del producto
+  lastUpdated: timestamp("last_updated").defaultNow(),
+  currency: text("currency").notNull().default("ARS"), // ARS o USD
 });
 
 export const insertProductSchema = createInsertSchema(products).pick({
@@ -111,6 +120,7 @@ export const insertProductSchema = createInsertSchema(products).pick({
   baseUnit: true,
   barcodes: true,
   price: true,
+  wholesalePrice: true,
   cost: true,
   stock: true,
   stockAlert: true,
@@ -127,7 +137,9 @@ export const insertProductSchema = createInsertSchema(products).pick({
   iva: true,
   shipping: true,
   profit: true,
+  wholesaleProfit: true,
   components: true,
+  currency: true,
 });
 
 // Accounts table (for customer current accounts)
@@ -137,12 +149,14 @@ export const accounts = pgTable("accounts", {
   balance: numeric("balance", { precision: 10, scale: 2 }).notNull().default("0"),
   creditLimit: numeric("credit_limit", { precision: 10, scale: 2 }),
   lastUpdated: timestamp("last_updated").defaultNow(),
+  currency: text("currency").notNull().default("ARS"), // ARS o USD
 });
 
 export const insertAccountSchema = createInsertSchema(accounts).pick({
   customerId: true,
   balance: true,
   creditLimit: true,
+  currency: true,
 });
 
 // Sales table
@@ -152,6 +166,11 @@ export const sales = pgTable("sales", {
   customerId: integer("customer_id").references(() => customers.id),
   userId: integer("user_id").notNull().references(() => users.id),
   total: numeric("total", { precision: 10, scale: 2 }).notNull(),
+  subtotal: numeric("subtotal", { precision: 10, scale: 2 }),
+  discount: numeric("discount", { precision: 10, scale: 2 }),
+  surcharge: numeric("surcharge", { precision: 10, scale: 2 }),
+  discountPercent: numeric("discount_percent", { precision: 5, scale: 2 }),
+  surchargePercent: numeric("surcharge_percent", { precision: 5, scale: 2 }),
   paymentMethod: text("payment_method").notNull(),
   paymentDetails: text("payment_details"),  // JSON stringificado con detalles del pago
   documentType: text("document_type").default("remito"),
@@ -159,12 +178,18 @@ export const sales = pgTable("sales", {
   status: text("status").notNull().default("completed"),
   notes: text("notes"),
   printOptions: json("print_options"), // Opciones para impresión y envío
+  currency: text("currency").notNull().default("ARS"), // ARS o USD
 });
 
 export const insertSaleSchema = createInsertSchema(sales).pick({
   customerId: true,
   userId: true,
   total: true,
+  subtotal: true,
+  discount: true,
+  surcharge: true,
+  discountPercent: true,
+  surchargePercent: true,
   paymentMethod: true,
   paymentDetails: true,
   documentType: true,
@@ -172,6 +197,7 @@ export const insertSaleSchema = createInsertSchema(sales).pick({
   status: true,
   notes: true,
   printOptions: true,
+  currency: true,
 });
 
 // Sale items table
@@ -179,6 +205,7 @@ export const saleItems = pgTable("sale_items", {
   id: serial("id").primaryKey(),
   saleId: integer("sale_id").notNull().references(() => sales.id),
   productId: integer("product_id").notNull().references(() => products.id),
+  name: text("name"),
   quantity: numeric("quantity", { precision: 10, scale: 2 }).notNull(),
   unit: text("unit").notNull(),
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
@@ -189,11 +216,13 @@ export const saleItems = pgTable("sale_items", {
   conversionFactor: numeric("conversion_factor", { precision: 10, scale: 3 }).default("1"),
   conversionUnit: text("conversion_unit"),
   conversionBarcode: text("conversion_barcode"),
+  currency: text("currency").notNull().default("ARS"), // ARS o USD
 });
 
 export const insertSaleItemSchema = createInsertSchema(saleItems).pick({
   saleId: true,
   productId: true,
+  name: true,
   quantity: true,
   unit: true,
   price: true,
@@ -203,6 +232,7 @@ export const insertSaleItemSchema = createInsertSchema(saleItems).pick({
   conversionFactor: true,
   conversionUnit: true,
   conversionBarcode: true,
+  currency: true,
 });
 
 // Orders table (for customer orders)
@@ -217,6 +247,7 @@ export const orders = pgTable("orders", {
   deliveryDate: timestamp("delivery_date"),
   isWebOrder: boolean("is_web_order").default(false),
   source: text("source").default("pos"), // Valores posibles: 'pos', 'web', 'phone', etc.
+  currency: text("currency").notNull().default("ARS"), // ARS o USD
 });
 
 export const insertOrderSchema = createInsertSchema(orders).pick({
@@ -228,6 +259,7 @@ export const insertOrderSchema = createInsertSchema(orders).pick({
   deliveryDate: true,
   isWebOrder: true,
   source: true,
+  currency: true,
 });
 
 // Order items table
@@ -238,6 +270,7 @@ export const orderItems = pgTable("order_items", {
   quantity: numeric("quantity", { precision: 10, scale: 2 }).notNull(),
   unit: text("unit").notNull(),
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+  currency: text("currency").notNull().default("ARS"), // ARS o USD
   total: numeric("total", { precision: 10, scale: 2 }).notNull(),
 });
 
@@ -248,6 +281,7 @@ export const insertOrderItemSchema = createInsertSchema(orderItems).pick({
   unit: true,
   price: true,
   total: true,
+  currency: true,
 });
 
 // Credit/Debit Notes table
@@ -261,6 +295,7 @@ export const notes = pgTable("notes", {
   amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
   reason: text("reason").notNull(),
   notes: text("notes"),
+  currency: text("currency").notNull().default("ARS"), // ARS o USD
 });
 
 export const insertNoteSchema = createInsertSchema(notes).pick({
@@ -271,6 +306,7 @@ export const insertNoteSchema = createInsertSchema(notes).pick({
   amount: true,
   reason: true,
   notes: true,
+  currency: true,
 });
 
 // Account transactions table
@@ -279,11 +315,13 @@ export const accountTransactions = pgTable("account_transactions", {
   timestamp: timestamp("timestamp").defaultNow(),
   accountId: integer("account_id").notNull().references(() => accounts.id),
   amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: text("currency").notNull().default("ARS"), // ARS o USD
   type: text("type").notNull(), // 'debit', 'credit', 'payment'
   relatedSaleId: integer("related_sale_id").references(() => sales.id),
   relatedNoteId: integer("related_note_id").references(() => notes.id),
   description: text("description").notNull(),
   userId: integer("user_id").notNull().references(() => users.id),
+  paymentMethod: text("payment_method"), // 'cash', 'transfer', 'credit_card', 'debit_card', 'check', 'qr'
 });
 
 export const insertAccountTransactionSchema = createInsertSchema(accountTransactions)
@@ -295,9 +333,12 @@ export const insertAccountTransactionSchema = createInsertSchema(accountTransact
     relatedNoteId: true,
     description: true,
     userId: true,
+    paymentMethod: true,
+    currency: true,
   })
   .extend({
     userId: z.coerce.number().optional(),
+    paymentMethod: z.enum(["cash", "transfer", "credit_card", "debit_card", "check", "qr"]).optional(),
   });
 
 // Tabla para los componentes de productos compuestos (combos)
@@ -450,6 +491,7 @@ export const deliveries = pgTable("deliveries", {
   requestSignature: boolean("request_signature").default(false),
   signatureUrl: text("signature_url"), // URL a la imagen de la firma
   totalWeight: numeric("total_weight", { precision: 10, scale: 2 }), // Peso total en kg
+  currency: text("currency").notNull().default("ARS"), // ARS o USD
 });
 
 export const insertDeliverySchema = createInsertSchema(deliveries).pick({
@@ -471,6 +513,7 @@ export const insertDeliverySchema = createInsertSchema(deliveries).pick({
   requiresRefrigeration: true,
   requestSignature: true,
   totalWeight: true,
+  currency: true,
 });
 
 // Tabla para el registro de eventos de entregas
@@ -608,9 +651,14 @@ export const productCategories = pgTable("product_categories", {
   name: text("name").notNull(),
   description: text("description"),
   imageUrl: text("image_url"),
-  parentId: integer("parent_id").references(() => productCategories.id),
+  parentId: integer("parent_id"), // Referencia simple sin restricción de clave foránea
   displayOrder: integer("display_order").default(0),
   active: boolean("active").default(true),
+  slug: text("slug").notNull().unique(),
+  metaTitle: text("meta_title"),
+  metaDescription: text("meta_description"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const insertProductCategorySchema = createInsertSchema(productCategories).pick({
@@ -620,18 +668,38 @@ export const insertProductCategorySchema = createInsertSchema(productCategories)
   parentId: true,
   displayOrder: true,
   active: true,
+  slug: true,
+  metaTitle: true,
+  metaDescription: true,
+}).extend({
+  slug: z.string().min(1, "El slug es requerido"),
+  name: z.string().min(1, "El nombre es requerido"),
+  description: z.string().optional(),
+  imageUrl: z.string().optional(),
+  parentId: z.number().optional(),
+  displayOrder: z.number().optional(),
+  active: z.boolean().optional(),
+  metaTitle: z.string().optional(),
+  metaDescription: z.string().optional()
 });
 
-// Relación entre productos y categorías
+// Relación entre productos y categorías (muchos a muchos)
 export const productCategoryRelations = pgTable("product_category_relations", {
   id: serial("id").primaryKey(),
   productId: integer("product_id").notNull().references(() => products.id),
   categoryId: integer("category_id").notNull().references(() => productCategories.id),
-});
+  isPrimary: boolean("is_primary").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  // Índice único para evitar duplicados
+  unq: uniqueIndex().on(table.productId, table.categoryId),
+}));
 
 export const insertProductCategoryRelationSchema = createInsertSchema(productCategoryRelations).pick({
   productId: true,
   categoryId: true,
+  isPrimary: true,
 });
 
 // Catálogo Web - Carritos de compra
@@ -746,3 +814,57 @@ export type InsertProductReview = z.infer<typeof insertProductReviewSchema>;
 
 export type WebOrder = typeof webOrders.$inferSelect;
 export type InsertWebOrder = z.infer<typeof insertWebOrderSchema>;
+
+// Purchases table
+export const purchases = pgTable("purchases", {
+  id: serial("id").primaryKey(),
+  timestamp: timestamp("timestamp").defaultNow(),
+  supplierId: integer("supplier_id").notNull().references(() => suppliers.id),
+  userId: integer("user_id").notNull().references(() => users.id),
+  total: numeric("total", { precision: 10, scale: 2 }).notNull(),
+  paymentMethod: text("payment_method").notNull(),
+  paymentDetails: text("payment_details"),  // JSON stringificado con detalles del pago
+  documentType: text("document_type").default("remito"),
+  invoiceNumber: text("invoice_number"),
+  status: text("status").notNull().default("completed"),
+  notes: text("notes"),
+});
+
+// Purchase items table
+export const purchaseItems = pgTable("purchase_items", {
+  id: serial("id").primaryKey(),
+  purchaseId: integer("purchase_id").notNull().references(() => purchases.id),
+  productId: integer("product_id").notNull().references(() => products.id),
+  quantity: numeric("quantity", { precision: 10, scale: 2 }).notNull(),
+  unit: text("unit").notNull(),
+  cost: numeric("cost", { precision: 10, scale: 2 }).notNull(),
+  total: numeric("total", { precision: 10, scale: 2 }).notNull(),
+  // Campos para tracking de conversiones
+  isConversion: boolean("is_conversion").default(false),
+  conversionFactor: numeric("conversion_factor", { precision: 10, scale: 3 }).default("1"),
+  conversionUnit: text("conversion_unit"),
+  conversionBarcode: text("conversion_barcode"),
+});
+
+// Bank accounts table
+export const bankAccounts = pgTable("bank_accounts", {
+  id: serial("id").primaryKey(),
+  bankName: text("bank_name").notNull(),
+  accountNumber: text("account_number").notNull(),
+  accountType: text("account_type").notNull(), // 'savings', 'current'
+  alias: text("alias").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertBankAccountSchema = createInsertSchema(bankAccounts).pick({
+  bankName: true,
+  accountNumber: true,
+  accountType: true,
+  alias: true,
+  isActive: true,
+});
+
+export type BankAccount = typeof bankAccounts.$inferSelect;
+export type InsertBankAccount = z.infer<typeof insertBankAccountSchema>;

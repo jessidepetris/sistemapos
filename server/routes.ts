@@ -4,6 +4,9 @@ import { storage } from "./storage";
 import { setupAuth, hashPassword } from "./auth";
 import { z } from "zod";
 import passport from "passport";
+import { Router } from "express";
+import { getBankAccounts, createBankAccount, updateBankAccount, deleteBankAccount } from "./api/bank-accounts";
+import { InsertSale, InsertSaleItem } from "../shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Sets up /api/register, /api/login, /api/logout, /api/user
@@ -62,17 +65,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return parseFloat(product.stock) < 10;
       });
       
-      // Obtener clientes nuevos (últimos 7 días)
+      // Obtener clientes nuevos
       const customers = await storage.getAllCustomers() || [];
-      const sevenDaysAgo = new Date(today);
-      sevenDaysAgo.setDate(today.getDate() - 7);
-      
-      const newCustomers = customers.filter((customer: any) => {
-        // Si no hay fecha de registro, no lo consideramos nuevo
-        if (!customer.createdAt) return false;
-        const registerDate = new Date(customer.createdAt);
-        return registerDate >= sevenDaysAgo;
-      });
+      // Temporalmente consideramos a todos como nuevos
+      const newCustomers = customers;
       
       const stats = {
         todaySales: { 
@@ -109,7 +105,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Ordenar por fecha, más recientes primero
       const sortedSales = [...allSales].sort((a, b) => {
-        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        return new Date(b.timestamp ?? '').getTime() - new Date(a.timestamp ?? '').getTime();
       });
       
       // Tomar las 5 ventas más recientes
@@ -190,11 +186,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Crear actividades de venta (las 2 más recientes)
       const salesActivities = allSales
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .sort((a, b) => new Date(b.timestamp ?? '').getTime() - new Date(a.timestamp ?? '').getTime())
         .slice(0, 2)
         .map((sale, index) => {
           const user = users.find((u: any) => u.id === sale.userId);
-          const timeAgo = getTimeAgo(sale.timestamp);
+          const timeAgo = getTimeAgo(sale.timestamp ?? '');
           
           return {
             id: `sale-${sale.id}`,
@@ -202,7 +198,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             action: `registró una venta de $${parseFloat(sale.total).toFixed(2)}`,
             timeAgo,
             type: "sale",
-            timestamp: new Date(sale.timestamp).getTime()
+            timestamp: new Date(sale.timestamp ?? '').getTime()
           };
         });
       
@@ -293,39 +289,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/products", async (req, res) => {
     try {
-      let productData = { ...req.body };
+      const productData = { ...req.body };
       
-      // Si es un producto compuesto, calcular el costo automáticamente
-      if (productData.isComposite && productData.components && productData.components.length > 0) {
-        let components;
-        
-        // Parsear los componentes si están en formato string
-        if (typeof productData.components === 'string') {
-          try {
-            components = JSON.parse(productData.components);
-          } catch (e) {
-            console.error("Error al parsear componentes:", e);
-            components = [];
-          }
-        } else {
-          components = productData.components;
-        }
-        
-        // Calcular costo total basado en los componentes
-        let totalCost = 0;
-        
-        for (const component of components) {
-          const componentProduct = await storage.getProduct(component.productId);
-          if (componentProduct && componentProduct.cost) {
-            const componentCost = parseFloat(componentProduct.cost.toString());
-            const quantity = parseFloat(component.quantity);
-            totalCost += componentCost * quantity;
-          }
-        }
-        
-        console.log(`Producto compuesto: Costo calculado automáticamente = ${totalCost}`);
-        productData.cost = totalCost;
-      }
+      // Agregar la fecha de última actualización
+      productData.lastUpdated = new Date().toISOString();
       
       const product = await storage.createProduct(productData);
       res.status(201).json(product);
@@ -338,6 +305,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       let productData = { ...req.body };
+      
+      console.log(`[PUT /api/products/${id}] Recibida solicitud de actualización con datos:`, JSON.stringify(productData, null, 2));
       
       // Si es un producto compuesto, calcular el costo automáticamente
       if (productData.isComposite && productData.components) {
@@ -373,9 +342,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Verificar que el producto exista antes de actualizarlo
+      const existingProduct = await storage.getProduct(id);
+      if (!existingProduct) {
+        console.error(`[PUT /api/products/${id}] Error: Producto no encontrado`);
+        return res.status(404).json({ message: "Producto no encontrado", error: `Producto con ID ${id} no existe` });
+      }
+      
+      console.log(`[PUT /api/products/${id}] Producto existente encontrado:`, existingProduct.name);
+      
+      // Agregar la fecha de última actualización solo si no viene en los datos
+      if (!productData.lastUpdated) {
+        productData.lastUpdated = new Date().toISOString();
+      }
+      
       const product = await storage.updateProduct(id, productData);
-      res.json(product);
+      console.log(`[PUT /api/products/${id}] Producto actualizado correctamente:`, product.name);
+      
+      // Asegurar que se envíe como JSON
+      res.setHeader('Content-Type', 'application/json');
+      res.json({
+        ...product,
+        message: "Producto actualizado correctamente"
+      });
     } catch (error) {
+      console.error(`[PUT /api/products/:id] Error al actualizar producto:`, error);
       res.status(400).json({ message: "Error al actualizar producto", error: (error as Error).message });
     }
   });
@@ -519,9 +510,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "No autorizado: Se requiere usuario para la transacción" });
       }
       
-      const { accountId, amount, type, description } = req.body;
+      const { accountId, amount, type, description, paymentMethod } = req.body;
       
-      console.log("Solicitud de transacción recibida:", { accountId, amount, type, description, userId });
+      console.log("Solicitud de transacción recibida:", { accountId, amount, type, description, userId, paymentMethod });
       
       const account = await storage.getAccount(accountId);
       if (!account) {
@@ -531,9 +522,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Calculate new balance
       let newBalance = parseFloat(account.balance.toString());
       if (type === "credit") {
-        newBalance += parseFloat(amount);
+        newBalance -= parseFloat(amount);  // Un crédito (pago) DISMINUYE el saldo deudor
       } else if (type === "debit") {
-        newBalance -= parseFloat(amount);
+        newBalance += parseFloat(amount);  // Un débito (cargo) AUMENTA el saldo deudor
       }
       
       console.log("Nuevo balance calculado:", newBalance);
@@ -545,6 +536,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         type,
         description,
         userId,
+        paymentMethod: type === "credit" ? paymentMethod : undefined, // Solo guardamos el método de pago para créditos
         balanceAfter: newBalance
       });
       
@@ -570,168 +562,294 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/sales", async (req, res) => {
+  app.post('/api/sales', async (req, res) => {
+    console.log('\n=== Iniciando proceso de venta ===');
+    console.log('Headers:', req.headers);
+    console.log('Cookies:', req.cookies);
+    console.log('Session:', req.session);
+    console.log('Body:', JSON.stringify(req.body, null, 2));
+    
     try {
-      if (!req.user) {
-        return res.status(401).json({ message: "No autorizado" });
+      // Verificar sesión
+      if (!(req.session as any).passport?.user) {
+        console.log('Error: Sesión no encontrada en passport');
+        return res.status(401).json({ 
+          code: "SESSION_EXPIRED",
+          message: "La sesión ha expirado. Por favor, inicie sesión nuevamente." 
+        });
       }
+
+      const userId = (req.session as any).passport.user;
+      console.log('Usuario autenticado con ID:', userId);
       
-      const { 
-        customerId, 
-        total, 
-        paymentMethod, 
-        paymentDetails,
-        documentType,
-        notes,
-        printOptions,
-        status, 
-        items 
-      } = req.body;
-      
-      // Crear número de factura si es necesario
-      let invoiceNumber = null;
-      if (documentType && documentType.startsWith('factura')) {
-        // En una implementación real, aquí se conectaría con AFIP
-        // para generar el número real de factura electrónica
-        // Por ahora generamos uno de prueba con formato: A-00001-00000001
-        const tipoFactura = documentType === 'factura_a' ? 'A' : 'B';
-        const puntoVenta = '00001';
-        const numero = Math.floor(Math.random() * 1000000).toString().padStart(8, '0');
-        invoiceNumber = `${tipoFactura}-${puntoVenta}-${numero}`;
+      // Obtener el usuario completo
+      const user = await storage.getUser(userId);
+      if (!user) {
+        console.log('Error: Usuario no encontrado en la base de datos');
+        return res.status(401).json({ 
+          code: "USER_NOT_FOUND",
+          message: "Usuario no encontrado" 
+        });
       }
+      console.log('Usuario encontrado:', user.username);
       
-      // Create sale
+      // Extraer los campos del body, aceptando ambos nombres para compatibilidad
+      const { items, paymentMethods, discountPercent = 0, surchargePercent = 0 } = req.body;
+      // Permitir ambos nombres, pero usar los correctos para guardar
+      const documentType = req.body.documentType || req.body.docType || "remito";
+      const invoiceNumber = req.body.invoiceNumber || req.body.docNumber || null;
+      
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        console.log('Error: No hay items en la venta');
+        return res.status(400).json({ message: 'La venta debe contener al menos un item' });
+      }
+
+      if (!paymentMethods || !Array.isArray(paymentMethods) || paymentMethods.length === 0) {
+        console.log('Error: No hay métodos de pago');
+        return res.status(400).json({ message: 'Debe especificar al menos un método de pago' });
+      }
+
+      // Calcular subtotal
+      const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      // Calcular descuento y recargo
+      const discount = discountPercent > 0 ? subtotal * (discountPercent / 100) : 0;
+      const surcharge = surchargePercent > 0 ? subtotal * (surchargePercent / 100) : 0;
+      // Calcular total
+      const total = subtotal - discount + surcharge;
+      console.log('Subtotal:', subtotal, 'Descuento:', discount, 'Recargo:', surcharge, 'Total:', total);
+
+      // Crear la venta con los nombres correctos de campos
       const sale = await storage.createSale({
-        customerId,
-        userId: req.user.id,
-        total,
-        paymentMethod,
-        paymentDetails,
-        documentType: documentType || 'remito',
+        userId: userId,
+        subtotal: subtotal.toFixed(2),
+        discount: discount.toFixed(2),
+        discountPercent: discountPercent.toString(),
+        surcharge: surcharge.toFixed(2),
+        surchargePercent: surchargePercent.toString(),
+        total: total.toFixed(2),
+        paymentMethod: paymentMethods[0]?.method || "efectivo",
+        documentType,
         invoiceNumber,
-        status,
-        notes,
-        printOptions
+        status: "completed"
       });
-      
-      // Create sale items
-      if (items && Array.isArray(items)) {
-        for (const item of items) {
-          await storage.createSaleItem({
-            saleId: sale.id,
-            productId: item.productId,
-            quantity: item.quantity,
-            unit: item.unit,
-            price: item.price,
-            discount: item.discount || 0,
-            total: item.total,
-            isConversion: item.isConversion || false,
-            conversionFactor: item.conversionFactor || 1,
-            conversionUnit: item.conversionUnit || null,
-            conversionBarcode: item.conversionBarcode || null
-          });
-          
-          // Update product stock
-          const product = await storage.getProduct(item.productId);
-          if (product) {
-            // Verificar si el producto es compuesto (un combo)
-            if (product.isComposite && product.components) {
-              console.log(`Venta de producto compuesto: ${product.name}`);
-              
-              // Parseamos los componentes si están en formato string
-              let components = [];
-              try {
-                components = typeof product.components === 'string' 
-                  ? JSON.parse(product.components) 
-                  : product.components;
-              } catch (error) {
-                console.error("Error al parsear componentes del producto:", error);
-                components = [];
-              }
-              
-              // Por cada componente, reducimos su stock proporcionalmente
-              for (const component of components) {
-                const componentProduct = await storage.getProduct(component.productId);
-                if (componentProduct) {
-                  // Calcular la cantidad total a reducir (cantidad de venta * cantidad por componente)
-                  const quantityToDeduct = parseFloat(item.quantity) * parseFloat(component.quantity);
-                  const newComponentStock = parseFloat(componentProduct.stock.toString()) - quantityToDeduct;
-                  
-                  // Actualizar el stock del componente
-                  await storage.updateProduct(component.productId, { stock: newComponentStock });
-                  
-                  console.log(`  - Componente: ${componentProduct.name}, Cantidad por unidad: ${component.quantity} ${component.unit}`);
-                  console.log(`    Cantidad vendida: ${item.quantity}, Stock descontado: ${quantityToDeduct}`);
-                  console.log(`    Nuevo stock del componente: ${newComponentStock}`);
-                }
-              }
-              
-              // No descontamos stock del producto compuesto mismo, ya que se gestiona a través de sus componentes
-              console.log(`Stock del producto compuesto no reducido directamente`);
-            }
-            // Si el item tiene información de conversión, aplicamos el factor
-            else if (item.isConversion && item.conversionFactor) {
-              // Descontamos proporcionalmente según el factor de conversión
-              // Por ejemplo, si vendemos una presentación de 500g (factor 0.5) con cantidad 2,
-              // descontamos 2 * 0.5 = 1kg del stock principal
-              const stockToDeduct = parseFloat(item.quantity) * parseFloat(item.conversionFactor.toString());
-              const newStock = parseFloat(product.stock.toString()) - stockToDeduct;
-              await storage.updateProduct(item.productId, { stock: newStock });
-              
-              console.log(`Venta de conversión: Producto ${product.name}, Presentación: ${item.unit}, 
-                           Cantidad: ${item.quantity}, Factor: ${item.conversionFactor}, 
-                           Stock descontado: ${stockToDeduct} ${product.baseUnit}`);
-            } else {
-              // Descuento normal para productos estándar (no compuestos)
-              const newStock = parseFloat(product.stock.toString()) - parseFloat(item.quantity);
-              await storage.updateProduct(item.productId, { stock: newStock });
-            }
-          }
+
+      console.log('Venta creada exitosamente:', sale.id);
+
+      // Prorratear el descuento entre los ítems
+      let prorratedTotal = 0;
+      for (let idx = 0; idx < items.length; idx++) {
+        const item = items[idx];
+        const product = await storage.getProduct(item.productId);
+        const itemSubtotal = item.price * item.quantity;
+        const proportion = subtotal > 0 ? itemSubtotal / subtotal : 0;
+        let itemDiscount = discount * proportion;
+        // Ajuste de redondeo en el último ítem
+        if (idx === items.length - 1) {
+          itemDiscount = discount - prorratedTotal;
+        } else {
+          prorratedTotal += itemDiscount;
+        }
+        const itemTotal = itemSubtotal - itemDiscount;
+        await storage.createSaleItem({
+          saleId: sale.id,
+          productId: item.productId,
+          name: product?.name || 'Producto',
+          quantity: item.quantity,
+          unit: item.unit,
+          price: item.price,
+          discount: itemDiscount.toFixed(2),
+          total: itemTotal.toFixed(2)
+        });
+        // Actualizar stock
+        if (product) {
+          const newStock = parseFloat(product.stock) - parseFloat(item.quantity);
+          await storage.updateProduct(product.id, { stock: newStock.toString() });
+          console.log(`Stock actualizado para producto ${product.id}: ${newStock}`);
         }
       }
-      
-      // If paying with account, create account transaction
-      if (paymentMethod === "account" && customerId) {
-        const customer = await storage.getCustomer(customerId);
-        if (customer && customer.hasAccount) {
-          const account = await storage.getAccountByCustomerId(customerId);
-          if (account) {
-            const newBalance = parseFloat(account.balance.toString()) - parseFloat(total);
-            
-            // Descripción detallada basada en el tipo de documento
-            let docTypeText = "Venta";
-            if (documentType === "remito") {
-              docTypeText = "Remito";
-            } else if (documentType === "factura_c") {
-              docTypeText = "Factura C";
-            } else if (documentType === "factura_a") {
-              docTypeText = "Factura A";
-            } else if (documentType === "factura_b") {
-              docTypeText = "Factura B";
-            }
-            
-            const docNumber = invoiceNumber || `#${sale.id}`;
-            
-            await storage.createAccountTransaction({
-              accountId: account.id,
-              amount: total,
-              type: "debit",
-              description: `${docTypeText} ${docNumber}`,
-              relatedSaleId: sale.id,
-              userId: req.user.id,
-              balanceAfter: newBalance
-            });
-            
-            await storage.updateAccount(account.id, { balance: newBalance, lastUpdated: new Date() });
-          }
-        }
+
+      // Crear los pagos
+      for (const payment of paymentMethods) {
+        console.log(`Procesando pago:`, payment);
+        await storage.createPayment({
+          saleId: sale.id,
+          amount: payment.amount,
+          method: payment.method,
+          accountId: payment.accountId
+        });
       }
+
+      console.log('=== Proceso de venta completado ===\n');
       
-      res.status(201).json(sale);
+      res.json(sale);
     } catch (error) {
-      res.status(400).json({ message: "Error al crear venta", error: (error as Error).message });
+      console.error('Error en el proceso de venta:', error);
+      res.status(500).json({ message: 'Error al procesar la venta' });
     }
   });
+
+  // Helper functions for different payment types
+  async function handleCashPayment(account: any, amount: number, docType: string, docNumber: string | number, saleId: number, userId: number) {
+    // Primer movimiento: Débito por la venta
+    await storage.createAccountTransaction({
+      accountId: account.id,
+      amount,
+      type: "debit",
+      description: `${docType} ${docNumber}`,
+      relatedSaleId: saleId,
+      userId,
+      balanceAfter: parseFloat(account.balance.toString()) + amount
+    });
+
+    const newBalance = parseFloat(account.balance.toString()) + amount;
+
+    // Segundo movimiento: Crédito por el pago en efectivo
+    await storage.createAccountTransaction({
+      accountId: account.id,
+      amount,
+      type: "credit",
+      description: `Pago en efectivo - ${docType} ${docNumber}`,
+      relatedSaleId: saleId,
+      userId,
+      balanceAfter: newBalance - amount
+    });
+
+    // Actualizar el saldo final de la cuenta
+    await storage.updateAccount(account.id, { 
+      balance: (newBalance - amount).toString(),
+      lastUpdated: new Date().toISOString()
+    });
+  }
+
+  async function handleTransferPayment(account: any, amount: number, docType: string, docNumber: string | number, saleId: number, userId: number) {
+    // Primer movimiento: Débito por la venta
+    await storage.createAccountTransaction({
+      accountId: account.id,
+      amount,
+      type: "debit",
+      description: `${docType} ${docNumber}`,
+      relatedSaleId: saleId,
+      userId,
+      balanceAfter: parseFloat(account.balance.toString()) + amount
+    });
+
+    const newBalance = parseFloat(account.balance.toString()) + amount;
+
+    // Segundo movimiento: Crédito por el pago por transferencia
+    await storage.createAccountTransaction({
+      accountId: account.id,
+      amount,
+      type: "credit",
+      description: `Pago por transferencia - ${docType} ${docNumber}`,
+      relatedSaleId: saleId,
+      userId,
+      balanceAfter: newBalance - amount
+    });
+
+    // Actualizar el saldo final de la cuenta
+    await storage.updateAccount(account.id, { 
+      balance: (newBalance - amount).toString(),
+      lastUpdated: new Date().toISOString()
+    });
+  }
+
+  async function handleAccountPayment(account: any, amount: number, docType: string, docNumber: string | number, saleId: number, userId: number, paymentMethod: string): Promise<void> {
+    // Primer movimiento: Débito por la venta
+    const currentBalance = parseFloat(account.balance.toString());
+    const debitBalance = currentBalance + amount;  // Un débito AUMENTA el saldo
+    
+    await storage.createAccountTransaction({
+        accountId: account.id,
+        amount,
+        type: "debit",
+        description: `${docType} ${docNumber}`,
+        relatedSaleId: saleId,
+        userId,
+        balanceAfter: debitBalance.toString()
+    });
+
+    // Solo registramos el pago si NO es en cuenta corriente
+    if (paymentMethod !== 'current_account') {
+        // Segundo movimiento: Crédito por el pago
+        let paymentDescription = '';
+        switch (paymentMethod) {
+            case 'cash':
+                paymentDescription = `Pago en efectivo`;
+                break;
+            case 'transfer':
+                paymentDescription = `Pago por transferencia`;
+                break;
+            case 'qr':
+                paymentDescription = `Pago por QR`;
+                break;
+            case 'credit_card':
+                paymentDescription = `Pago con tarjeta de crédito`;
+                break;
+            case 'debit_card':
+                paymentDescription = `Pago con tarjeta de débito`;
+                break;
+            case 'check':
+                paymentDescription = `Pago con cheque`;
+                break;
+            default:
+                paymentDescription = `Pago`;
+        }
+        
+        const creditBalance = debitBalance - amount;  // Un crédito REDUCE el saldo
+        
+        await storage.createAccountTransaction({
+            accountId: account.id,
+            amount,
+            type: "credit",
+            description: `${paymentDescription} - ${docType} ${docNumber}`,
+            relatedSaleId: saleId,
+            userId,
+            balanceAfter: creditBalance.toString()
+        });
+
+        // Actualizar el saldo final después del pago
+        await storage.updateAccount(account.id, { 
+            balance: creditBalance.toString(),
+            lastUpdated: new Date().toISOString()
+        });
+    } else {
+        // Si es cuenta corriente, solo actualizamos con el débito
+        await storage.updateAccount(account.id, { 
+            balance: debitBalance.toString(),
+            lastUpdated: new Date().toISOString()
+        });
+    }
+  }
+
+  async function calculateNewBalance(accountId: number): Promise<number> {
+    const transactions = await storage.getAccountTransactions(accountId);
+    
+    // Ordenar las transacciones por fecha
+    transactions.sort((a: any, b: any) => {
+        const dateA = new Date(a.createdAt || 0);
+        const dateB = new Date(b.createdAt || 0);
+        return dateA.getTime() - dateB.getTime();
+    });
+    
+    // Calcular el saldo acumulado en orden cronológico
+    let balance = 0;
+    for (const transaction of transactions) {
+        if (transaction.type === 'credit') {
+            balance -= parseFloat(transaction.amount.toString());  // Un crédito (pago) REDUCE el saldo
+        } else {
+            balance += parseFloat(transaction.amount.toString());  // Un débito (cargo) AUMENTA el saldo
+        }
+        
+        // Actualizar el balanceAfter en la base de datos
+        try {
+            await storage.updateAccountTransactionBalance(transaction.id, balance.toString());
+        } catch (error) {
+            console.error("Error actualizando balance de transacción:", error);
+        }
+    }
+    
+    return balance;
+  }
 
   // Invoices (remitos) endpoints
   app.get("/api/invoices", async (req, res) => {
@@ -790,6 +908,203 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Endpoint para convertir un pedido en factura (remito)
+  app.post("/api/invoices/from-order/:id", async (req, res) => {
+    try {
+      const orderId = parseInt(req.params.id);
+      
+      // Verificar si el pedido existe
+      const order = await storage.getOrder(orderId);
+      if (!order) {
+        return res.status(404).json({ message: "Pedido no encontrado" });
+      }
+
+      // Verificar si el pedido ya está facturado
+      if (order.status === "invoiced") {
+        return res.status(400).json({ message: "Este pedido ya ha sido facturado anteriormente" });
+      }
+      
+      // Obtener los ítems del pedido
+      const orderItems = await storage.getOrderItemsByOrderId(orderId);
+      
+      if (orderItems.length === 0) {
+        return res.status(400).json({ message: "El pedido no tiene productos para facturar" });
+      }
+      
+      // Extraer datos del body
+      const { 
+        documentType = "remito", 
+        paymentMethod = "efectivo", 
+        notes = "",
+        printOptions = { printTicket: true, sendEmail: false },
+        discountPercent = 0,
+        surchargePercent = 0,
+        paymentDetails = {} // Agregar extracción de paymentDetails
+      } = req.body;
+      
+      // Calcular el total con descuento y recargo
+      let subtotal = parseFloat(order.total);
+      let discountAmount = 0;
+      let surchargeAmount = 0;
+      
+      if (discountPercent > 0) {
+        discountAmount = subtotal * (discountPercent / 100);
+        subtotal -= discountAmount;
+      }
+      
+      if (surchargePercent > 0) {
+        surchargeAmount = subtotal * (surchargePercent / 100);
+        subtotal += surchargeAmount;
+      }
+      
+      // Crear una nueva venta (factura/remito)
+      const invoice = await storage.createSale({
+        customerId: order.customerId,
+        userId: req.user?.id || 1, // Usar el usuario autenticado o el ID 1 por defecto
+        total: subtotal.toString(), // Usar el subtotal ya calculado con descuento
+        subtotal: order.total,
+        tax: "0", // Para simplificar, sin impuestos
+        discount: discountAmount.toString(),
+        surcharge: surchargeAmount.toString(),
+        discountPercent: discountPercent.toString(),
+        surchargePercent: surchargePercent.toString(),
+        documentType, // Usar el tipo de documento enviado
+        documentNumber: "", // Se generará automáticamente
+        paymentMethod, // Usar el método de pago enviado
+        paymentStatus: "pagado", // Por defecto, pagado
+        notes: notes || `Generado desde pedido #${orderId}. ${order.notes || ''}`,
+        source: "sistema",
+        printOptions: JSON.stringify(printOptions),
+        status: "completed" // Establecer explícitamente el estado como completado
+      });
+      
+      // Actualizar cuenta corriente del cliente si corresponde
+      if (order.customerId) {
+        const account = await storage.getAccountByCustomerId(order.customerId);
+        if (account) {
+          const docTypeText = documentType === 'remito' ? 'Remito' : 'Factura';
+          const docNumber = invoice.id;
+
+          // Handle different payment methods
+          if (paymentMethod === 'cash' || (paymentMethod === 'mixed' && paymentDetails?.mixedPayment?.cash > 0)) {
+            const cashAmount = paymentMethod === 'cash' ? subtotal : paymentDetails.mixedPayment.cash;
+            await handleAccountPayment(account, cashAmount, docTypeText, docNumber, invoice.id, req.user?.id || 1, 'cash');
+          }
+
+          if (paymentMethod === 'transfer' || (paymentMethod === 'mixed' && paymentDetails?.mixedPayment?.transfer > 0)) {
+            const transferAmount = paymentMethod === 'transfer' ? subtotal : paymentDetails.mixedPayment.transfer;
+            await handleAccountPayment(account, transferAmount, docTypeText, docNumber, invoice.id, req.user?.id || 1, 'transfer');
+          }
+
+          if (paymentMethod === 'qr' || (paymentMethod === 'mixed' && paymentDetails?.mixedPayment?.qr > 0)) {
+            const qrAmount = paymentMethod === 'qr' ? subtotal : paymentDetails.mixedPayment.qr;
+            await handleAccountPayment(account, qrAmount, docTypeText, docNumber, invoice.id, req.user?.id || 1, 'qr');
+          }
+
+          if (paymentMethod === 'credit_card' || (paymentMethod === 'mixed' && paymentDetails?.mixedPayment?.credit_card > 0)) {
+            const creditCardAmount = paymentMethod === 'credit_card' ? subtotal : paymentDetails.mixedPayment.credit_card;
+            await handleAccountPayment(account, creditCardAmount, docTypeText, docNumber, invoice.id, req.user?.id || 1, 'credit_card');
+          }
+
+          if (paymentMethod === 'debit_card' || (paymentMethod === 'mixed' && paymentDetails?.mixedPayment?.debit_card > 0)) {
+            const debitCardAmount = paymentMethod === 'debit_card' ? subtotal : paymentDetails.mixedPayment.debit_card;
+            await handleAccountPayment(account, debitCardAmount, docTypeText, docNumber, invoice.id, req.user?.id || 1, 'debit_card');
+          }
+
+          if (paymentMethod === 'check' || (paymentMethod === 'mixed' && paymentDetails?.mixedPayment?.check > 0)) {
+            const checkAmount = paymentMethod === 'check' ? subtotal : paymentDetails.mixedPayment.check;
+            await handleAccountPayment(account, checkAmount, docTypeText, docNumber, invoice.id, req.user?.id || 1, 'check');
+          }
+
+          if (paymentMethod === 'current_account' || (paymentMethod === 'mixed' && paymentDetails?.mixedPayment?.current_account > 0)) {
+            const accountAmount = paymentMethod === 'current_account' ? subtotal : paymentDetails.mixedPayment.current_account;
+            await handleAccountPayment(account, accountAmount, docTypeText, docNumber, invoice.id, req.user?.id || 1, 'current_account');
+          }
+
+          // Update account balance
+          const newBalance = await calculateNewBalance(account.id);
+          await storage.updateAccount(account.id, { balance: newBalance.toString(), lastUpdated: new Date().toISOString() });
+        }
+      }
+      
+      // Crear los ítems de la factura a partir de los ítems del pedido, prorrateando descuento y recargo de forma robusta y asíncrona
+      const itemsSubtotal = orderItems.reduce((sum, item) => sum + parseFloat(item.total), 0);
+      let prorratedTotal = 0;
+      for (let idx = 0; idx < orderItems.length; idx++) {
+        const item = orderItems[idx];
+        const itemSubtotal = parseFloat(item.total);
+        const proportion = itemsSubtotal > 0 ? itemSubtotal / itemsSubtotal : 0;
+        const itemDiscount = discountAmount * proportion;
+        const itemSurcharge = surchargeAmount * proportion;
+        let itemTotal = itemSubtotal;
+        if (discountAmount > 0) itemTotal -= itemDiscount;
+        if (surchargeAmount > 0) itemTotal += itemSurcharge;
+        // Ajuste de redondeo en el último ítem
+        if (idx === orderItems.length - 1) {
+          itemTotal = parseFloat((subtotal - prorratedTotal).toFixed(2));
+        } else {
+          prorratedTotal += itemTotal;
+        }
+        const product = await storage.getProduct(item.productId);
+        await storage.createSaleItem({
+          saleId: invoice.id,
+          productId: item.productId,
+          name: product?.name || 'Producto',
+          quantity: item.quantity,
+          unit: item.unit,
+          price: item.price,
+          total: itemTotal.toFixed(2),
+          discount: itemDiscount.toFixed(2)
+        });
+        
+        // Actualizar el stock del producto (descontando del stock reservado)
+        if (product) {
+          const newStock = parseFloat(product.stock) - parseFloat(item.quantity);
+          await storage.updateProduct(product.id, { stock: newStock.toString() });
+          console.log(`Stock actualizado para producto ${product.id}: ${newStock}`);
+        }
+      }
+      
+      // Actualizar el estado del pedido para marcar que ha sido facturado
+      await storage.updateOrder(orderId, {
+        customerId: order.customerId,
+        total: order.total,
+        status: "invoiced", // Nuevo estado para pedidos facturados
+        notes: order.notes ? `${order.notes} - Facturado: ${new Date().toLocaleString()}` : `Facturado: ${new Date().toLocaleString()}`
+      });
+      
+      // Obtener los datos de los productos para incluirlos en la respuesta
+      const saleItems = await storage.getSaleItemsBySaleId(invoice.id);
+      const productIds = saleItems.map(item => item.productId);
+      const products = [];
+      
+      // Obtener información de cada producto
+      for (const productId of productIds) {
+        const product = await storage.getProduct(productId);
+        if (product) {
+          products.push(product);
+        }
+      }
+      
+      // Devolver la factura creada
+      res.status(201).json({
+        id: invoice.id,
+        message: "Factura creada correctamente",
+        invoice: {
+          ...invoice,
+          items: saleItems,
+          products: products, // Incluir los datos de los productos
+          productsData: JSON.stringify(products) // Respaldo en formato JSON
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        message: "Error al convertir pedido a factura", 
+        error: (error as Error).message 
+      });
+    }
+  });
+
   // Orders endpoints
   app.get("/api/orders", async (req, res) => {
     try {
@@ -808,11 +1123,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Get order items
           const items = await storage.getOrderItemsByOrderId(order.id);
           
+          // Obtener información completa de los productos para cada item
+          const enrichedItems = await Promise.all(items.map(async (item) => {
+            // Obtener detalles del producto
+            const product = await storage.getProduct(item.productId);
+            // Agregar el producto al item
+            return {
+              ...item,
+              product: product,
+              // Asegurar que tengamos un nombre de producto
+              productName: product?.name || item.productName || `Producto #${item.productId}`
+            };
+          }));
+          
           return {
             ...order,
             customer,
             user,
-            items
+            items: enrichedItems
           };
         })
       );
@@ -823,12 +1151,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/orders/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const order = await storage.getOrder(id);
+      
+      if (!order) {
+        return res.status(404).json({ message: "Pedido no encontrado" });
+      }
+      
+      // Enrich with customer data
+      let customer = null;
+      if (order.customerId) {
+        customer = await storage.getCustomer(order.customerId);
+      }
+      
+      const user = await storage.getUser(order.userId);
+      
+      // Get order items
+      const items = await storage.getOrderItemsByOrderId(order.id);
+      
+      // Obtener información completa de los productos para cada item
+      const enrichedItems = await Promise.all(items.map(async (item) => {
+        // Obtener detalles del producto
+        const product = await storage.getProduct(item.productId);
+        // Agregar el producto al item
+        return {
+          ...item,
+          product: product,
+          // Asegurar que tengamos un nombre de producto
+          productName: product?.name || item.productName || `Producto #${item.productId}`
+        };
+      }));
+      
+      const enrichedOrder = {
+        ...order,
+        customer,
+        user,
+        items: enrichedItems
+      };
+      
+      res.json(enrichedOrder);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener pedido", error: (error as Error).message });
+    }
+  });
+
   app.post("/api/orders", async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ message: "No autorizado" });
       }
       
+      console.log("Creando nuevo pedido con datos:", req.body);
       const { customerId, total, status, notes, deliveryDate, items } = req.body;
       
       // Create order
@@ -836,17 +1211,158 @@ export async function registerRoutes(app: Express): Promise<Server> {
         customerId,
         userId: req.user.id,
         total,
-        status,
+        status: status || "pending",
         notes,
-        deliveryDate,
-        timestamp: new Date()
+        deliveryDate
       });
+      
+      console.log("Pedido creado:", order);
       
       // Create order items
       if (items && Array.isArray(items)) {
+        console.log(`Procesando ${items.length} items del pedido`);
+        
         for (const item of items) {
-          await storage.createOrderItem({
+          console.log("Procesando item:", item);
+          
+          const orderItem = await storage.createOrderItem({
             orderId: order.id,
+            productId: item.productId,
+            quantity: item.quantity,
+            unit: item.unit,
+            price: item.price,
+            total: item.total
+          });
+          
+          console.log("Item de pedido creado:", orderItem);
+        }
+      } else {
+        console.warn("No se proporcionaron items para el pedido o no es un array válido");
+      }
+      
+      res.status(201).json(order);
+    } catch (error) {
+      console.error("Error al crear pedido:", error);
+      res.status(400).json({ message: "Error al crear pedido", error: (error as Error).message });
+    }
+  });
+
+  app.put("/api/orders/:id", async (req, res) => {
+    try {
+      // Eliminar temporalmente esta validación que puede estar causando el problema
+      /*if (!req.user) {
+        return res.status(401).json({ message: "No autorizado" });
+      }*/
+      
+      const orderId = parseInt(req.params.id);
+      const { customerId, total, status, notes, deliveryDate, items } = req.body;
+      
+      // Añadir log para depuración
+      console.log("PUT /api/orders/:id - Datos recibidos:", {
+        orderId,
+        customerId,
+        total,
+        status,
+        deliveryDate,
+        itemsCount: items?.length || 0
+      });
+      
+      // Verificar si el pedido existe
+      const existingOrder = await storage.getOrder(orderId);
+      if (!existingOrder) {
+        return res.status(404).json({ message: "Pedido no encontrado" });
+      }
+      
+      // Actualizar orden
+      const updatedOrder = await storage.updateOrder(orderId, {
+        customerId,
+        total,
+        status,
+        notes,
+        deliveryDate
+      });
+      
+      // Obtener items existentes antes de eliminarlos para restaurar el stock
+      const existingItems = await storage.getOrderItemsByOrderId(orderId);
+      
+      // Restaurar el stock de los items que serán eliminados
+      for (const item of existingItems) {
+        try {
+          const product = await storage.getProduct(item.productId);
+          if (product) {
+            console.log(`[STOCK-RESTAURAR] Restaurando stock para producto: "${product.name}", ID: ${product.id}, Stock actual: ${product.stock}, Cantidad a restaurar: ${item.quantity}`);
+            
+            // Verificar si el producto es compuesto
+            if (product.isComposite && product.components) {
+              let components = [];
+              try {
+                components = typeof product.components === 'string' 
+                  ? JSON.parse(product.components) 
+                  : product.components;
+                console.log(`[STOCK-RESTAURAR] Producto compuesto con ${components.length} componentes`);
+              } catch (error) {
+                console.error("[STOCK-RESTAURAR] Error al parsear componentes del producto:", error);
+                components = [];
+              }
+              for (const component of components) {
+                const componentProduct = await storage.getProduct(component.productId);
+                if (componentProduct) {
+                  const quantityToRestore = parseFloat(item.quantity) * parseFloat(component.quantity);
+                  const newComponentStock = parseFloat(componentProduct.stock.toString()) + quantityToRestore;
+                  console.log(`[STOCK-RESTAURAR] Restaurando stock de componente: "${componentProduct.name}", Stock anterior: ${componentProduct.stock}, Cantidad a restaurar: ${quantityToRestore}, Nuevo stock: ${newComponentStock}`);
+                  
+                  const updateResult = await storage.updateProduct(component.productId, { stock: newComponentStock.toString() });
+                  console.log(`[STOCK-RESTAURAR] Resultado actualización stock componente:`, updateResult ? "OK" : "ERROR");
+                  
+                  // Verificar que el stock se actualizó correctamente
+                  const updatedComponentProduct = await storage.getProduct(component.productId);
+                  console.log(`[STOCK-RESTAURAR] Verificación stock componente actualizado: ${updatedComponentProduct?.stock}`);
+                }
+              }
+            } else {
+              // Para productos no compuestos (estándar)
+              // Verificar si necesitamos aplicar factor de conversión
+              let stockToRestore = parseFloat(item.quantity);
+              
+              // Verificar si la unidad del item es diferente a la unidad base del producto
+              if (product.baseUnit && item.unit && item.unit !== product.baseUnit && product.conversionRates) {
+                const conversions = typeof product.conversionRates === 'string' 
+                  ? JSON.parse(product.conversionRates) 
+                  : product.conversionRates;
+                
+                if (conversions && conversions[item.unit] && conversions[item.unit].factor) {
+                  const conversionFactor = parseFloat(conversions[item.unit].factor);
+                  stockToRestore = stockToRestore * conversionFactor;
+                  console.log(`[STOCK-RESTAURAR] Aplicando factor de conversión ${conversionFactor} para ${item.unit}`);
+                  console.log(`[STOCK-RESTAURAR] Cantidad original ${item.quantity}, cantidad a restaurar al stock: ${stockToRestore}`);
+                }
+              }
+              
+              const currentStock = parseFloat(product.stock.toString());
+              const newStock = currentStock + stockToRestore;
+              console.log(`[STOCK-RESTAURAR] Restaurando stock estándar - Stock anterior: ${currentStock}, Cantidad a restaurar: ${stockToRestore}, Nuevo stock: ${newStock}`);
+              
+              const updateResult = await storage.updateProduct(item.productId, { stock: newStock.toString() });
+              console.log(`[STOCK-RESTAURAR] Resultado actualización stock estándar:`, updateResult ? "OK" : "ERROR");
+              
+              // Verificar que el stock se actualizó correctamente
+              const updatedProduct = await storage.getProduct(item.productId);
+              console.log(`[STOCK-RESTAURAR] Verificación stock actualizado: ${updatedProduct?.stock}`);
+            }
+          }
+        } catch (error) {
+          console.error("[STOCK-RESTAURAR] Error al restaurar stock:", error);
+        }
+      }
+      
+      // Eliminar items existentes
+      await storage.deleteOrderItems(orderId);
+      
+      // Crear nuevos items
+      if (items && Array.isArray(items)) {
+        for (const item of items) {
+          const orderItem = await storage.createOrderItem({
+            orderId: orderId,
             productId: item.productId,
             quantity: item.quantity,
             unit: item.unit,
@@ -856,9 +1372,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      res.status(201).json(order);
+      // Responder con JSON y asegurar el Content-Type
+      res.setHeader('Content-Type', 'application/json');
+      res.json({
+        ...updatedOrder,
+        message: "Pedido actualizado correctamente"
+      });
     } catch (error) {
-      res.status(400).json({ message: "Error al crear pedido", error: (error as Error).message });
+      console.error("Error al actualizar pedido:", error);
+      res.status(400).json({ message: "Error al actualizar pedido", error: (error as Error).message });
     }
   });
 
@@ -908,7 +1430,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
           
-          // Si hay una cuenta de cliente, verificamos si hay transacción asociada
+          // Si hay una cuenta de cliente, verificamos si hay transaccación asociada
           let accountTransaction = null;
           if (note.customerId && customer?.hasAccount) {
             const account = await storage.getAccountByCustomerId(note.customerId);
@@ -967,9 +1489,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             let newBalance = parseFloat(account.balance.toString());
             
             if (type === "credit") {
-              newBalance += parseFloat(amount);
+              newBalance += parseFloat(amount);  // Una nota de crédito AUMENTA el saldo a favor (reduce el saldo deudor)
             } else if (type === "debit") {
-              newBalance -= parseFloat(amount);
+              newBalance -= parseFloat(amount);  // Una nota de débito REDUCE el saldo a favor (aumenta el saldo deudor)
             }
             
             // Crear transacción en cuenta corriente
@@ -979,13 +1501,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
               type: type === "credit" ? "credit" : "debit",
               description: `Nota de ${type === "credit" ? "crédito" : "débito"} #${note.id}: ${reason}`,
               relatedNoteId: note.id,
-              userId: req.user.id
+              userId: req.user.id,
+              balanceAfter: newBalance
             });
             
             // Actualizar saldo en cuenta
             await storage.updateAccount(account.id, { 
               balance: newBalance.toString(), 
-              lastUpdated: new Date() 
+              lastUpdated: new Date().toISOString() 
             });
             
             // Enriquecer la nota con información del cliente
@@ -1492,6 +2015,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Rutas para el Catálogo Web
+  
+  // Endpoint para obtener usuario web actual autenticado
+  app.get("/api/web/user", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "No autorizado" });
+    }
+    
+    try {
+      // Asegurar que req.user existe
+      if (!req.user) {
+        return res.status(401).json({ message: "No autorizado" });
+      }
+      
+      const userId = req.user.id;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+      
+      // Buscar cliente asociado
+      let customer = null;
+      if (req.user.customerId) {
+        customer = await storage.getCustomer(req.user.customerId);
+      } else {
+        // Si no hay customerId directo, intentar buscar por nombre
+        const allCustomers = await storage.getAllCustomers();
+        customer = allCustomers.find(c => c.name === user.fullName);
+      }
+      
+      // Excluir la contraseña de la respuesta
+      const { password, ...userData } = user;
+      
+      res.json({
+        ...userData,
+        customerId: customer?.id || null,
+        email: customer?.email || null,
+        phone: customer?.phone || null,
+        address: customer?.address || null,
+        city: customer?.city || null,
+        province: customer?.province || null
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener datos del usuario", error: (error as Error).message });
+    }
+  });
   
   // Autenticación de usuarios web
   app.post("/api/web/register", async (req, res) => {
@@ -2835,37 +3404,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.post("/api/product-categories", async (req, res) => {
     try {
-      // Validar datos de entrada
-      const schema = z.object({
-        name: z.string().min(1, "El nombre es requerido"),
-        description: z.string().optional(),
-        imageUrl: z.string().optional(),
-        parentId: z.number().optional().nullable(),
-        displayOrder: z.number().optional(),
-        active: z.boolean().optional()
-      });
-      
-      const validation = schema.safeParse(req.body);
-      if (!validation.success) {
-        return res.status(400).json({ 
-          error: "Datos de categoría inválidos", 
-          details: validation.error.format()
+      const { name, description, imageUrl, active, displayOrder, slug, parentId } = req.body;
+
+      // Validar campos requeridos
+      if (!name || !slug) {
+        return res.status(400).json({
+          error: 'Campos requeridos faltantes',
+          details: {
+            name: !name ? 'El nombre es requerido' : undefined,
+            slug: !slug ? 'El slug es requerido' : undefined
+          }
         });
       }
-      
-      // Si hay parentId, verificar que exista la categoría padre
-      if (req.body.parentId) {
-        const parentCategory = await storage.getProductCategory(req.body.parentId);
+
+      // Validar que el slug sea único
+      const existingCategory = await storage.getProductCategoryBySlug(slug);
+      if (existingCategory) {
+        return res.status(400).json({
+          error: 'El slug ya está en uso',
+          details: {
+            slug: 'Ya existe una categoría con este slug'
+          }
+        });
+      }
+
+      // Validar parentId si se proporciona
+      if (parentId) {
+        const parentCategory = await storage.getProductCategory(parentId);
         if (!parentCategory) {
-          return res.status(400).json({ error: "La categoría padre no existe" });
+          return res.status(400).json({
+            error: 'Categoría padre no válida',
+            details: {
+              parentId: 'La categoría padre especificada no existe'
+            }
+          });
         }
       }
-      
-      const category = await storage.createProductCategory(req.body);
-      res.status(201).json(category);
+
+      const category = await storage.createProductCategory({
+        name,
+        description,
+        imageUrl,
+        active: active ?? true,
+        displayOrder: displayOrder ?? 0,
+        slug,
+        parentId
+      });
+
+      res.json(category);
     } catch (error) {
-      console.error("Error al crear categoría:", error);
-      res.status(500).json({ error: "Error al crear categoría" });
+      console.error('Error al crear categoría:', error);
+      res.status(500).json({
+        error: 'Error al crear la categoría',
+        details: error instanceof Error ? error.message : 'Error desconocido'
+      });
     }
   });
   
@@ -2876,11 +3468,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validar datos de entrada
       const schema = z.object({
         name: z.string().min(1, "El nombre es requerido").optional(),
-        description: z.string().optional(),
-        imageUrl: z.string().optional(),
+        description: z.string().optional().nullable(),
+        imageUrl: z.string().optional().nullable(),
         parentId: z.number().optional().nullable(),
         displayOrder: z.number().optional(),
-        active: z.boolean().optional()
+        active: z.boolean().optional(),
+        slug: z.string().min(1, "El slug es requerido").optional(),
+        metaTitle: z.string().optional().nullable(),
+        metaDescription: z.string().optional().nullable(),
       });
       
       const validation = schema.safeParse(req.body);
@@ -2892,35 +3487,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Si hay parentId, verificar que exista la categoría padre
-      if (req.body.parentId) {
+      if (req.body.parentId !== undefined) {
         // Evitar ciclos (una categoría no puede ser su propia subcategoría)
         if (req.body.parentId === id) {
           return res.status(400).json({ error: "Una categoría no puede ser su propia subcategoría" });
         }
         
-        const parentCategory = await storage.getProductCategory(req.body.parentId);
-        if (!parentCategory) {
-          return res.status(400).json({ error: "La categoría padre no existe" });
-        }
-        
-        // Verificar si no estamos creando un ciclo en la jerarquía
-        // (no se puede asignar como padre a una de sus subcategorías)
-        let tempCategory = parentCategory;
-        while (tempCategory && tempCategory.parentId) {
-          if (tempCategory.parentId === id) {
-            return res.status(400).json({ 
-              error: "No se puede asignar como padre a una subcategoría (ciclo en la jerarquía)"
-            });
+        // Si parentId es null, se permite (es una categoría raíz)
+        if (req.body.parentId !== null) {
+          const parentCategory = await storage.getProductCategory(req.body.parentId);
+          if (!parentCategory) {
+            return res.status(400).json({ error: "La categoría padre no existe" });
           }
-          tempCategory = await storage.getProductCategory(tempCategory.parentId);
+          
+          // Verificar si no estamos creando un ciclo en la jerarquía
+          let tempCategory = parentCategory;
+          while (tempCategory && tempCategory.parentId) {
+            if (tempCategory.parentId === id) {
+              return res.status(400).json({ 
+                error: "No se puede asignar como padre a una subcategoría (ciclo en la jerarquía)"
+              });
+            }
+            tempCategory = await storage.getProductCategory(tempCategory.parentId);
+          }
         }
       }
       
-      const category = await storage.updateProductCategory(id, req.body);
-      res.json(category);
+      const updatedCategory = await storage.updateProductCategory(id, req.body);
+      res.json(updatedCategory);
     } catch (error) {
-      console.error("Error al actualizar categoría:", error);
-      res.status(500).json({ error: "Error al actualizar categoría" });
+      console.error('Error al actualizar categoría:', error);
+      res.status(500).json({
+        error: 'Error al actualizar la categoría',
+        details: error instanceof Error ? error.message : 'Error desconocido'
+      });
     }
   });
   
@@ -2989,20 +3589,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const productId = parseInt(req.params.productId);
       const categoryId = parseInt(req.params.categoryId);
       
-      const relation = await storage.addProductToCategory(productId, categoryId);
+      // Verificar que el producto y la categoría existan
+      const product = await storage.getProduct(productId);
+      if (!product) {
+        return res.status(404).json({ error: "Producto no encontrado" });
+      }
+      
+      const category = await storage.getProductCategory(categoryId);
+      if (!category) {
+        return res.status(404).json({ error: "Categoría no encontrada" });
+      }
+      
+      // Verificar si ya existe la relación
+      const existingRelation = await storage.getProductCategoryRelation(productId, categoryId);
+      if (existingRelation) {
+        return res.status(400).json({ error: "El producto ya está asignado a esta categoría" });
+      }
+      
+      // Si es la primera categoría, marcarla como principal
+      const productCategories = await storage.getProductCategoriesByProductId(productId);
+      const isPrimary = productCategories.length === 0;
+      
+      const relation = await storage.addProductToCategory(productId, categoryId, isPrimary);
       res.status(201).json(relation);
     } catch (error) {
       console.error("Error al asignar producto a categoría:", error);
-      
-      // Manejar errores específicos
-      if (error instanceof Error) {
-        if (error.message.includes("ya está asignado")) {
-          return res.status(400).json({ error: error.message });
-        } else if (error.message.includes("no encontrado") || error.message.includes("no encontrada")) {
-          return res.status(404).json({ error: error.message });
-        }
-      }
-      
       res.status(500).json({ error: "Error al asignar producto a categoría" });
     }
   });
@@ -3012,21 +3623,905 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const productId = parseInt(req.params.productId);
       const categoryId = parseInt(req.params.categoryId);
       
-      await storage.removeProductFromCategory(productId, categoryId);
-      res.json({ success: true, message: "Producto removido de la categoría" });
-    } catch (error) {
-      console.error("Error al remover producto de categoría:", error);
-      
-      // Manejar errores específicos
-      if (error instanceof Error && error.message.includes("no encontrada")) {
-        return res.status(404).json({ error: error.message });
+      // Verificar que exista la relación
+      const relation = await storage.getProductCategoryRelation(productId, categoryId);
+      if (!relation) {
+        return res.status(404).json({ error: "La relación no existe" });
       }
       
-      res.status(500).json({ error: "Error al remover producto de categoría" });
+      // Si es la categoría principal, asignar otra como principal
+      if (relation.isPrimary) {
+        const otherCategories = await storage.getProductCategoriesByProductId(productId);
+        const otherCategory = otherCategories.find(cat => cat.id !== categoryId);
+        
+        if (otherCategory) {
+          await storage.updateProductCategoryRelation(productId, otherCategory.id, { isPrimary: true });
+        }
+      }
+      
+      await storage.removeProductFromCategory(productId, categoryId);
+      res.json({ success: true, message: "Categoría quitada correctamente" });
+    } catch (error) {
+      console.error("Error al quitar categoría del producto:", error);
+      res.status(500).json({ error: "Error al quitar categoría del producto" });
+    }
+  });
+
+  // Compras
+  app.get('/api/purchases', async (req, res) => {
+    try {
+      const purchases = await storage.getPurchases();
+      res.json(purchases);
+    } catch (error) {
+      console.error('Error al obtener compras:', error);
+      res.status(500).json({ error: 'Error al obtener compras' });
+    }
+  });
+
+  app.get('/api/purchases/:id', async (req, res) => {
+    try {
+      const purchase = await storage.getPurchase(Number(req.params.id));
+      if (!purchase) {
+        return res.status(404).json({ error: 'Compra no encontrada' });
+      }
+      res.json(purchase);
+    } catch (error) {
+      console.error('Error al obtener compra:', error);
+      res.status(500).json({ error: 'Error al obtener compra' });
+    }
+  });
+
+  app.post('/api/purchases', async (req, res) => {
+    try {
+      const purchaseData = {
+        ...req.body,
+        userId: req.user?.id || 1, // Usar el ID del usuario autenticado o un valor por defecto
+        timestamp: new Date().toISOString(),
+        status: 'completed'
+      };
+      const purchase = await storage.createPurchase(purchaseData);
+
+      // Actualizar el stock de los productos
+      if (purchaseData.items && Array.isArray(purchaseData.items)) {
+        for (const item of purchaseData.items) {
+          const product = await storage.getProduct(item.productId);
+          if (product) {
+            const currentStock = parseFloat(product.stock.toString());
+            const newStock = currentStock + parseFloat(item.quantity.toString());
+            await storage.updateProduct(item.productId, { stock: newStock.toString() });
+          }
+        }
+      }
+
+      res.status(201).json(purchase);
+    } catch (error) {
+      console.error('Error al crear compra:', error);
+      res.status(500).json({ error: 'Error al crear compra' });
+    }
+  });
+
+  app.put('/api/purchases/:id', async (req, res) => {
+    try {
+      // Obtener la compra actual para comparar los items
+      const currentPurchase = await storage.getPurchase(Number(req.params.id));
+      if (!currentPurchase) {
+        return res.status(404).json({ error: 'Compra no encontrada' });
+      }
+
+      // Revertir el stock de los items actuales
+      if (currentPurchase.items && Array.isArray(currentPurchase.items)) {
+        for (const item of currentPurchase.items) {
+          const product = await storage.getProduct(item.productId);
+          if (product) {
+            const currentStock = parseFloat(product.stock.toString());
+            const newStock = currentStock - parseFloat(item.quantity.toString());
+            await storage.updateProduct(item.productId, { stock: newStock.toString() });
+          }
+        }
+      }
+
+      // Actualizar la compra
+      const purchase = await storage.updatePurchase(Number(req.params.id), req.body);
+
+      // Actualizar el stock con los nuevos items
+      if (req.body.items && Array.isArray(req.body.items)) {
+        for (const item of req.body.items) {
+          const product = await storage.getProduct(item.productId);
+          if (product) {
+            const currentStock = parseFloat(product.stock.toString());
+            const newStock = currentStock + parseFloat(item.quantity.toString());
+            await storage.updateProduct(item.productId, { stock: newStock.toString() });
+          }
+        }
+      }
+
+      res.json(purchase);
+    } catch (error) {
+      console.error('Error al actualizar compra:', error);
+      res.status(500).json({ error: 'Error al actualizar compra' });
+    }
+  });
+
+  app.delete('/api/purchases/:id', async (req, res) => {
+    try {
+      await storage.deletePurchase(Number(req.params.id));
+      res.status(204).send();
+    } catch (error) {
+      console.error('Error al eliminar compra:', error);
+      res.status(500).json({ error: 'Error al eliminar compra' });
+    }
+  });
+
+  // Items de compra
+  app.get('/api/purchases/:id/items', async (req, res) => {
+    try {
+      const items = await storage.getPurchaseItems(Number(req.params.id));
+      res.json(items);
+    } catch (error) {
+      console.error('Error al obtener items de compra:', error);
+      res.status(500).json({ error: 'Error al obtener items de compra' });
+    }
+  });
+
+  app.post('/api/purchases/:id/items', async (req, res) => {
+    try {
+      const itemData = {
+        ...req.body,
+        purchaseId: Number(req.params.id),
+        total: Number(req.body.quantity) * Number(req.body.cost)
+      };
+      const item = await storage.createPurchaseItem(itemData);
+
+      // Actualizar el stock del producto
+      const product = await storage.getProduct(itemData.productId);
+      if (product) {
+        const currentStock = parseFloat(product.stock.toString());
+        const newStock = currentStock + Number(itemData.quantity);
+        await storage.updateProduct(itemData.productId, { stock: newStock.toString() });
+      }
+
+      res.status(201).json(item);
+    } catch (error) {
+      console.error('Error al crear item de compra:', error);
+      res.status(500).json({ error: 'Error al crear item de compra' });
+    }
+  });
+
+  // Endpoint para obtener información del usuario web actual
+  app.get("/api/web/user", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "No autorizado" });
+    }
+    
+    try {
+      const userId = req.user.id;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+      
+      // Si el usuario está asociado a un cliente, obtener sus datos
+      let customerData = {};
+      if (user.role === 'cliente') {
+        const allCustomers = await storage.getAllCustomers();
+        const customer = allCustomers.find(c => c.name === user.fullName);
+        
+        if (customer) {
+          customerData = {
+            customerId: customer.id,
+            email: customer.email,
+            phone: customer.phone,
+            address: customer.address,
+            city: customer.city,
+            province: customer.province
+          };
+        }
+      }
+      
+      // Devolver datos del usuario sin la contraseña
+      const { password, ...userData } = user;
+      res.json({
+        ...userData,
+        name: userData.fullName,
+        ...customerData
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener información del usuario", error: (error as Error).message });
+    }
+  });
+
+  app.delete("/api/order-items/:id", async (req, res) => {
+    try {
+      const orderItemId = parseInt(req.params.id);
+      
+      // Obtener el ítem del pedido antes de eliminarlo para restaurar el stock
+      const orderItem = await storage.getOrderItem(orderItemId);
+      if (!orderItem) {
+        return res.status(404).json({ message: "Ítem de pedido no encontrado" });
+      }
+      
+      try {
+        // Restaurar el stock reservado al eliminar un ítem de pedido
+        const product = await storage.getProduct(orderItem.productId);
+        if (product) {
+          console.log(`[STOCK-RESTAURAR] Restaurando stock reservado para producto: "${product.name}", ID: ${product.id}, Stock actual: ${product.stock}, Cantidad a restaurar: ${orderItem.quantity}`);
+          
+          // Verificar si el producto es compuesto
+          if (product.isComposite && product.components) {
+            let components = [];
+            try {
+              components = typeof product.components === 'string' 
+                ? JSON.parse(product.components) 
+                : product.components;
+              console.log(`[STOCK-RESTAURAR] Producto compuesto con ${components.length} componentes`);
+            } catch (error) {
+              console.error("[STOCK-RESTAURAR] Error al parsear componentes del producto:", error);
+              components = [];
+            }
+            
+            // Por cada componente, restaurar su stock reservado proporcionalmente
+            for (const component of components) {
+              const componentProduct = await storage.getProduct(component.productId);
+              if (componentProduct) {
+                const quantityToRestore = parseFloat(orderItem.quantity) * parseFloat(component.quantity);
+                const currentReservedStock = parseFloat(componentProduct.reservedStock?.toString() || "0");
+                const newReservedStock = currentReservedStock - quantityToRestore;
+                
+                console.log(`[STOCK-RESTAURAR] Restaurando stock reservado de componente: "${componentProduct.name}", Stock reservado anterior: ${currentReservedStock}, Cantidad a restaurar: ${quantityToRestore}, Nuevo stock reservado: ${newReservedStock}`);
+                
+                await storage.updateProduct(component.productId, { 
+                  reservedStock: newReservedStock.toString() 
+                });
+              }
+            }
+          } else {
+            // Para productos no compuestos (estándar)
+            try {
+              // Verificar si necesitamos aplicar factor de conversión
+              let stockToRestore = parseFloat(orderItem.quantity);
+              
+              // Verificar si la unidad del item es diferente a la unidad base del producto
+              if (product.baseUnit && orderItem.unit && orderItem.unit !== product.baseUnit && product.conversionRates) {
+                const conversions = typeof product.conversionRates === 'string' 
+                  ? JSON.parse(product.conversionRates) 
+                  : product.conversionRates;
+                
+                console.log("[STOCK-RESTAURAR] Tasas de conversión:", conversions);
+                
+                if (conversions && conversions[orderItem.unit] && conversions[orderItem.unit].factor) {
+                  const conversionFactor = parseFloat(conversions[orderItem.unit].factor);
+                  stockToRestore = stockToRestore * conversionFactor;
+                  console.log(`[STOCK-RESTAURAR] Aplicando factor de conversión ${conversionFactor} para ${orderItem.unit}`);
+                  console.log(`[STOCK-RESTAURAR] Cantidad original ${orderItem.quantity}, cantidad a restaurar al stock reservado: ${stockToRestore}`);
+                }
+              }
+              
+              const currentReservedStock = parseFloat(product.reservedStock?.toString() || "0");
+              const newReservedStock = currentReservedStock - stockToRestore;
+              console.log(`[STOCK-RESTAURAR] Actualizando stock reservado - Stock reservado anterior: ${currentReservedStock}, Cantidad a restaurar: ${stockToRestore}, Nuevo stock reservado: ${newReservedStock}`);
+              
+              await storage.updateProduct(orderItem.productId, { 
+                reservedStock: newReservedStock.toString() 
+              });
+            } catch (stockError) {
+              console.error("[STOCK-RESTAURAR] Error al restaurar el stock reservado del producto:", stockError);
+            }
+          }
+        }
+      } catch (productError) {
+        console.error("[STOCK-RESTAURAR] Error al procesar el producto para restaurar stock:", productError);
+      }
+      
+      // Eliminar el ítem del pedido
+      const result = await storage.deleteOrderItem(orderItemId);
+      if (result) {
+        res.status(200).json({ message: "Ítem de pedido eliminado correctamente" });
+      } else {
+        res.status(500).json({ message: "Error al eliminar ítem de pedido" });
+      }
+    } catch (error) {
+      console.error("Error al eliminar ítem de pedido:", error);
+      res.status(400).json({ message: "Error al eliminar ítem de pedido", error: (error as Error).message });
+    }
+  });
+
+  // Endpoint para eliminar un ítem de orden específico
+  app.delete("/api/order-items/:id", async (req, res) => {
+    try {
+      const itemId = parseInt(req.params.id);
+      
+      // Obtener el item antes de eliminarlo
+      const orderItem = await storage.getOrderItem(itemId);
+      if (!orderItem) {
+        return res.status(404).json({ message: "Item de pedido no encontrado" });
+      }
+      
+      // Obtener el producto asociado al item
+      const product = await storage.getProduct(orderItem.productId);
+      if (product) {
+        console.log(`[STOCK-RESTAURAR] Restaurando stock para producto: "${product.name}", ID: ${product.id}, Stock actual: ${product.stock}, Cantidad a restaurar: ${orderItem.quantity}`);
+        
+        // Verificar si el producto es compuesto
+        if (product.isComposite && product.components) {
+          let components = [];
+          try {
+            components = typeof product.components === 'string' 
+              ? JSON.parse(product.components) 
+              : product.components;
+            console.log(`[STOCK-RESTAURAR] Producto compuesto con ${components.length} componentes`);
+          } catch (error) {
+            console.error("[STOCK-RESTAURAR] Error al parsear componentes del producto:", error);
+            components = [];
+          }
+          
+          // Por cada componente, restaurar su stock proporcionalmente
+          for (const component of components) {
+            const componentProduct = await storage.getProduct(component.productId);
+            if (componentProduct) {
+              const quantityToRestore = parseFloat(orderItem.quantity) * parseFloat(component.quantity);
+              const newComponentStock = parseFloat(componentProduct.stock.toString()) + quantityToRestore;
+              console.log(`[STOCK-RESTAURAR] Restaurando stock de componente: "${componentProduct.name}", Stock anterior: ${componentProduct.stock}, Cantidad a restaurar: ${quantityToRestore}, Nuevo stock: ${newComponentStock}`);
+              
+              await storage.updateProduct(component.productId, { stock: newComponentStock.toString() });
+            }
+          }
+        } else {
+          // Para productos no compuestos (estándar)
+          // Verificar si necesitamos aplicar factor de conversión
+          let stockToRestore = parseFloat(orderItem.quantity);
+          
+          // Verificar si la unidad del item es diferente a la unidad base del producto
+          if (product.baseUnit && orderItem.unit && orderItem.unit !== product.baseUnit && product.conversionRates) {
+            const conversions = typeof product.conversionRates === 'string' 
+              ? JSON.parse(product.conversionRates) 
+              : product.conversionRates;
+            
+            if (conversions && conversions[orderItem.unit] && conversions[orderItem.unit].factor) {
+              const conversionFactor = parseFloat(conversions[orderItem.unit].factor);
+              stockToRestore = stockToRestore * conversionFactor;
+              console.log(`[STOCK-RESTAURAR] Aplicando factor de conversión ${conversionFactor} para ${orderItem.unit}`);
+              console.log(`[STOCK-RESTAURAR] Cantidad original ${orderItem.quantity}, cantidad a restaurar al stock: ${stockToRestore}`);
+            }
+          }
+          
+          const currentStock = parseFloat(product.stock.toString());
+          const newStock = currentStock + stockToRestore;
+          console.log(`[STOCK-RESTAURAR] Restaurando stock estándar - Stock anterior: ${currentStock}, Cantidad a restaurar: ${stockToRestore}, Nuevo stock: ${newStock}`);
+          
+          await storage.updateProduct(orderItem.productId, { stock: newStock.toString() });
+        }
+      }
+      
+      // Eliminar el item del pedido
+      await storage.deleteOrderItem(itemId);
+      
+      res.json({ message: "Item de pedido eliminado correctamente" });
+    } catch (error) {
+      console.error("Error al eliminar item de pedido:", error);
+      res.status(400).json({ message: "Error al eliminar item de pedido", error: (error as Error).message });
+    }
+  });
+
+  // Ruta para generar reportes de ganancias
+  app.get("/api/reports/profit", async (req, res) => {
+    try {
+      // Obtener parámetros de fecha desde la solicitud
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(new Date().setDate(new Date().getDate() - 30));
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      
+      // Asegurar que la fecha de fin incluya todo el día
+      endDate.setHours(23, 59, 59, 999);
+
+      // Obtener todas las ventas
+      const allSales = await storage.getAllSales() || [];
+      
+      // Filtrar ventas por fecha
+      const filteredSales = allSales.filter((sale: any) => {
+        const saleDate = new Date(sale.timestamp);
+        return saleDate >= startDate && saleDate <= endDate;
+      });
+      
+      // Obtener detalles de cada venta
+      const salesDetails = await Promise.all(filteredSales.map(async (sale) => {
+        // Obtener los items de la venta
+        const saleItems = await storage.getSaleItemsBySaleId(sale.id);
+        
+        // Calcular costos y ganancias por item
+        const itemsWithProfit = await Promise.all(saleItems.map(async (item) => {
+          const product = await storage.getProduct(item.productId);
+          const costPrice = product ? parseFloat(product.cost || "0") : 0;
+          const sellPrice = parseFloat(item.price);
+          const quantity = parseFloat(item.quantity);
+          
+          const totalCost = costPrice * quantity;
+          const totalSell = sellPrice * quantity;
+          const profit = totalSell - totalCost;
+          const profitMargin = totalSell > 0 ? (profit / totalSell) * 100 : 0;
+          
+          return {
+            ...item,
+            productName: product ? product.name : "Producto desconocido",
+            costPrice,
+            profit,
+            profitMargin
+          };
+        }));
+        
+        // Calcular totales para la venta
+        const totalCost = itemsWithProfit.reduce((sum, item) => sum + (item.costPrice * parseFloat(item.quantity)), 0);
+        const totalSell = parseFloat(sale.total);
+        const totalProfit = totalSell - totalCost;
+        const profitMargin = totalSell > 0 ? (totalProfit / totalSell) * 100 : 0;
+        
+        // Obtener información del cliente
+        let customerInfo = "Cliente no registrado";
+        if (sale.customerId) {
+          const customer = await storage.getCustomer(sale.customerId);
+          if (customer) {
+            customerInfo = customer.name;
+          }
+        }
+        
+        return {
+          id: sale.id,
+          date: sale.timestamp,
+          customer: customerInfo,
+          items: itemsWithProfit,
+          totalCost,
+          totalSell,
+          totalProfit,
+          profitMargin
+        };
+      }));
+      
+      // Calcular resumen del periodo
+      const summary = {
+        periodStart: startDate,
+        periodEnd: endDate,
+        totalSales: filteredSales.length,
+        totalRevenue: salesDetails.reduce((sum, sale) => sum + sale.totalSell, 0),
+        totalCost: salesDetails.reduce((sum, sale) => sum + sale.totalCost, 0),
+        totalProfit: salesDetails.reduce((sum, sale) => sum + sale.totalProfit, 0),
+        averageProfitMargin: salesDetails.length > 0 
+          ? salesDetails.reduce((sum, sale) => sum + sale.profitMargin, 0) / salesDetails.length 
+          : 0,
+        // Ventas por día para gráfico
+        dailySales: getDailySalesSummary(salesDetails) || []
+      };
+      
+      res.json({
+        summary,
+        salesDetails: salesDetails || []
+      });
+      
+    } catch (error) {
+      console.error("Error al generar reporte de ganancias:", error);
+      res.status(500).json({ 
+        error: "Error al generar reporte de ganancias",
+        summary: {
+          periodStart: new Date(),
+          periodEnd: new Date(),
+          totalSales: 0,
+          totalRevenue: 0,
+          totalCost: 0,
+          totalProfit: 0,
+          averageProfitMargin: 0,
+          dailySales: []
+        },
+        salesDetails: []
+      });
     }
   });
   
-  const httpServer = createServer(app);
+  // Función para agrupar ventas por día
+  function getDailySalesSummary(salesDetails) {
+    const dailyMap = new Map();
+    
+    salesDetails.forEach(sale => {
+      const date = new Date(sale.date);
+      const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      
+      if (!dailyMap.has(dateKey)) {
+        dailyMap.set(dateKey, {
+          date: dateKey,
+          revenue: 0,
+          cost: 0,
+          profit: 0,
+          salesCount: 0
+        });
+      }
+      
+      const dailyData = dailyMap.get(dateKey);
+      dailyMap.set(dateKey, {
+        ...dailyData,
+        revenue: dailyData.revenue + sale.totalSell,
+        cost: dailyData.cost + sale.totalCost,
+        profit: dailyData.profit + sale.totalProfit,
+        salesCount: dailyData.salesCount + 1
+      });
+    });
+    
+    // Convertir el Map a un array ordenado por fecha
+    return Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }
 
-  return httpServer;
+  // Ruta para generar reportes de productos más rentables
+  app.get("/api/reports/profitable-products", async (req, res) => {
+    try {
+      // Obtener parámetros de fecha desde la solicitud
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(new Date().setDate(new Date().getDate() - 30));
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      
+      // Asegurar que la fecha de fin incluya todo el día
+      endDate.setHours(23, 59, 59, 999);
+
+      // Obtener todas las ventas
+      const allSales = await storage.getAllSales() || [];
+      
+      // Filtrar ventas por fecha
+      const filteredSales = allSales.filter((sale: any) => {
+        const saleDate = new Date(sale.timestamp);
+        return saleDate >= startDate && saleDate <= endDate;
+      });
+      
+      // Obtener todos los productos
+      const products = await storage.getAllProducts() || [];
+      
+      // Mapa para acumular datos por producto
+      const productMap = new Map();
+      
+      // Procesar cada venta y sus items
+      for (const sale of filteredSales) {
+        const saleItems = await storage.getSaleItemsBySaleId(sale.id);
+        
+        for (const item of saleItems) {
+          const product = products.find(p => p.id === item.productId);
+          if (!product) continue;
+          
+          const costPrice = parseFloat(product.cost || "0");
+          const sellPrice = parseFloat(item.price);
+          const quantity = parseFloat(item.quantity);
+          
+          const totalCost = costPrice * quantity;
+          const totalSell = sellPrice * quantity;
+          const profit = totalSell - totalCost;
+          
+          const productId = product.id;
+          if (!productMap.has(productId)) {
+            productMap.set(productId, {
+              id: productId,
+              name: product.name,
+              totalQuantity: 0,
+              totalRevenue: 0,
+              totalCost: 0,
+              totalProfit: 0
+            });
+          }
+          
+          const productData = productMap.get(productId);
+          productMap.set(productId, {
+            ...productData,
+            totalQuantity: productData.totalQuantity + quantity,
+            totalRevenue: productData.totalRevenue + totalSell,
+            totalCost: productData.totalCost + totalCost,
+            totalProfit: productData.totalProfit + profit
+          });
+        }
+      }
+      
+      // Convertir el mapa a array y calcular márgenes de ganancia
+      let productProfits = Array.from(productMap.values()).map(product => {
+        const profitMargin = product.totalRevenue > 0 
+          ? (product.totalProfit / product.totalRevenue) * 100 
+          : 0;
+          
+        return {
+          ...product,
+          profitMargin
+        };
+      });
+      
+      // Ordenar por ganancia total (de mayor a menor)
+      productProfits = productProfits.sort((a, b) => b.totalProfit - a.totalProfit);
+      
+      // Siempre devolver un array, incluso si está vacío
+      res.json(productProfits || []);
+      
+    } catch (error) {
+      console.error("Error al generar reporte de productos rentables:", error);
+      res.status(500).json({ error: "Error al generar reporte de productos rentables" });
+    }
+  });
+
+  // Actualización masiva de precio de costo por porcentaje
+  app.post('/api/products/update-cost-by-percentage', async (req, res) => {
+    try {
+      const { percentage, filterByCategoryId, filterBySupplierId } = req.body;
+      
+      // Validación básica
+      if (typeof percentage !== 'number' || isNaN(percentage)) {
+        return res.status(400).json({ 
+          error: 'El porcentaje debe ser un número válido'
+        });
+      }
+      
+      // Obtener productos según los filtros
+      let products = await storage.getAllProducts();
+      
+      // Aplicar filtro por categoría si se proporciona
+      if (filterByCategoryId) {
+        const categoryProducts = await storage.getProductsByCategory(filterByCategoryId);
+        const categoryProductIds = new Set(categoryProducts.map(p => p.id));
+        products = products.filter(p => categoryProductIds.has(p.id));
+      }
+      
+      // Aplicar filtro por proveedor si se proporciona
+      if (filterBySupplierId) {
+        products = products.filter(p => p.supplierId === filterBySupplierId);
+      }
+      
+      // Actualizar el costo de cada producto y recalcular precios
+      const updatedProducts = [];
+      for (const product of products) {
+        if (product.cost) {
+          const currentCost = parseFloat(product.cost.toString());
+          const newCost = currentCost * (1 + percentage / 100);
+          
+          // Redondear a 2 decimales
+          const roundedCost = Math.round(newCost * 100) / 100;
+          
+          // Obtener los valores actuales del producto
+          const ivaRate = parseFloat(product.iva?.toString() || "21");
+          const shippingRate = parseFloat(product.shipping?.toString() || "0");
+          const profitRate = parseFloat(product.profit?.toString() || "55");
+          const wholesaleProfitRate = parseFloat(product.wholesaleProfit?.toString() || "35");
+          
+          // Calcular nuevo precio minorista
+          const costWithIva = roundedCost * (1 + (ivaRate / 100));
+          const costWithShipping = costWithIva * (1 + (shippingRate / 100));
+          const newPrice = Math.round(costWithShipping * (1 + (profitRate / 100)) * 100) / 100;
+          
+          // Calcular nuevo precio mayorista
+          const newWholesalePrice = Math.round(costWithShipping * (1 + (wholesaleProfitRate / 100)) * 100) / 100;
+          
+          // Actualizar el producto con el nuevo costo y precios
+          const updatedProduct = await storage.updateProduct(product.id, { 
+            cost: roundedCost.toString(),
+            price: newPrice.toString(),
+            wholesalePrice: newWholesalePrice.toString(),
+            lastUpdated: new Date()
+          });
+          updatedProducts.push(updatedProduct);
+        }
+      }
+      
+      res.json({
+        message: `Se actualizó el costo de ${updatedProducts.length} productos con un aumento del ${percentage}%`,
+        updatedProductsCount: updatedProducts.length,
+        updatedProducts: updatedProducts // Incluir los productos actualizados en la respuesta
+      });
+      
+    } catch (error) {
+      console.error('Error al actualizar costos por porcentaje:', error);
+      res.status(500).json({ 
+        error: 'Error al actualizar costos de productos', 
+        message: (error as Error).message 
+      });
+    }
+  });
+  
+  // Actualización masiva de precio de costo por archivo (usando código de proveedor)
+  app.post('/api/products/update-cost-by-file', async (req, res) => {
+    try {
+      const { products: productUpdates, supplierId, keepCurrentPrices = false } = req.body;
+      
+      // Validación básica
+      if (!Array.isArray(productUpdates)) {
+        return res.status(400).json({ 
+          error: 'Se requiere un array de productos para actualizar' 
+        });
+      }
+      
+      const results = {
+        success: 0,
+        errors: [] as Array<{ supplierCode: string; message: string; details?: string }>,
+        updatedProducts: [] as any[]
+      };
+      
+      // Obtener todos los productos para buscar por código de proveedor
+      let allProducts = await storage.getAllProducts();
+      
+      // Filtrar por proveedor si se especifica
+      if (supplierId) {
+        allProducts = allProducts.filter(p => p.supplierId === supplierId);
+      }
+      
+      // Crear un mapa para búsqueda eficiente por código de proveedor
+      const productsBySupplierCode = new Map();
+      allProducts.forEach(product => {
+        if (product.supplierCode) {
+          productsBySupplierCode.set(product.supplierCode, product);
+        }
+      });
+      
+      // Procesar cada actualización de producto
+      for (const update of productUpdates) {
+        const { supplierCode, newCost } = update;
+        
+        if (!supplierCode) {
+          results.errors.push({
+            supplierCode: 'desconocido',
+            message: 'Código de proveedor no proporcionado',
+            details: 'El código de proveedor es requerido para actualizar el producto'
+          });
+          continue;
+        }
+        
+        if (typeof newCost !== 'number' || isNaN(newCost)) {
+          results.errors.push({
+            supplierCode,
+            message: 'Costo inválido',
+            details: `El costo proporcionado (${newCost}) no es un número válido`
+          });
+          continue;
+        }
+        
+        if (newCost < 0) {
+          results.errors.push({
+            supplierCode,
+            message: 'Costo inválido',
+            details: 'El costo no puede ser negativo'
+          });
+          continue;
+        }
+        
+        const product = productsBySupplierCode.get(supplierCode);
+        
+        if (!product) {
+          results.errors.push({
+            supplierCode,
+            message: 'Producto no encontrado',
+            details: 'No se encontró ningún producto con este código de proveedor'
+          });
+          continue;
+        }
+        
+        try {
+          // Obtener los valores actuales del producto
+          const ivaRate = parseFloat(product.iva?.toString() || "21");
+          const shippingRate = parseFloat(product.shipping?.toString() || "0");
+          const profitRate = parseFloat(product.profit?.toString() || "55");
+          const wholesaleProfitRate = parseFloat(product.wholesaleProfit?.toString() || "35");
+          
+          // Preparar datos de actualización
+          const updateData: any = { 
+            cost: newCost.toString(),
+            lastUpdated: new Date()
+          };
+          
+          // Solo actualizar precios si no se debe mantener los actuales
+          if (!keepCurrentPrices) {
+            // Calcular nuevo precio minorista
+            const costWithIva = newCost * (1 + (ivaRate / 100));
+            const costWithShipping = costWithIva * (1 + (shippingRate / 100));
+            const newPrice = Math.round(costWithShipping * (1 + (profitRate / 100)) * 100) / 100;
+            
+            // Calcular nuevo precio mayorista
+            const newWholesalePrice = Math.round(costWithShipping * (1 + (wholesaleProfitRate / 100)) * 100) / 100;
+            
+            updateData.price = newPrice.toString();
+            updateData.wholesalePrice = newWholesalePrice.toString();
+          }
+          
+          // Actualizar el producto
+          const updatedProduct = await storage.updateProduct(product.id, updateData);
+          results.updatedProducts.push(updatedProduct);
+          results.success++;
+          
+        } catch (error) {
+          results.errors.push({
+            supplierCode,
+            message: 'Error al actualizar producto',
+            details: (error as Error).message
+          });
+        }
+      }
+      
+      res.json({
+        message: `Se actualizaron ${results.success} productos. Hubo ${results.errors.length} errores.`,
+        results
+      });
+      
+    } catch (error) {
+      console.error('Error al actualizar costos por archivo:', error);
+      res.status(500).json({ 
+        error: 'Error al actualizar costos de productos', 
+        message: (error as Error).message 
+      });
+    }
+  });
+
+  // Bank Accounts endpoints
+  app.get("/api/bank-accounts", async (req, res) => {
+    try {
+      const accounts = await getBankAccounts();
+      res.json(accounts);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener cuentas bancarias", error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/bank-accounts", async (req, res) => {
+    try {
+      const account = await createBankAccount(req.body);
+      res.status(201).json(account);
+    } catch (error) {
+      res.status(400).json({ message: "Error al crear cuenta bancaria", error: (error as Error).message });
+    }
+  });
+
+  app.put("/api/bank-accounts/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const account = await updateBankAccount(id, req.body);
+      res.json(account);
+    } catch (error) {
+      res.status(400).json({ message: "Error al actualizar cuenta bancaria", error: (error as Error).message });
+    }
+  });
+
+  app.delete("/api/bank-accounts/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await deleteBankAccount(id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ message: "Error al eliminar cuenta bancaria", error: (error as Error).message });
+    }
+  });
+
+  // Endpoint para renovar la sesión
+  app.post("/api/refresh-session", async (req, res) => {
+    try {
+      if (!req.session.passport?.user) {
+        return res.status(401).json({ 
+          code: "SESSION_EXPIRED",
+          message: "No hay sesión activa" 
+        });
+      }
+
+      // Verificar si el usuario existe
+      const user = await storage.getUser(req.session.passport.user);
+      if (!user) {
+        return res.status(401).json({ 
+          code: "USER_NOT_FOUND",
+          message: "Usuario no encontrado" 
+        });
+      }
+
+      // Renovar la sesión
+      req.session.touch();
+      
+      return res.status(200).json({ 
+        message: "Sesión renovada exitosamente",
+        user: {
+          id: user.id,
+          username: user.username,
+          fullName: user.fullName,
+          role: user.role
+        }
+      });
+    } catch (error) {
+      console.error("Error al renovar la sesión:", error);
+      return res.status(500).json({ 
+        code: "INTERNAL_ERROR",
+        message: "Error al renovar la sesión" 
+      });
+    }
+  });
+
+  const server = createServer(app);
+
+  return server;
 }

@@ -127,6 +127,9 @@ export const PrintService = {
             <div class="ticket-divider"></div>
             
             <div class="product-total">
+              <p>Subtotal: $${parseFloat(sale.subtotal ?? sale.total ?? 0).toFixed(2)}</p>
+              ${(parseFloat(sale.discountPercent) > 0) ? `<p>Descuento (${sale.discountPercent}%): -$${parseFloat(sale.discount ?? 0).toFixed(2)}</p>` : ''}
+              ${(parseFloat(sale.surchargePercent) > 0) ? `<p>Recargo (${sale.surchargePercent}%): +$${parseFloat(sale.surcharge ?? 0).toFixed(2)}</p>` : ''}
               <p>TOTAL: $${parseFloat(sale.total).toFixed(2)}</p>
             </div>
             
@@ -185,6 +188,9 @@ export const PrintService = {
         escpos
           .text('----------------------------------')
           .align('right')
+          .text(`Subtotal: $${parseFloat(sale.subtotal ?? sale.total ?? 0).toFixed(2)}`)
+          .text(parseFloat(sale.discountPercent) > 0 ? `Descuento (${sale.discountPercent}%): -$${parseFloat(sale.discount ?? 0).toFixed(2)}` : '')
+          .text(parseFloat(sale.surchargePercent) > 0 ? `Recargo (${sale.surchargePercent}%): +$${parseFloat(sale.surcharge ?? 0).toFixed(2)}` : '')
           .text(`TOTAL: $${parseFloat(sale.total).toFixed(2)}`)
           .align('center')
           .text('')

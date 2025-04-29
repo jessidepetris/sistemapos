@@ -115,8 +115,33 @@ export const PDFService = {
           yPos = 20;
         }
         
+        // Determinar el nombre del producto de forma más robusta
+        let productName = 'Producto no especificado';
+        
+        if (item.name) {
+          // Si ya tiene nombre, usarlo
+          productName = item.name;
+        } else if (sale.products && sale.products.find((p: { id: number, name: string }) => p.id === item.productId)) {
+          // Buscar en la lista de productos asociados a la venta
+          productName = sale.products.find((p: { id: number, name: string }) => p.id === item.productId).name;
+        } else if (sale.productsData && typeof sale.productsData === 'string') {
+          // Intentar extraer de datos en JSON
+          try {
+            const productsData = JSON.parse(sale.productsData);
+            const product = productsData.find((p: { id: number, name: string }) => p.id === item.productId);
+            if (product && product.name) {
+              productName = product.name;
+            }
+          } catch (e) {
+            console.warn('Error al parsear productsData', e);
+          }
+        } else {
+          // Usar el ID como último recurso
+          productName = `Producto #${item.productId}`;
+        }
+        
         // Descripción con posible presentación
-        pdf.text(item.name, margin + 2, yPos);
+        pdf.text(productName, margin + 2, yPos);
         
         if (item.isConversion) {
           yPos += 4;
@@ -148,20 +173,28 @@ export const PDFService = {
       const totalesX = pageWidth - margin - 60;
       const valoresX = pageWidth - margin - 2;
       
+      pdf.setFont('helvetica', 'normal');
       pdf.text('Subtotal:', totalesX, yPos);
-      pdf.text(`$${parseFloat(sale.total).toFixed(2)}`, valoresX, yPos, { align: 'right' });
+      pdf.text(`$${parseFloat(sale.subtotal ?? sale.total ?? 0).toFixed(2)}`, valoresX, yPos, { align: 'right' });
       
-      yPos += 6;
-      pdf.text('IVA (21%):', totalesX, yPos);
-      pdf.text(`$${(parseFloat(sale.total) * 0.21 / 1.21).toFixed(2)}`, valoresX, yPos, { align: 'right' });
-      
-      yPos += 6;
-      pdf.setDrawColor(150, 150, 150);
-      pdf.line(totalesX, yPos - 2, valoresX, yPos - 2);
-      
+      if (parseFloat(sale.discountPercent) > 0) {
+        yPos += 6;
+        pdf.setTextColor(56, 142, 60); // Verde
+        pdf.text(`Descuento (${sale.discountPercent}%):`, totalesX, yPos);
+        pdf.text(`-$${parseFloat(sale.discount ?? 0).toFixed(2)}`, valoresX, yPos, { align: 'right' });
+        pdf.setTextColor(0, 0, 0); // Reset color
+      }
+      if (parseFloat(sale.surchargePercent) > 0) {
+        yPos += 6;
+        pdf.setTextColor(230, 81, 0); // Naranja
+        pdf.text(`Recargo (${sale.surchargePercent}%):`, totalesX, yPos);
+        pdf.text(`+$${parseFloat(sale.surcharge ?? 0).toFixed(2)}`, valoresX, yPos, { align: 'right' });
+        pdf.setTextColor(0, 0, 0); // Reset color
+      }
+      yPos += 8;
       pdf.setFont('helvetica', 'bold');
-      pdf.text('TOTAL:', totalesX, yPos + 5);
-      pdf.text(`$${parseFloat(sale.total).toFixed(2)}`, valoresX, yPos + 5, { align: 'right' });
+      pdf.text('TOTAL:', totalesX, yPos);
+      pdf.text(`$${parseFloat(sale.total).toFixed(2)}`, valoresX, yPos, { align: 'right' });
       
       // Pie de página
       yPos = pdf.internal.pageSize.height - 20;

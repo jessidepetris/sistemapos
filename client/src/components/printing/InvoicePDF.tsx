@@ -84,12 +84,20 @@ export const InvoicePDFHelper = {
             <div style="width: 250px;">
               <div style="display: flex; justify-content: space-between; padding: 8px 0;">
                 <span style="font-weight: 500;">Subtotal:</span>
-                <span>$${parseFloat(sale.total).toFixed(2)}</span>
+                <span>$${parseFloat(sale.subtotal || sale.total).toFixed(2)}</span>
               </div>
-              <div style="display: flex; justify-content: space-between; padding: 8px 0; color: #666;">
-                <span>IVA (21%):</span>
-                <span>$${(parseFloat(sale.total) * 0.21 / 1.21).toFixed(2)}</span>
-              </div>
+              ${parseFloat(sale.discountPercent) > 0 ? `
+                <div style="display: flex; justify-content: space-between; padding: 8px 0; color: #388e3c;">
+                  <span>Descuento (${sale.discountPercent}%):</span>
+                  <span>-$${parseFloat(sale.discount).toFixed(2)}</span>
+                </div>
+              ` : ''}
+              ${parseFloat(sale.surchargePercent) > 0 ? `
+                <div style="display: flex; justify-content: space-between; padding: 8px 0; color: #e65100;">
+                  <span>Recargo (${sale.surchargePercent}%):</span>
+                  <span>+$${parseFloat(sale.surcharge).toFixed(2)}</span>
+                </div>
+              ` : ''}
               <div style="display: flex; justify-content: space-between; padding: 8px 0; font-weight: bold; font-size: 18px; border-top: 1px solid #ddd; margin-top: 8px;">
                 <span>TOTAL:</span>
                 <span>$${parseFloat(sale.total).toFixed(2)}</span>

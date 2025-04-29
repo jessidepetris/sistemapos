@@ -91,7 +91,7 @@ export default function DeliveryRoutesTab() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedRoute, setSelectedRoute] = useState<DeliveryRoute | null>(null);
   const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const reactQueryClient = useQueryClient();
 
   // Obtener lista de rutas
   const { data: routes, isLoading: isLoadingRoutes } = useQuery<DeliveryRoute[]>({
@@ -147,7 +147,7 @@ export default function DeliveryRoutesTab() {
         title: "Ruta creada",
         description: "La ruta de entrega ha sido creada exitosamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/delivery-routes"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/delivery-routes"] });
       setIsCreateOpen(false);
       form.reset();
     },
@@ -170,7 +170,7 @@ export default function DeliveryRoutesTab() {
         title: "Ruta actualizada",
         description: "La ruta de entrega ha sido actualizada exitosamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/delivery-routes"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/delivery-routes"] });
       setIsEditOpen(false);
       setSelectedRoute(null);
       form.reset();
@@ -194,7 +194,7 @@ export default function DeliveryRoutesTab() {
         title: "Ruta eliminada",
         description: "La ruta de entrega ha sido eliminada exitosamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/delivery-routes"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/delivery-routes"] });
     },
     onError: (error) => {
       toast({

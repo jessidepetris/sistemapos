@@ -77,7 +77,7 @@ export default function DeliveryZonesTab() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedZone, setSelectedZone] = useState<DeliveryZone | null>(null);
   const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const reactQueryClient = useQueryClient();
 
   // Obtener lista de zonas
   const { data: zones, isLoading } = useQuery<DeliveryZone[]>({
@@ -114,7 +114,7 @@ export default function DeliveryZonesTab() {
         title: "Zona creada",
         description: "La zona de entrega ha sido creada exitosamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/delivery-zones"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/delivery-zones"] });
       setIsCreateOpen(false);
       form.reset();
     },
@@ -137,7 +137,7 @@ export default function DeliveryZonesTab() {
         title: "Zona actualizada",
         description: "La zona de entrega ha sido actualizada exitosamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/delivery-zones"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/delivery-zones"] });
       setIsEditOpen(false);
       setSelectedZone(null);
       form.reset();
@@ -161,7 +161,7 @@ export default function DeliveryZonesTab() {
         title: "Zona eliminada",
         description: "La zona de entrega ha sido eliminada exitosamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/delivery-zones"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/delivery-zones"] });
     },
     onError: (error) => {
       toast({

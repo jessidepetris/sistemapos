@@ -22,46 +22,104 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { insertAccountTransactionSchema } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, Search, CreditCard, ArrowDownCircle, ArrowUpCircle } from "lucide-react";
+import { Loader2, Plus, Search, CreditCard, ArrowDownCircle, ArrowUpCircle, Eye, MessageCircle, Receipt } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Link } from "wouter";
+import { jsPDF } from 'jspdf';
 
-const transactionFormSchema = insertAccountTransactionSchema.extend({
+// Tipos
+interface Account {
+  id: number;
+  customerId: number;
+  balance: string;
+  creditLimit?: string;
+  lastUpdated: string;
+  customer?: {
+    id: number;
+    name: string;
+    phone?: string;
+  };
+}
+
+interface Transaction {
+  id: number;
+  timestamp: string;
+  accountId: number;
+  amount: string;
+  type: "credit" | "debit";
+  description: string;
+  balanceAfter: string;
+  relatedSaleId?: number;
+  relatedNoteId?: number;
+  paymentMethod?: "cash" | "transfer" | "credit_card" | "debit_card" | "check" | "qr";
+}
+
+interface Customer {
+  id: number;
+  name: string;
+}
+
+interface User {
+  id: number;
+}
+
+const transactionFormSchema = z.object({
+  accountId: z.number().optional(),
   amount: z.coerce.number().min(0.01, "El monto debe ser mayor a 0"),
+  currency: z.string().default("ARS"),
+  type: z.enum(["credit", "debit"]),
   description: z.string().min(1, "La descripción es requerida"),
-});
+  paymentMethod: z.enum(["cash", "transfer", "credit_card", "debit_card", "check", "qr"]).optional(),
+}).refine(
+  (data) => {
+    if (data.type === "credit") {
+      return !!data.paymentMethod;
+    }
+    return true;
+  },
+  {
+    message: "El método de pago es requerido para pagos",
+    path: ["paymentMethod"],
+  }
+);
 
 type TransactionFormValues = z.infer<typeof transactionFormSchema>;
 
-export default function AccountsPage() {
+const AccountsPage = () => {
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAccount, setSelectedAccount] = useState<number | null>(null);
-  const [selectedAccountDetails, setSelectedAccountDetails] = useState<any | null>(null);
+  const [selectedAccountDetails, setSelectedAccountDetails] = useState<Account | null>(null);
   const [isTransactionDialogOpen, setIsTransactionDialogOpen] = useState(false);
   const [transactionType, setTransactionType] = useState<"credit" | "debit">("credit");
   
   // Get accounts
-  const { data: accounts, isLoading } = useQuery({
+  const { data: accounts, isLoading } = useQuery<Account[]>({
     queryKey: ["/api/accounts"],
     retry: false,
   });
   
   // Get account transactions if an account is selected
-  const { data: transactions, isLoading: isLoadingTransactions } = useQuery({
+  const { data: transactions, isLoading: isLoadingTransactions } = useQuery<Transaction[]>({
     queryKey: [`/api/accounts/${selectedAccount}/transactions`],
     enabled: !!selectedAccount,
     retry: false,
   });
   
   // Get customers for new account
-  const { data: customers, isLoading: isLoadingCustomers } = useQuery({
+  const { data: customers, isLoading: isLoadingCustomers } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
     retry: false,
   });
   
+  // Get current user
+  const { data: currentUser } = useQuery<User>({
+    queryKey: ["/api/user"],
+    retry: false,
+  });
+
   // New account form
   const form = useForm<any>({
     resolver: zodResolver(z.object({
@@ -82,6 +140,7 @@ export default function AccountsPage() {
       amount: 0,
       type: "credit",
       description: "",
+      paymentMethod: undefined,
     },
   });
   
@@ -134,8 +193,8 @@ export default function AccountsPage() {
   });
   
   // Filtered accounts based on search
-  const filteredAccounts = searchQuery
-    ? accounts?.filter((account: any) =>
+  const filteredAccounts = searchQuery && accounts
+    ? accounts.filter((account) =>
         account.customer?.name.toLowerCase().includes(searchQuery.toLowerCase())
       )
     : accounts;
@@ -144,19 +203,27 @@ export default function AccountsPage() {
   const onCreateAccountSubmit = (data: any) => {
     createAccountMutation.mutate(data);
   };
-  
-  // Get current user
-  const { data: currentUser } = useQuery({
-    queryKey: ["/api/user"],
-    retry: false,
-  });
 
   const onAddTransactionSubmit = (data: TransactionFormValues) => {    
     const transactionData = {
       ...data,
       accountId: selectedAccount!,
       type: transactionType,
-      userId: currentUser?.id || 1, // Usamos el ID 1 como fallback (admin)
+      description: data.type === "credit" ? 
+        `Pago a cuenta en ${(() => {
+          if (!data.paymentMethod) return "método no especificado";
+          switch (data.paymentMethod) {
+            case "cash": return "efectivo";
+            case "transfer": return "transferencia";
+            case "credit_card": return "tarjeta de crédito";
+            case "debit_card": return "tarjeta de débito";
+            case "check": return "cheque";
+            case "qr": return "QR";
+            default: return data.paymentMethod;
+          }
+        })()}` : data.description,
+      paymentMethod: data.type === "credit" ? data.paymentMethod : undefined,
+      userId: currentUser?.id || 1,
     };
     
     console.log("Enviando transacción:", transactionData);
@@ -165,7 +232,7 @@ export default function AccountsPage() {
   };
   
   // Handle opening transaction dialog
-  const handleOpenTransactionDialog = (account: any, type: "credit" | "debit") => {
+  const handleOpenTransactionDialog = (account: Account, type: "credit" | "debit") => {
     setSelectedAccount(account.id);
     setSelectedAccountDetails(account);
     setTransactionType(type);
@@ -174,6 +241,7 @@ export default function AccountsPage() {
       amount: 0,
       type: type,
       description: type === "credit" ? "Pago a cuenta" : "Compra",
+      paymentMethod: "cash",
     });
     setIsTransactionDialogOpen(true);
   };
@@ -182,6 +250,92 @@ export default function AccountsPage() {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+  
+  // Función para generar el comprobante de pago
+  const generateReceipt = (transaction: Transaction, account: Account) => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    // Configuración de fuentes y estilos
+    doc.setFontSize(20);
+    doc.setFont("helvetica", "bold");
+    
+    // Título centrado
+    doc.text("COMPROBANTE DE PAGO", pageWidth / 2, 20, { align: "center" });
+    
+    // Agregar número de comprobante
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.text(`N° ${transaction.id.toString().padStart(8, '0')}`, pageWidth / 2, 30, { align: "center" });
+    
+    // Línea divisoria
+    doc.setLineWidth(0.5);
+    doc.line(20, 35, pageWidth - 20, 35);
+    
+    // Información del comercio
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text("Punto Pastelero", 20, 45);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text("Insumos de Pastelería", 20, 52);
+    doc.text("Tel: (xxx) xxx-xxxx", 20, 57);
+    doc.text("Email: contacto@puntopastelero.com", 20, 62);
+    
+    // Línea divisoria
+    doc.line(20, 67, pageWidth - 20, 67);
+    
+    // Información de la transacción
+    doc.setFontSize(12);
+    const startY = 77;
+    const lineHeight = 7;
+    let currentY = startY;
+    
+    // Función helper para agregar líneas de texto
+    const addLine = (label: string, value: string) => {
+      doc.setFont("helvetica", "bold");
+      doc.text(label, 20, currentY);
+      doc.setFont("helvetica", "normal");
+      doc.text(value, 70, currentY);
+      currentY += lineHeight;
+    };
+    
+    addLine("Fecha:", formatDate(transaction.timestamp));
+    addLine("Cliente:", account.customer?.name || 'Cliente no registrado');
+    addLine("Monto:", `$${parseFloat(transaction.amount).toFixed(2)}`);
+    addLine("Método de pago:", (() => {
+      if (!transaction.paymentMethod) return "No especificado";
+      switch (transaction.paymentMethod) {
+        case "cash": return "Efectivo";
+        case "transfer": return "Transferencia";
+        case "credit_card": return "Tarjeta de Crédito";
+        case "debit_card": return "Tarjeta de Débito";
+        case "check": return "Cheque";
+        case "qr": return "QR";
+        default: return "No especificado";
+      }
+    })());
+    addLine("Descripción:", transaction.description);
+    
+    // Línea divisoria
+    doc.line(20, currentY + 5, pageWidth - 20, currentY + 5);
+    
+    // Saldo
+    currentY += 15;
+    doc.setFont("helvetica", "bold");
+    doc.text("Saldo actual:", 20, currentY);
+    doc.text(`$${parseFloat(transaction.balanceAfter).toFixed(2)}`, pageWidth - 20, currentY, { align: "right" });
+    
+    // Pie de página
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "italic");
+    const bottomY = doc.internal.pageSize.getHeight() - 20;
+    doc.text("Gracias por su pago", pageWidth / 2, bottomY, { align: "center" });
+    
+    // Guardar el PDF
+    const filename = `comprobante-${transaction.id}-${formatDate(transaction.timestamp).replace(/[/: ]/g, '-')}.pdf`;
+    doc.save(filename);
   };
   
   return (
@@ -224,7 +378,7 @@ export default function AccountsPage() {
                     </div>
                   ) : filteredAccounts && filteredAccounts.length > 0 ? (
                     <div className="divide-y">
-                      {filteredAccounts.map((account: any) => (
+                      {filteredAccounts.map((account: Account) => (
                         <div 
                           key={account.id} 
                           className={`p-4 hover:bg-slate-50 cursor-pointer ${
@@ -234,13 +388,18 @@ export default function AccountsPage() {
                         >
                           <div className="flex justify-between items-start">
                             <div>
-                              <h3 className="font-medium">{account.customer?.name}</h3>
+                              <h3 className="font-medium">{account.customer?.name || "Cliente no encontrado"}</h3>
                               <p className="text-sm text-slate-500">
                                 Actualizado: {formatDate(account.lastUpdated)}
                               </p>
                             </div>
-                            <Badge className={account.balance >= 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}>
-                              ${parseFloat(account.balance).toFixed(2)}
+                            <Badge className={parseFloat(account.balance) < 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}>
+                              ${Math.abs(parseFloat(account.balance)).toFixed(2)}
+                              {parseFloat(account.balance) !== 0 && (
+                                <span className="ml-1 text-xs">
+                                  {parseFloat(account.balance) < 0 ? "a favor" : "debe"}
+                                </span>
+                              )}
                             </Badge>
                           </div>
                           <div className="flex gap-2 mt-3">
@@ -266,6 +425,21 @@ export default function AccountsPage() {
                               <ArrowUpCircle className="h-4 w-4 mr-1" />
                               Débito
                             </Button>
+                            {account.customer?.phone && parseFloat(account.balance) > 0 && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="bg-green-100 hover:bg-green-200 text-green-800"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const message = `Buenos dias, te recordamos que tu saldo pendiente a la fecha es $${Math.abs(parseFloat(account.balance)).toFixed(2)}`;
+                                  window.open(`https://wa.me/${account.customer.phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
+                                }}
+                              >
+                                <MessageCircle className="h-4 w-4 mr-1" />
+                                Reclamar Saldo
+                              </Button>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -314,39 +488,88 @@ export default function AccountsPage() {
                             <TableHead>Fecha</TableHead>
                             <TableHead>Descripción</TableHead>
                             <TableHead>Tipo</TableHead>
+                            <TableHead>Método de Pago</TableHead>
+                            <TableHead>Comprobante</TableHead>
                             <TableHead className="text-right">Monto</TableHead>
                             <TableHead className="text-right">Saldo</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {transactions.map((transaction: any) => (
+                          {transactions.map((transaction: Transaction) => (
                             <TableRow key={transaction.id}>
                               <TableCell>{formatDate(transaction.timestamp)}</TableCell>
                               <TableCell>
-                                {transaction.relatedSaleId ? (
-                                  <button 
-                                    className="text-blue-600 hover:underline font-medium"
-                                    onClick={() => {
-                                      window.open(`/invoices?id=${transaction.relatedSaleId}`, '_blank');
-                                    }}
-                                  >
-                                    {transaction.description}
-                                  </button>
-                                ) : (
-                                  transaction.description
+                                {transaction.description}
+                                {transaction.paymentMethod && (
+                                  <span className="text-muted-foreground">
+                                    {" "}({(() => {
+                                      switch (transaction.paymentMethod) {
+                                        case "cash": return "Efectivo";
+                                        case "transfer": return "Transferencia";
+                                        case "credit_card": return "Tarjeta de Crédito";
+                                        case "debit_card": return "Tarjeta de Débito";
+                                        case "check": return "Cheque";
+                                        case "qr": return "QR";
+                                        default: return transaction.paymentMethod;
+                                      }
+                                    })()})
+                                  </span>
                                 )}
                               </TableCell>
                               <TableCell>
                                 <Badge 
-                                  variant={transaction.type === "credit" ? "outline" : "secondary"}
-                                  className={
-                                    transaction.type === "credit" 
-                                      ? "bg-green-50 text-green-700 border-green-200" 
-                                      : "bg-blue-50 text-blue-700"
-                                  }
+                                  variant={transaction.type === "credit" ? "default" : "secondary"}
+                                  className={transaction.type === "credit" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}
                                 >
                                   {transaction.type === "credit" ? "Crédito" : "Débito"}
                                 </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {transaction.paymentMethod && (
+                                  <Badge variant="outline">
+                                    {(() => {
+                                      switch (transaction.paymentMethod) {
+                                        case "cash": return "Efectivo";
+                                        case "transfer": return "Transferencia";
+                                        case "credit_card": return "Tarjeta de Crédito";
+                                        case "debit_card": return "Tarjeta de Débito";
+                                        case "check": return "Cheque";
+                                        case "qr": return "QR";
+                                        default: return transaction.paymentMethod;
+                                      }
+                                    })()}
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {transaction.relatedSaleId && (
+                                  <Link href={`/sales/${transaction.relatedSaleId}`}>
+                                    <Button variant="ghost" size="sm">
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                  </Link>
+                                )}
+                                {transaction.relatedNoteId && (
+                                  <Link href={`/credit-notes/${transaction.relatedNoteId}`}>
+                                    <Button variant="ghost" size="sm">
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                  </Link>
+                                )}
+                                {transaction.type === "credit" && (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => {
+                                      const account = accounts?.find(a => a.id === transaction.accountId);
+                                      if (account) {
+                                        generateReceipt(transaction, account);
+                                      }
+                                    }}
+                                  >
+                                    <Receipt className="h-4 w-4" />
+                                  </Button>
+                                )}
                               </TableCell>
                               <TableCell className="text-right">
                                 ${parseFloat(transaction.amount).toFixed(2)}
@@ -409,13 +632,13 @@ export default function AccountsPage() {
                             <Loader2 className="h-4 w-4 animate-spin" />
                           </div>
                         ) : (
-                          customers?.filter((customer: any) => {
+                          customers?.filter((customer: Customer) => {
                             // Verificar si el cliente ya tiene una cuenta
-                            const hasExistingAccount = accounts?.some((account: any) => 
+                            const hasExistingAccount = accounts?.some((account: Account) => 
                               account.customerId === customer.id
                             );
                             return !hasExistingAccount;
-                          }).map((customer: any) => (
+                          }).map((customer: Customer) => (
                             <SelectItem key={customer.id} value={customer.id.toString()}>
                               {customer.name}
                             </SelectItem>
@@ -509,6 +732,63 @@ export default function AccountsPage() {
               
               <FormField
                 control={transactionForm.control}
+                name="currency"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Moneda</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value || "ARS"}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccione la moneda" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="ARS">Pesos Argentinos (ARS)</SelectItem>
+                        <SelectItem value="USD">Dólares (USD)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              {transactionType === "credit" && (
+                <FormField
+                  control={transactionForm.control}
+                  name="paymentMethod"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Método de Pago</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar método de pago" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="cash">Efectivo</SelectItem>
+                          <SelectItem value="transfer">Transferencia</SelectItem>
+                          <SelectItem value="credit_card">Tarjeta de Crédito</SelectItem>
+                          <SelectItem value="debit_card">Tarjeta de Débito</SelectItem>
+                          <SelectItem value="check">Cheque</SelectItem>
+                          <SelectItem value="qr">QR</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+              
+              <FormField
+                control={transactionForm.control}
                 name="description"
                 render={({ field }) => (
                   <FormItem>
@@ -547,3 +827,5 @@ export default function AccountsPage() {
     </div>
   );
 }
+
+export default AccountsPage;

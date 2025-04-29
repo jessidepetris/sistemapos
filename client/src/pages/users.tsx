@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
@@ -57,6 +57,8 @@ export default function UsersPage() {
     retry: false,
   });
   
+  const reactQueryClient = useQueryClient();
+  
   // Form definition
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userFormSchema),
@@ -80,7 +82,7 @@ export default function UsersPage() {
       toast({ title: "Usuario creado correctamente" });
       form.reset();
       setIsDialogOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/users"] });
     },
     onError: (error) => {
       toast({
@@ -99,7 +101,7 @@ export default function UsersPage() {
     },
     onSuccess: () => {
       toast({ title: "Estado del usuario actualizado correctamente" });
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/users"] });
     },
     onError: (error) => {
       toast({

@@ -23,7 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { insertSupplierSchema } from "@shared/schema";
+import { insertSupplierSchema } from "../../../shared/schema";
 import { Loader2, Plus, Search, Truck } from "lucide-react";
 
 const supplierFormSchema = insertSupplierSchema.extend({});
@@ -37,7 +37,7 @@ export default function SuppliersPage() {
   const [editingSupplier, setEditingSupplier] = useState<number | null>(null);
 
   // Get suppliers
-  const { data: suppliers, isLoading } = useQuery({
+  const { data: suppliers = [], isLoading } = useQuery({
     queryKey: ["/api/suppliers"],
     retry: false,
   });
@@ -52,6 +52,7 @@ export default function SuppliersPage() {
       email: "",
       address: "",
       notes: "",
+      discount: "0",
     },
   });
 
@@ -119,7 +120,7 @@ export default function SuppliersPage() {
 
   // Filtered suppliers based on search
   const filteredSuppliers = searchQuery
-    ? suppliers?.filter((supplier: any) =>
+    ? (suppliers as any[]).filter((supplier) =>
         supplier.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (supplier.contactName && supplier.contactName.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (supplier.phone && supplier.phone.includes(searchQuery)) ||
@@ -146,6 +147,7 @@ export default function SuppliersPage() {
       email: supplier.email || "",
       address: supplier.address || "",
       notes: supplier.notes || "",
+      discount: supplier.discount?.toString() || "0",
     });
     setIsDialogOpen(true);
   };
@@ -160,6 +162,7 @@ export default function SuppliersPage() {
       email: "",
       address: "",
       notes: "",
+      discount: "0",
     });
     setIsDialogOpen(true);
   };
@@ -204,13 +207,14 @@ export default function SuppliersPage() {
                       <TableHead>Teléfono</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Dirección</TableHead>
+                      <TableHead>Descuento</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {isLoading ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center">
+                        <TableCell colSpan={7} className="text-center">
                           <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
@@ -222,6 +226,7 @@ export default function SuppliersPage() {
                           <TableCell>{supplier.phone || "-"}</TableCell>
                           <TableCell>{supplier.email || "-"}</TableCell>
                           <TableCell className="max-w-xs truncate">{supplier.address || "-"}</TableCell>
+                          <TableCell>{supplier.discount ? `${supplier.discount}%` : "0%"}</TableCell>
                           <TableCell className="text-right">
                             <Button
                               variant="ghost"
@@ -234,7 +239,7 @@ export default function SuppliersPage() {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-10">
+                        <TableCell colSpan={7} className="text-center py-10">
                           <div className="flex flex-col items-center justify-center text-center">
                             <Truck className="h-12 w-12 text-muted-foreground mb-4" />
                             <h3 className="text-lg font-medium mb-2">
@@ -333,19 +338,43 @@ export default function SuppliersPage() {
                 )}
               />
               
-              <FormField
-                control={form.control}
-                name="address"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Dirección</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Dirección" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="address"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dirección</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Dirección" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="discount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Descuento (%)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="Descuento sobre precio de costo" 
+                          type="number" 
+                          min="0" 
+                          max="100" 
+                          step="0.01"
+                          {...field} 
+                          value={field.value}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               
               <FormField
                 control={form.control}

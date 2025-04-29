@@ -120,7 +120,7 @@ export default function RouteAssignmentsTab() {
   const [selectedAssignment, setSelectedAssignment] = useState<RouteAssignment | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const reactQueryClient = useQueryClient();
 
   // Obtener lista de asignaciones para la fecha seleccionada
   const { data: assignments, isLoading: isLoadingAssignments } = useQuery<RouteAssignment[]>({
@@ -213,7 +213,7 @@ export default function RouteAssignmentsTab() {
         title: "Asignación creada",
         description: "La asignación de ruta ha sido creada exitosamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/route-assignments"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/route-assignments"] });
       setIsCreateOpen(false);
       form.reset({
         date: new Date(),
@@ -239,7 +239,7 @@ export default function RouteAssignmentsTab() {
         title: "Asignación actualizada",
         description: "La asignación de ruta ha sido actualizada exitosamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/route-assignments"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/route-assignments"] });
       setIsEditOpen(false);
       setSelectedAssignment(null);
       form.reset({
@@ -266,7 +266,7 @@ export default function RouteAssignmentsTab() {
         title: "Asignación eliminada",
         description: "La asignación de ruta ha sido eliminada exitosamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/route-assignments"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/route-assignments"] });
     },
     onError: (error) => {
       toast({
@@ -597,7 +597,7 @@ export default function RouteAssignmentsTab() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/route-assignments"] })}
+              onClick={() => reactQueryClient.invalidateQueries({ queryKey: ["/api/route-assignments"] })}
               title="Actualizar"
             >
               <RotateCw className="h-4 w-4" />

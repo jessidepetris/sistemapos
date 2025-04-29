@@ -4,7 +4,7 @@ import {
   useMutation,
   UseMutationResult,
 } from "@tanstack/react-query";
-import { insertUserSchema, User as SelectUser, InsertUser } from "@shared/schema";
+import { insertUserSchema, User as SelectUser, InsertUser } from "../../../shared/schema";
 import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -26,18 +26,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     data: user,
     error,
     isLoading,
-  } = useQuery<SelectUser | undefined, Error>({
+  } = useQuery({
     queryKey: ["/api/user"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
+    queryFn: getQueryFn<SelectUser | null>({ on401: "returnNull" }),
   });
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginData) => {
       const res = await apiRequest("POST", "/api/login", credentials);
-      return await res.json();
+      return await res.json() as SelectUser;
     },
     onSuccess: (user: SelectUser) => {
-      queryClient.setQueryData(["/api/user"], user);
+      queryClient.reactQuery.setQueryData(["/api/user"], user);
       toast({
         title: "Inicio de sesión exitoso",
         description: `Bienvenido, ${user.fullName}`,
@@ -52,13 +52,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
-  const registerMutation = useMutation({
-    mutationFn: async (credentials: InsertUser) => {
-      const res = await apiRequest("POST", "/api/register", credentials);
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/logout");
       return await res.json();
     },
+    onSuccess: () => {
+      queryClient.reactQuery.setQueryData(["/api/user"], null);
+      toast({
+        title: "Sesión cerrada",
+        description: "Has cerrado sesión correctamente",
+      });
+    },
+  });
+
+  const registerMutation = useMutation({
+    mutationFn: async (userData: InsertUser) => {
+      const res = await apiRequest("POST", "/api/register", userData);
+      return await res.json() as SelectUser;
+    },
     onSuccess: (user: SelectUser) => {
-      queryClient.setQueryData(["/api/user"], user);
+      queryClient.reactQuery.setQueryData(["/api/user"], user);
       toast({
         title: "Registro exitoso",
         description: `Bienvenido, ${user.fullName}`,
@@ -67,27 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     onError: (error: Error) => {
       toast({
         title: "Error de registro",
-        description: error.message || "No se pudo crear la cuenta",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/logout");
-    },
-    onSuccess: () => {
-      queryClient.setQueryData(["/api/user"], null);
-      toast({
-        title: "Sesión cerrada",
-        description: "Has cerrado sesión correctamente",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error al cerrar sesión",
-        description: error.message,
+        description: error.message || "Error al registrar el usuario",
         variant: "destructive",
       });
     },
@@ -96,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider
       value={{
-        user: user ?? null,
+        user: user || null,
         isLoading,
         error,
         loginMutation,

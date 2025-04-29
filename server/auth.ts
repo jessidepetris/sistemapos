@@ -33,19 +33,31 @@ export async function comparePasswords(supplied: string, stored: string) {
 export function setupAuth(app: Express) {
   const sessionSettings: session.SessionOptions = {
     secret: process.env.SESSION_SECRET || "punto-pastelero-secret",
-    resave: false,
-    saveUninitialized: false,
+    resave: true,
+    saveUninitialized: true,
     store: storage.sessionStore,
     cookie: { 
       maxAge: 1000 * 60 * 60 * 24, // 1 day
-      secure: process.env.NODE_ENV === "production"
-    }
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      sameSite: 'lax',
+      path: '/'
+    },
+    name: 'punto.sid'
   };
 
   app.set("trust proxy", 1);
   app.use(session(sessionSettings));
   app.use(passport.initialize());
   app.use(passport.session());
+
+  // Middleware para logging de sesión
+  app.use((req, res, next) => {
+    console.log('Session ID:', req.sessionID);
+    console.log('Session:', req.session);
+    console.log('User:', req.user);
+    next();
+  });
 
   passport.use(
     new LocalStrategy(async (username, password, done) => {

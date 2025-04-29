@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
@@ -97,7 +97,8 @@ export default function CustomersPage() {
       toast({ title: "Cliente creado correctamente" });
       form.reset();
       setIsDialogOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
     },
     onError: (error) => {
       toast({
@@ -119,7 +120,8 @@ export default function CustomersPage() {
       form.reset();
       setIsDialogOpen(false);
       setEditingCustomer(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
     },
     onError: (error) => {
       toast({
@@ -138,7 +140,8 @@ export default function CustomersPage() {
     },
     onSuccess: () => {
       toast({ title: "Cliente eliminado correctamente" });
-      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
     },
     onError: (error) => {
       toast({
@@ -227,6 +230,8 @@ export default function CustomersPage() {
     const seller = users.find((user: any) => user.id === sellerId);
     return seller ? seller.fullName : "-";
   };
+
+  const reactQueryClient = useQueryClient();
 
   return (
     <div className="flex h-screen overflow-hidden">

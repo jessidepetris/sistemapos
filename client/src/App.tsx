@@ -7,11 +7,13 @@ import { AuthProvider } from "@/hooks/use-auth";
 import { WebAuthProvider } from "@/hooks/use-web-auth";
 import { CartProvider } from "@/hooks/use-cart";
 import { ProtectedRoute } from "@/lib/protected-route";
+import { RouterProvider } from "@/lib/router-provider";
+import { useEffect } from "react";
 
 // Admin Panel Pages
 import Dashboard from "@/pages/dashboard";
 import AuthPage from "@/pages/auth-page";
-import POSPage from "@/pages/pos";
+import { POSPage } from "@/pages/pos";
 import ProductsPage from "@/pages/products-page";
 import CategoriesPage from "@/pages/categories-page";
 import SuppliersPage from "@/pages/suppliers";
@@ -24,6 +26,8 @@ import ReportsPage from "@/pages/reports";
 import UsersPage from "@/pages/users";
 import SettingsPage from "@/pages/settings";
 import LogisticsPage from "@/pages/logistics-page";
+import PurchasesPage from "@/pages/purchases-page";
+import BankAccountsPage from "@/pages/bank-accounts";
 
 // Web Catalog Pages
 import WebHomePage from "@/pages/web/home-page";
@@ -36,7 +40,14 @@ import OrderConfirmationPage from "@/pages/web/order-confirmation-page";
 import AccountPage from "@/pages/web/account-page";
 import WebOrdersPage from "@/pages/web/orders-page";
 
-function Router() {
+function AppRoutes() {
+  useEffect(() => {
+    console.log("[AppRoutes] Component mounted");
+    return () => {
+      console.log("[AppRoutes] Component unmounted");
+    };
+  }, []);
+
   return (
     <Switch>
       {/* Admin Routes */}
@@ -48,6 +59,7 @@ function Router() {
       <ProtectedRoute path="/suppliers" component={SuppliersPage} />
       <ProtectedRoute path="/customers" component={CustomersPage} />
       <ProtectedRoute path="/accounts" component={AccountsPage} />
+      <ProtectedRoute path="/bank-accounts" component={BankAccountsPage} />
       <ProtectedRoute path="/invoices" component={InvoicesPage} />
       <ProtectedRoute path="/orders" component={OrdersPage} />
       <ProtectedRoute path="/credit-notes" component={CreditNotesPage} />
@@ -55,6 +67,7 @@ function Router() {
       <ProtectedRoute path="/reports" component={ReportsPage} />
       <ProtectedRoute path="/users" component={UsersPage} />
       <ProtectedRoute path="/settings" component={SettingsPage} />
+      <ProtectedRoute path="/purchases" component={PurchasesPage} />
       
       {/* Web Catalog Routes */}
       <Route path="/web">
@@ -91,13 +104,22 @@ function Router() {
 }
 
 function App() {
+  useEffect(() => {
+    console.log("[App] Component mounted");
+    return () => {
+      console.log("[App] Component unmounted");
+    };
+  }, []);
+
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={queryClient.reactQuery}>
       <AuthProvider>
         <WebAuthProvider>
           <CartProvider>
-            <Router />
-            <Toaster />
+            <RouterProvider>
+              <AppRoutes />
+              <Toaster />
+            </RouterProvider>
           </CartProvider>
         </WebAuthProvider>
       </AuthProvider>

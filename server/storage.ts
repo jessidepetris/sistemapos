@@ -4,11 +4,15 @@ import { users, User, InsertUser, Supplier, InsertSupplier, Customer, InsertCust
   Vehicle, InsertVehicle, DeliveryZone, InsertDeliveryZone, DeliveryRoute, InsertDeliveryRoute, 
   Delivery, InsertDelivery, DeliveryEvent, InsertDeliveryEvent, RouteAssignment, InsertRouteAssignment, 
   Cart, InsertCart, CartItem, InsertCartItem, WebUser, InsertWebUser,
-  ProductCategory, InsertProductCategory, ProductCategoryRelation, InsertProductCategoryRelation } from "@shared/schema";
+  ProductCategory, InsertProductCategory, ProductCategoryRelation, InsertProductCategoryRelation,
+  BankAccount, InsertBankAccount } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
+import { Purchase, PurchaseItem, InsertPurchase, UpdatePurchase, InsertPurchaseItem } from "../shared/types";
 
 const MemoryStore = createMemoryStore(session);
+
+type StoragePurchase = Omit<Purchase, 'items'>;
 
 export interface IStorage {
   // Users
@@ -86,6 +90,8 @@ export interface IStorage {
   getOrderItem(id: number): Promise<OrderItem | undefined>;
   getOrderItemsByOrderId(orderId: number): Promise<OrderItem[]>;
   createOrderItem(item: InsertOrderItem): Promise<OrderItem>;
+  deleteOrderItems(orderId: number): Promise<void>;
+  deleteOrderItem(id: number): Promise<boolean>;
   
   // Notes (Credit/Debit)
   getNote(id: number): Promise<Note | undefined>;
@@ -145,6 +151,7 @@ export interface IStorage {
   getProductCategory(id: number): Promise<ProductCategory | undefined>;
   getAllProductCategories(): Promise<ProductCategory[]>;
   getProductCategoriesByParentId(parentId: number | null): Promise<ProductCategory[]>;
+  getProductCategoryBySlug(slug: string): Promise<ProductCategory | undefined>;
   createProductCategory(category: InsertProductCategory): Promise<ProductCategory>;
   updateProductCategory(id: number, category: Partial<ProductCategory>): Promise<ProductCategory>;
   deleteProductCategory(id: number): Promise<void>;
@@ -157,6 +164,16 @@ export interface IStorage {
   
   // Session store
   sessionStore: session.Store;
+
+  // Bank Accounts
+  getBankAccount(id: number): Promise<BankAccount | undefined>;
+  getAllBankAccounts(): Promise<BankAccount[]>;
+  createBankAccount(account: InsertBankAccount): Promise<BankAccount>;
+  updateBankAccount(id: number, account: Partial<BankAccount>): Promise<BankAccount>;
+  deleteBankAccount(id: number): Promise<void>;
+
+  // Payments
+  createPayment(payment: any): Promise<any>;
 }
 
 export class MemStorage implements IStorage {
@@ -219,6 +236,19 @@ export class MemStorage implements IStorage {
   private productCategoryIdCounter: number;
   private productCategoryRelationIdCounter: number;
   
+  // Purchase maps
+  private purchases: Map<number, StoragePurchase> = new Map();
+  private purchaseItems: Map<number, PurchaseItem> = new Map();
+  private purchaseIdCounter = 1;
+  private purchaseItemIdCounter = 1;
+  
+  // Bank Accounts
+  private bankAccounts: Map<number, BankAccount>;
+  private bankAccountIdCounter: number = 1;
+  
+  // Payments
+  private payments: any[] = [];
+  
   sessionStore: session.Store;
 
   constructor() {
@@ -241,6 +271,9 @@ export class MemStorage implements IStorage {
     this.deliveries = new Map();
     this.deliveryEvents = new Map();
     this.routeAssignments = new Map();
+    
+    // Inicializar Maps adicionales
+    this.bankAccounts = new Map();
     
     // Inicializar contadores
     this.userIdCounter = 1;
@@ -299,7 +332,12 @@ export class MemStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.userIdCounter++;
-    const user: User = { ...insertUser, id };
+    const user: User = { 
+      ...insertUser, 
+      id,
+      active: true,
+      role: insertUser.role || 'user'
+    };
     this.users.set(id, user);
     return user;
   }
@@ -339,7 +377,16 @@ export class MemStorage implements IStorage {
   
   async createSupplier(insertSupplier: InsertSupplier): Promise<Supplier> {
     const id = this.supplierIdCounter++;
-    const supplier: Supplier = { ...insertSupplier, id };
+    const supplier: Supplier = { 
+      ...insertSupplier, 
+      id,
+      email: insertSupplier.email || null,
+      phone: insertSupplier.phone || null,
+      address: insertSupplier.address || null,
+      notes: insertSupplier.notes || null,
+      contactName: insertSupplier.contactName || null,
+      lastPriceUpdate: insertSupplier.lastPriceUpdate || null
+    };
     this.suppliers.set(id, supplier);
     return supplier;
   }
@@ -374,18 +421,31 @@ export class MemStorage implements IStorage {
   }
   
   async createCustomer(insertCustomer: InsertCustomer): Promise<Customer> {
-    const id = this.customerIdCounter++;
-    const customer: Customer = { ...insertCustomer, id };
+    const id = ++this.customerIdCounter;
+    const customer: Customer = {
+      id,
+      name: insertCustomer.name,
+      phone: insertCustomer.phone || null,
+      email: insertCustomer.email || null,
+      address: insertCustomer.address || null,
+      city: insertCustomer.city || null,
+      province: insertCustomer.province || null,
+      notes: insertCustomer.notes || null,
+      sellerId: insertCustomer.sellerId || null,
+      invoiceType: insertCustomer.invoiceType || "remito",
+      documentId: insertCustomer.documentId || null,
+      hasCurrentAccount: true,
+      currentBalance: "0",
+    };
     this.customers.set(id, customer);
     return customer;
   }
   
   async updateCustomer(id: number, customerData: Partial<Customer>): Promise<Customer> {
-    const customer = await this.getCustomer(id);
+    const customer = this.customers.get(id);
     if (!customer) {
-      throw new Error(`Cliente con ID ${id} no encontrado`);
+      throw new Error(`Customer with id ${id} not found`);
     }
-    
     const updatedCustomer = { ...customer, ...customerData };
     this.customers.set(id, updatedCustomer);
     return updatedCustomer;
@@ -411,19 +471,65 @@ export class MemStorage implements IStorage {
   
   async createProduct(insertProduct: InsertProduct): Promise<Product> {
     const id = this.productIdCounter++;
-    const product: Product = { ...insertProduct, id };
+    const product: Product = { 
+      id,
+      name: insertProduct.name,
+      active: insertProduct.active ?? true,
+      description: insertProduct.description || null,
+      baseUnit: insertProduct.baseUnit || "unidad",
+      barcodes: insertProduct.barcodes || null,
+      price: insertProduct.price || "0",
+      cost: insertProduct.cost || null,
+      stock: insertProduct.stock || "0",
+      stockAlert: insertProduct.stockAlert || null,
+      webVisible: insertProduct.webVisible ?? true,
+      isRefrigerated: insertProduct.isRefrigerated ?? false,
+      isComposite: insertProduct.isComposite ?? false,
+      components: insertProduct.components || null,
+      conversionRates: insertProduct.conversionRates || null,
+      isBulk: insertProduct.isBulk ?? false,
+      supplierId: insertProduct.supplierId || null,
+      supplierCode: insertProduct.supplierCode || null,
+      category: insertProduct.category || null,
+      imageUrl: insertProduct.imageUrl || null,
+      iva: insertProduct.iva || "21",
+      shipping: insertProduct.shipping || "0",
+      profit: insertProduct.profit || "30"
+    };
     this.products.set(id, product);
     return product;
   }
   
   async updateProduct(id: number, productData: Partial<Product>): Promise<Product> {
+    console.log(`[updateProduct] Actualizando producto con ID ${id} con datos:`, productData);
+    
     const product = await this.getProduct(id);
     if (!product) {
+      console.error(`[updateProduct] ERROR: Producto con ID ${id} no encontrado`);
       throw new Error(`Producto con ID ${id} no encontrado`);
     }
     
-    const updatedProduct = { ...product, ...productData };
+    console.log(`[updateProduct] Producto original:`, product);
+    
+    // Asegurar que lastUpdated se actualice como Date
+    const updatedProduct = { 
+      ...product, 
+      ...productData,
+      lastUpdated: new Date() // Siempre actualizar la fecha de última actualización como Date
+    };
+    console.log(`[updateProduct] Producto actualizado:`, updatedProduct);
+    
+    // Verificar específicamente si estamos actualizando el stock
+    if (productData.stock !== undefined) {
+      console.log(`[updateProduct] Actualizando stock: ${product.stock} -> ${productData.stock}`);
+    }
+    
     this.products.set(id, updatedProduct);
+    
+    // Verificar que la actualización se haya realizado correctamente
+    const verifyProduct = this.products.get(id);
+    console.log(`[updateProduct] Verificación después de actualizar:`, verifyProduct);
+    
     return updatedProduct;
   }
   
@@ -457,7 +563,8 @@ export class MemStorage implements IStorage {
       ...insertAccount, 
       id,
       balance: insertAccount.balance || "0",
-      lastUpdated: new Date() 
+      creditLimit: insertAccount.creditLimit || null,
+      lastUpdated: new Date()
     };
     this.accounts.set(id, account);
     return account;
@@ -493,7 +600,9 @@ export class MemStorage implements IStorage {
       .filter(transaction => transaction.accountId === accountId)
       .sort((a, b) => {
         // Sort by timestamp in descending order (newest first)
-        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return dateB - dateA;
       });
   }
   
@@ -516,20 +625,36 @@ export class MemStorage implements IStorage {
   async getAllSales(): Promise<Sale[]> {
     return Array.from(this.sales.values())
       .sort((a, b) => {
-        // Sort by timestamp in descending order (newest first)
-        return new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime();
+        const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return dateB - dateA;
       });
   }
   
   async createSale(insertSale: InsertSale): Promise<Sale> {
     const id = this.saleIdCounter++;
-    const sale: Sale = { 
-      ...insertSale, 
+    const newSale: Sale = { 
       id,
-      timestamp: new Date() 
+      timestamp: new Date(),
+      userId: insertSale.userId,
+      total: insertSale.total,
+      subtotal: insertSale.subtotal,
+      discount: insertSale.discount || "0",
+      surcharge: insertSale.surcharge || "0",
+      discountPercent: insertSale.discountPercent || "0",
+      surchargePercent: insertSale.surchargePercent || "0",
+      paymentMethod: insertSale.paymentMethod,
+      paymentDetails: insertSale.paymentDetails || null,
+      documentType: insertSale.documentType || "remito",
+      invoiceNumber: insertSale.invoiceNumber || null,
+      status: insertSale.status || 'completed',
+      notes: insertSale.notes || null,
+      customerId: insertSale.customerId || null,
+      printOptions: insertSale.printOptions || null
     };
-    this.sales.set(id, sale);
-    return sale;
+    
+    this.sales.set(id, newSale);
+    return newSale;
   }
   
   async updateSale(id: number, saleData: Partial<Sale>): Promise<Sale> {
@@ -562,11 +687,119 @@ export class MemStorage implements IStorage {
       .filter(item => item.saleId === saleId);
   }
   
-  async createSaleItem(insertItem: InsertSaleItem): Promise<SaleItem> {
+  async createSaleItem(item: InsertSaleItem): Promise<SaleItem> {
     const id = this.saleItemIdCounter++;
-    const item: SaleItem = { ...insertItem, id };
-    this.saleItems.set(id, item);
-    return item;
+    const saleItem: SaleItem = { 
+      ...item, 
+      id,
+      discount: item.discount || null,
+      isConversion: item.isConversion || null,
+      conversionFactor: item.conversionFactor || null,
+      conversionUnit: item.conversionUnit || null,
+      conversionBarcode: item.conversionBarcode || null
+    };
+    this.saleItems.set(id, saleItem);
+
+    // Actualizar el stock del producto
+    try {
+      const product = await this.getProduct(item.productId);
+      if (product) {
+        console.log(`[STOCK-VENTA] Actualizando stock para producto: "${product.name}", ID: ${product.id}, Stock actual: ${product.stock}, Cantidad vendida: ${item.quantity}`);
+        
+        // Verificar si el producto es compuesto (un combo)
+        if (product.isComposite && product.components) {
+          // Parseamos los componentes si están en formato string
+          let components = [];
+          try {
+            components = typeof product.components === 'string' 
+              ? JSON.parse(product.components) 
+              : product.components;
+            
+            console.log("[STOCK-VENTA] Componentes del producto:", components);
+          } catch (error) {
+            console.error("[STOCK-VENTA] Error al parsear componentes del producto:", error);
+            components = [];
+          }
+          
+          // Por cada componente, actualizamos su stock
+          for (const component of components) {
+            const componentProduct = await this.getProduct(component.productId);
+            if (componentProduct) {
+              // Calcular la cantidad total a descontar (cantidad de venta * cantidad por componente)
+              const quantityToDeduct = parseFloat(item.quantity) * parseFloat(component.quantity);
+              const currentComponentStock = parseFloat(componentProduct.stock.toString());
+              const currentReservedStock = parseFloat(componentProduct.reservedStock?.toString() || "0");
+              
+              // Verificar si hay suficiente stock disponible
+              if (currentComponentStock < quantityToDeduct) {
+                throw new Error(`Stock insuficiente para el componente ${componentProduct.name}. Stock disponible: ${currentComponentStock}, Cantidad requerida: ${quantityToDeduct}`);
+              }
+              
+              // Si hay stock reservado, lo liberamos primero
+              const newStock = currentComponentStock - quantityToDeduct;
+              const newReservedStock = Math.max(0, currentReservedStock - quantityToDeduct);
+              
+              console.log(`[STOCK-VENTA] Actualizando stock de componente: "${componentProduct.name}"`);
+              console.log(`Stock anterior: ${currentComponentStock}, Nuevo stock: ${newStock}`);
+              console.log(`Stock reservado anterior: ${currentReservedStock}, Nuevo stock reservado: ${newReservedStock}`);
+              
+              // Actualizar el stock y stock reservado del componente
+              await this.updateProduct(component.productId, { 
+                stock: newStock.toString(),
+                reservedStock: newReservedStock.toString()
+              });
+            }
+          }
+        } else {
+          // Verificar si necesitamos aplicar factor de conversión
+          let stockToDeduct = parseFloat(item.quantity);
+          
+          // Verificar si la unidad del item es diferente a la unidad base del producto
+          if (product.baseUnit && item.unit && item.unit !== product.baseUnit && product.conversionRates) {
+            const conversions = typeof product.conversionRates === 'string' 
+              ? JSON.parse(product.conversionRates) 
+              : product.conversionRates;
+            
+            if (conversions && conversions[item.unit] && conversions[item.unit].factor) {
+              const conversionFactor = parseFloat(conversions[item.unit].factor);
+              stockToDeduct = stockToDeduct * conversionFactor;
+              console.log(`[STOCK-VENTA] Aplicando factor de conversión ${conversionFactor} para ${item.unit}`);
+              console.log(`[STOCK-VENTA] Cantidad original ${item.quantity}, cantidad a descontar del stock: ${stockToDeduct}`);
+            }
+          }
+          
+          const currentStock = parseFloat(product.stock.toString());
+          const currentReservedStock = parseFloat(product.reservedStock?.toString() || "0");
+          
+          // Verificar si hay suficiente stock disponible
+          if (currentStock < stockToDeduct) {
+            throw new Error(`Stock insuficiente para el producto ${product.name}. Stock disponible: ${currentStock}, Cantidad requerida: ${stockToDeduct}`);
+          }
+          
+          // Si hay stock reservado, lo liberamos primero
+          const newStock = currentStock - stockToDeduct;
+          const newReservedStock = Math.max(0, currentReservedStock - stockToDeduct);
+          
+          console.log(`[STOCK-VENTA] Actualizando stock del producto: "${product.name}"`);
+          console.log(`Stock anterior: ${currentStock}, Nuevo stock: ${newStock}`);
+          console.log(`Stock reservado anterior: ${currentReservedStock}, Nuevo stock reservado: ${newReservedStock}`);
+          
+          const updateResult = await this.updateProduct(item.productId, { 
+            stock: newStock.toString(),
+            reservedStock: newReservedStock.toString()
+          });
+          
+          console.log("[STOCK-VENTA] Resultado de la actualización del stock:", updateResult ? "OK" : "ERROR");
+        }
+      } else {
+        console.error(`[STOCK-VENTA] No se encontró el producto con ID ${item.productId}`);
+      }
+    } catch (error) {
+      console.error("[STOCK-VENTA] Error al actualizar el stock del producto:", error);
+      throw error; // Propagar el error para manejarlo en el endpoint
+    }
+    
+    return saleItem;
   }
   
   // Orders
@@ -587,7 +820,13 @@ export class MemStorage implements IStorage {
     const order: Order = { 
       ...insertOrder, 
       id,
-      timestamp: new Date() 
+      status: insertOrder.status || 'pending',
+      notes: insertOrder.notes || null,
+      customerId: insertOrder.customerId || null,
+      timestamp: new Date(),
+      deliveryDate: insertOrder.deliveryDate || null,
+      isWebOrder: insertOrder.isWebOrder || null,
+      source: insertOrder.source || null
     };
     this.orders.set(id, order);
     return order;
@@ -627,7 +866,110 @@ export class MemStorage implements IStorage {
     const id = this.orderItemIdCounter++;
     const item: OrderItem = { ...insertItem, id };
     this.orderItems.set(id, item);
+    
+    // Reservar stock del producto
+    try {
+      const product = await this.getProduct(insertItem.productId);
+      if (product) {
+        console.log(`[STOCK-ORDEN] Reservando stock para producto: "${product.name}", ID: ${product.id}, Stock actual: ${product.stock}, Cantidad a reservar: ${insertItem.quantity}`);
+        
+        // Verificar si el producto es compuesto (un combo)
+        if (product.isComposite && product.components) {
+          // Parseamos los componentes si están en formato string
+          let components = [];
+          try {
+            components = typeof product.components === 'string' 
+              ? JSON.parse(product.components) 
+              : product.components;
+            
+            console.log("[STOCK-ORDEN] Componentes del producto:", components);
+          } catch (error) {
+            console.error("[STOCK-ORDEN] Error al parsear componentes del producto:", error);
+            components = [];
+          }
+          
+          // Por cada componente, reservamos su stock proporcionalmente
+          for (const component of components) {
+            const componentProduct = await this.getProduct(component.productId);
+            if (componentProduct) {
+              // Calcular la cantidad total a reservar (cantidad de venta * cantidad por componente)
+              const quantityToReserve = parseFloat(insertItem.quantity) * parseFloat(component.quantity);
+              const currentComponentStock = parseFloat(componentProduct.stock.toString());
+              const currentReservedStock = parseFloat(componentProduct.reservedStock?.toString() || "0");
+              
+              // Verificar si hay suficiente stock disponible
+              if (currentComponentStock - currentReservedStock < quantityToReserve) {
+                throw new Error(`Stock insuficiente para el componente ${componentProduct.name}. Stock disponible: ${currentComponentStock - currentReservedStock}, Cantidad requerida: ${quantityToReserve}`);
+              }
+              
+              const newReservedStock = currentReservedStock + quantityToReserve;
+              
+              console.log(`[STOCK-ORDEN] Reservando stock de componente: "${componentProduct.name}", Stock reservado anterior: ${currentReservedStock}, Cantidad a reservar: ${quantityToReserve}, Nuevo stock reservado: ${newReservedStock}`);
+              
+              // Actualizar el stock reservado del componente
+              await this.updateProduct(component.productId, { 
+                reservedStock: newReservedStock.toString() 
+              });
+            }
+          }
+        } else {
+          // Verificar si necesitamos aplicar factor de conversión
+          let stockToReserve = parseFloat(insertItem.quantity);
+          
+          // Verificar si la unidad del item es diferente a la unidad base del producto
+          if (product.baseUnit && insertItem.unit && insertItem.unit !== product.baseUnit && product.conversionRates) {
+            const conversions = typeof product.conversionRates === 'string' 
+              ? JSON.parse(product.conversionRates) 
+              : product.conversionRates;
+            
+            if (conversions && conversions[insertItem.unit] && conversions[insertItem.unit].factor) {
+              const conversionFactor = parseFloat(conversions[insertItem.unit].factor);
+              stockToReserve = stockToReserve * conversionFactor;
+              console.log(`[STOCK-ORDEN] Aplicando factor de conversión ${conversionFactor} para ${insertItem.unit}`);
+              console.log(`[STOCK-ORDEN] Cantidad original ${insertItem.quantity}, cantidad a reservar del stock: ${stockToReserve}`);
+            }
+          }
+          
+          const currentStock = parseFloat(product.stock.toString());
+          const currentReservedStock = parseFloat(product.reservedStock?.toString() || "0");
+          
+          // Verificar si hay suficiente stock disponible
+          if (currentStock - currentReservedStock < stockToReserve) {
+            throw new Error(`Stock insuficiente para el producto ${product.name}. Stock disponible: ${currentStock - currentReservedStock}, Cantidad requerida: ${stockToReserve}`);
+          }
+          
+          const newReservedStock = currentReservedStock + stockToReserve;
+          console.log(`[STOCK-ORDEN] Actualizando stock reservado - Stock anterior: ${currentStock}, Stock reservado anterior: ${currentReservedStock}, Cantidad a reservar: ${stockToReserve}, Nuevo stock reservado: ${newReservedStock}`);
+          
+          const updateResult = await this.updateProduct(insertItem.productId, { 
+            reservedStock: newReservedStock.toString() 
+          });
+          
+          console.log("[STOCK-ORDEN] Resultado de la actualización del stock reservado:", updateResult ? "OK" : "ERROR");
+        }
+      } else {
+        console.error(`[STOCK-ORDEN] No se encontró el producto con ID ${insertItem.productId}`);
+      }
+    } catch (error) {
+      console.error("[STOCK-ORDEN] Error al reservar el stock del producto:", error);
+      throw error; // Propagar el error para manejarlo en el endpoint
+    }
+    
     return item;
+  }
+  
+  async deleteOrderItems(orderId: number): Promise<void> {
+    const items = await this.getOrderItemsByOrderId(orderId);
+    items.forEach(item => this.orderItems.delete(item.id));
+  }
+  
+  async deleteOrderItem(id: number): Promise<boolean> {
+    const exists = this.orderItems.has(id);
+    if (!exists) {
+      return false;
+    }
+    this.orderItems.delete(id);
+    return true;
   }
   
   // Notes (Credit/Debit)
@@ -644,7 +986,10 @@ export class MemStorage implements IStorage {
     const note: Note = { 
       ...insertNote, 
       id,
-      timestamp: new Date() 
+      notes: insertNote.notes || null,
+      customerId: insertNote.customerId || null,
+      timestamp: new Date(),
+      relatedSaleId: insertNote.relatedSaleId || null
     };
     this.notes.set(id, note);
     return note;
@@ -681,7 +1026,14 @@ export class MemStorage implements IStorage {
   
   async createVehicle(insertVehicle: InsertVehicle): Promise<Vehicle> {
     const id = this.vehicleIdCounter++;
-    const vehicle: Vehicle = { ...insertVehicle, id };
+    const vehicle: Vehicle = { 
+      ...insertVehicle, 
+      id,
+      active: insertVehicle.active ?? true,
+      notes: insertVehicle.notes || null,
+      maxCapacity: insertVehicle.maxCapacity || null,
+      refrigerated: insertVehicle.refrigerated || null
+    };
     this.vehicles.set(id, vehicle);
     return vehicle;
   }
@@ -721,7 +1073,15 @@ export class MemStorage implements IStorage {
   
   async createDeliveryZone(zone: InsertDeliveryZone): Promise<DeliveryZone> {
     const id = this.deliveryZoneIdCounter++;
-    const deliveryZone: DeliveryZone = { ...zone, id };
+    const deliveryZone: DeliveryZone = { 
+      ...zone, 
+      id,
+      active: zone.active ?? true,
+      description: zone.description || null,
+      coordinates: zone.coordinates || null,
+      estimatedDeliveryTime: zone.estimatedDeliveryTime || null,
+      deliveryDays: zone.deliveryDays || null
+    };
     this.deliveryZones.set(id, deliveryZone);
     return deliveryZone;
   }
@@ -766,7 +1126,16 @@ export class MemStorage implements IStorage {
   
   async createDeliveryRoute(route: InsertDeliveryRoute): Promise<DeliveryRoute> {
     const id = this.deliveryRouteIdCounter++;
-    const deliveryRoute: DeliveryRoute = { ...route, id };
+    const deliveryRoute: DeliveryRoute = { 
+      ...route, 
+      id,
+      active: route.active ?? true,
+      description: route.description || null,
+      zoneId: route.zoneId || null,
+      optimizedPath: route.optimizedPath || null,
+      estimatedDuration: route.estimatedDuration || null,
+      distance: route.distance || null
+    };
     this.deliveryRoutes.set(id, deliveryRoute);
     return deliveryRoute;
   }
@@ -858,22 +1227,33 @@ export class MemStorage implements IStorage {
     const trackingCode = `PUNTO-${id.toString().padStart(6, '0')}`;
     
     const newDelivery: Delivery = { 
-      ...delivery, 
       id,
+      status: (delivery.status || 'pending') as 'pending' | 'assigned' | 'in_transit' | 'delivered' | 'failed' | 'cancelled',
+      customerId: delivery.customerId || null,
+      userId: delivery.userId,
+      saleId: delivery.saleId || null,
+      orderId: delivery.orderId,
       trackingCode,
-      status: delivery.status || 'pending'
+      scheduledDate: delivery.scheduledDate,
+      estimatedDeliveryTime: delivery.estimatedDeliveryTime || null,
+      actualDeliveryTime: null,
+      vehicleId: delivery.vehicleId || null,
+      driverId: delivery.driverId || null,
+      routeId: delivery.routeId || null,
+      deliveryAddress: delivery.deliveryAddress,
+      deliveryNotes: delivery.deliveryNotes || null,
+      recipientName: delivery.recipientName || null,
+      recipientPhone: delivery.recipientPhone || null,
+      priority: delivery.priority || 0,
+      requiresRefrigeration: delivery.requiresRefrigeration || false,
+      proof: null,
+      deliveryPosition: null,
+      requestSignature: delivery.requestSignature || false,
+      signatureUrl: null,
+      totalWeight: delivery.totalWeight || null
     };
     
     this.deliveries.set(id, newDelivery);
-    
-    // Crear un evento de creación
-    await this.createDeliveryEvent({
-      deliveryId: id,
-      eventType: 'status_change',
-      description: `Entrega #${id} creada con estado '${newDelivery.status}'`,
-      userId: delivery.userId
-    });
-    
     return newDelivery;
   }
   
@@ -898,7 +1278,7 @@ export class MemStorage implements IStorage {
     return updatedDelivery;
   }
   
-  async updateDeliveryStatus(id: number, status: string, userId: number): Promise<Delivery> {
+  async updateDeliveryStatus(id: number, status: 'pending' | 'assigned' | 'in_transit' | 'delivered' | 'failed' | 'cancelled', userId: number): Promise<Delivery> {
     const delivery = await this.getDelivery(id);
     if (!delivery) {
       throw new Error(`Entrega con ID ${id} no encontrada`);
@@ -953,8 +1333,9 @@ export class MemStorage implements IStorage {
     return Array.from(this.deliveryEvents.values())
       .filter(event => event.deliveryId === deliveryId)
       .sort((a, b) => {
-        // Sort by timestamp in ascending order (oldest first)
-        return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+        const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return dateA - dateB;
       });
   }
   
@@ -963,7 +1344,10 @@ export class MemStorage implements IStorage {
     const deliveryEvent: DeliveryEvent = { 
       ...event, 
       id,
-      timestamp: new Date() 
+      timestamp: new Date(),
+      userId: event.userId || null,
+      location: event.location || null,
+      metadata: event.metadata || null
     };
     this.deliveryEvents.set(id, deliveryEvent);
     return deliveryEvent;
@@ -1003,7 +1387,14 @@ export class MemStorage implements IStorage {
   
   async createRouteAssignment(assignment: InsertRouteAssignment): Promise<RouteAssignment> {
     const id = this.routeAssignmentIdCounter++;
-    const routeAssignment: RouteAssignment = { ...assignment, id };
+    const routeAssignment: RouteAssignment = { 
+      ...assignment, 
+      id,
+      status: assignment.status || 'pending',
+      notes: assignment.notes || null,
+      startTime: assignment.startTime || null,
+      endTime: assignment.endTime || null
+    };
     this.routeAssignments.set(id, routeAssignment);
     return routeAssignment;
   }
@@ -1047,10 +1438,13 @@ export class MemStorage implements IStorage {
     const cart: Cart = {
       ...insertCart,
       id,
+      status: insertCart.status || null,
       createdAt: new Date(),
+      webUserId: insertCart.webUserId || null,
+      sessionId: insertCart.sessionId || null,
       updatedAt: new Date(),
-      items: 0,
-      total: "0"
+      totalItems: 0,
+      totalAmount: "0"
     };
     this.carts.set(id, cart);
     return cart;
@@ -1082,7 +1476,17 @@ export class MemStorage implements IStorage {
   
   async createCartItem(insertItem: InsertCartItem): Promise<CartItem> {
     const id = this.cartItemIdCounter++;
-    const item: CartItem = { ...insertItem, id };
+    const item: CartItem = { 
+      id,
+      cartId: insertItem.cartId,
+      productId: insertItem.productId,
+      price: insertItem.price,
+      quantity: insertItem.quantity,
+      unit: insertItem.unit,
+      notes: insertItem.notes || null,
+      updatedAt: new Date(),
+      addedAt: new Date()
+    };
     this.cartItems.set(id, item);
     
     // Actualizar el carrito
@@ -1090,11 +1494,11 @@ export class MemStorage implements IStorage {
     if (cart) {
       const cartItems = await this.getCartItemsByCartId(cart.id);
       const total = cartItems.reduce((sum, item) => 
-        sum + parseFloat(item.total), parseFloat(insertItem.total)).toString();
+        sum + (parseFloat(item.price) * parseFloat(item.quantity)), 0).toString();
       
       await this.updateCart(cart.id, { 
-        items: cartItems.length + 1,
-        total
+        totalItems: cartItems.length + 1,
+        totalAmount: total
       });
     }
     
@@ -1113,11 +1517,11 @@ export class MemStorage implements IStorage {
       const cartItems = await this.getCartItemsByCartId(cart.id);
       const filteredItems = cartItems.filter(i => i.id !== id);
       const total = filteredItems.reduce((sum, item) => 
-        sum + parseFloat(item.total), 0).toString();
+        sum + (parseFloat(item.price) * parseFloat(item.quantity)), 0).toString();
       
       await this.updateCart(cart.id, { 
-        items: filteredItems.length,
-        total
+        totalItems: filteredItems.length,
+        totalAmount: total
       });
     }
     
@@ -1127,13 +1531,24 @@ export class MemStorage implements IStorage {
   // Web User methods
   async getWebUserByUsername(username: string): Promise<WebUser | undefined> {
     return Array.from(this.webUsers.values()).find(
-      (user) => user.username === username
+      (user) => user.email === username
     );
   }
 
   async createWebUser(insertWebUser: InsertWebUser): Promise<WebUser> {
     const id = this.webUserIdCounter++;
-    const webUser: WebUser = { ...insertWebUser, id };
+    const webUser: WebUser = { 
+      ...insertWebUser, 
+      id,
+      active: true,
+      customerId: insertWebUser.customerId || null,
+      verificationToken: insertWebUser.verificationToken || null,
+      verified: insertWebUser.verified || null,
+      resetToken: null,
+      resetTokenExpiry: null,
+      lastLogin: null,
+      createdAt: new Date()
+    };
     this.webUsers.set(id, webUser);
     return webUser;
   }
@@ -1157,9 +1572,27 @@ export class MemStorage implements IStorage {
       });
   }
   
+  async getProductCategoryBySlug(slug: string): Promise<ProductCategory | undefined> {
+    return Array.from(this.productCategories.values())
+      .find(category => category.slug === slug);
+  }
+  
   async createProductCategory(category: InsertProductCategory): Promise<ProductCategory> {
     const id = this.productCategoryIdCounter++;
-    const newCategory: ProductCategory = { ...category, id };
+    const newCategory: ProductCategory = {
+      id,
+      name: category.name,
+      slug: category.slug,
+      description: category.description || null,
+      imageUrl: category.imageUrl || null,
+      parentId: category.parentId || null,
+      displayOrder: category.displayOrder || 0,
+      active: category.active ?? true,
+      metaTitle: category.metaTitle || null,
+      metaDescription: category.metaDescription || null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
     this.productCategories.set(id, newCategory);
     return newCategory;
   }
@@ -1248,7 +1681,10 @@ export class MemStorage implements IStorage {
     const relation: ProductCategoryRelation = {
       id,
       productId,
-      categoryId
+      categoryId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      isPrimary: false
     };
     
     this.productCategoryRelations.set(id, relation);
@@ -1265,6 +1701,215 @@ export class MemStorage implements IStorage {
     }
     
     this.productCategoryRelations.delete(relationKey);
+  }
+
+  // Purchase methods
+  async getPurchaseItems(purchaseId: number): Promise<PurchaseItem[]> {
+    const items: PurchaseItem[] = [];
+    for (const [_, item] of this.purchaseItems.entries()) {
+      if (item.purchaseId === purchaseId) {
+        items.push(item);
+      }
+    }
+    return items;
+  }
+
+  async getPurchase(id: number): Promise<Purchase | null> {
+    const purchase = this.purchases.get(id);
+    if (!purchase) return null;
+
+    const items = await this.getPurchaseItems(id);
+    const purchaseWithItems: Purchase = {
+      ...purchase,
+      items,
+    };
+    return purchaseWithItems;
+  }
+
+  async getPurchases(): Promise<Purchase[]> {
+    const purchases: Purchase[] = [];
+    for (const purchase of Array.from(this.purchases.values())) {
+      const items = await this.getPurchaseItems(purchase.id);
+      purchases.push({
+        ...purchase,
+        items,
+      });
+    }
+    return purchases;
+  }
+
+  async createPurchase(insertPurchase: InsertPurchase): Promise<Purchase> {
+    const id = this.purchaseIdCounter++;
+    const purchase: StoragePurchase = {
+      id,
+      timestamp: new Date(),
+      supplierId: insertPurchase.supplierId,
+      userId: insertPurchase.userId,
+      total: insertPurchase.total.toString(),
+      paymentMethod: insertPurchase.paymentMethod,
+      paymentDetails: insertPurchase.paymentDetails || null,
+      documentType: insertPurchase.documentType || "remito",
+      invoiceNumber: insertPurchase.invoiceNumber || null,
+      status: insertPurchase.status || "completed",
+      notes: insertPurchase.notes || null,
+    };
+    this.purchases.set(id, purchase);
+
+    // Crear los items de la compra
+    const items: PurchaseItem[] = [];
+    if (insertPurchase.items && insertPurchase.items.length > 0) {
+      for (const item of insertPurchase.items) {
+        const itemId = this.purchaseItemIdCounter++;
+        const purchaseItem: PurchaseItem = {
+          id: itemId,
+          purchaseId: id,
+          productId: item.productId,
+          quantity: item.quantity.toString(),
+          unit: item.unit,
+          cost: item.cost.toString(),
+          total: (item.quantity * item.cost).toString(),
+          isConversion: false,
+          conversionFactor: "1",
+          conversionUnit: null,
+          conversionBarcode: null,
+        };
+        this.purchaseItems.set(itemId, purchaseItem);
+        items.push(purchaseItem);
+      }
+    }
+
+    return {
+      ...purchase,
+      items,
+    };
+  }
+
+  async updatePurchase(id: number, updatePurchase: UpdatePurchase): Promise<Purchase> {
+    const purchase = this.purchases.get(id);
+    if (!purchase) throw new Error("Purchase not found");
+
+    const updatedPurchase: StoragePurchase = {
+      ...purchase,
+      supplierId: updatePurchase.supplierId || purchase.supplierId,
+      total: updatePurchase.total?.toString() || purchase.total,
+      paymentMethod: updatePurchase.paymentMethod || purchase.paymentMethod,
+      paymentDetails: updatePurchase.paymentDetails || purchase.paymentDetails,
+      documentType: updatePurchase.documentType || purchase.documentType,
+      invoiceNumber: updatePurchase.invoiceNumber || purchase.invoiceNumber,
+      status: updatePurchase.status || purchase.status,
+      notes: updatePurchase.notes || purchase.notes,
+    };
+
+    this.purchases.set(id, updatedPurchase);
+
+    // Actualizar los items de la compra
+    const items: PurchaseItem[] = [];
+    if (updatePurchase.items && updatePurchase.items.length > 0) {
+      // Eliminar items existentes
+      for (const [itemId, item] of Array.from(this.purchaseItems.entries())) {
+        if (item.purchaseId === id) {
+          this.purchaseItems.delete(itemId);
+        }
+      }
+
+      // Crear nuevos items
+      for (const item of updatePurchase.items) {
+        const itemId = this.purchaseItemIdCounter++;
+        const purchaseItem: PurchaseItem = {
+          id: itemId,
+          purchaseId: id,
+          productId: item.productId,
+          quantity: item.quantity.toString(),
+          unit: item.unit,
+          cost: item.cost.toString(),
+          total: (item.quantity * item.cost).toString(),
+          isConversion: false,
+          conversionFactor: "1",
+          conversionUnit: null,
+          conversionBarcode: null,
+        };
+        this.purchaseItems.set(itemId, purchaseItem);
+        items.push(purchaseItem);
+      }
+    } else {
+      // Si no se proporcionan items, mantener los existentes
+      const existingItems = await this.getPurchaseItems(id);
+      items.push(...existingItems);
+    }
+
+    return {
+      ...updatedPurchase,
+      items,
+    };
+  }
+
+  async deletePurchase(id: number): Promise<void> {
+    this.purchases.delete(id);
+  }
+
+  async createPurchaseItem(insertItem: InsertPurchaseItem): Promise<PurchaseItem> {
+    const id = this.purchaseItemIdCounter++;
+    const item: PurchaseItem = {
+      id,
+      purchaseId: insertItem.purchaseId,
+      productId: insertItem.productId,
+      quantity: insertItem.quantity.toString(),
+      unit: insertItem.unit,
+      cost: insertItem.cost.toString(),
+      total: insertItem.total.toString(),
+      isConversion: insertItem.isConversion || false,
+      conversionFactor: insertItem.conversionFactor?.toString() || "1",
+      conversionUnit: insertItem.conversionUnit || null,
+      conversionBarcode: insertItem.conversionBarcode || null
+    };
+    this.purchaseItems.set(id, item);
+    return item;
+  }
+
+  // Bank Accounts
+  async getBankAccount(id: number): Promise<BankAccount | undefined> {
+    return this.bankAccounts.get(id);
+  }
+
+  async getAllBankAccounts(): Promise<BankAccount[]> {
+    return Array.from(this.bankAccounts.values());
+  }
+
+  async createBankAccount(insertAccount: InsertBankAccount): Promise<BankAccount> {
+    const id = this.bankAccountIdCounter++;
+    const account: BankAccount = {
+      ...insertAccount,
+      id,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.bankAccounts.set(id, account);
+    return account;
+  }
+
+  async updateBankAccount(id: number, updateAccount: Partial<BankAccount>): Promise<BankAccount> {
+    const account = this.bankAccounts.get(id);
+    if (!account) {
+      throw new Error("Bank account not found");
+    }
+    const updatedAccount = {
+      ...account,
+      ...updateAccount,
+      updatedAt: new Date()
+    };
+    this.bankAccounts.set(id, updatedAccount);
+    return updatedAccount;
+  }
+
+  async deleteBankAccount(id: number): Promise<void> {
+    this.bankAccounts.delete(id);
+  }
+
+  // Payments
+  async createPayment(payment: any): Promise<any> {
+    const newPayment = { id: this.payments.length + 1, ...payment };
+    this.payments.push(newPayment);
+    return newPayment;
   }
 }
 

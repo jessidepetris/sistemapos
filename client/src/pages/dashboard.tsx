@@ -17,6 +17,9 @@ export default function Dashboard() {
   const { data: stats, isLoading: isLoadingStats } = useQuery({
     queryKey: ["/api/dashboard/stats"],
     retry: false,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+    staleTime: 30000
   });
 
   const { data: recentSales, isLoading: isLoadingRecentSales } = useQuery({
@@ -43,7 +46,7 @@ export default function Dashboard() {
         
         <main className="flex-1 overflow-y-auto p-6">
           {/* Dashboard stats */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-6 mb-6">
             <StatCard
               title="Ventas Hoy"
               value={stats?.todaySales?.total || "$0"}
@@ -70,15 +73,6 @@ export default function Dashboard() {
               icon={<Package className="h-5 w-5" />}
               color="yellow"
               alert={stats?.lowStock?.count > 0}
-            />
-            
-            <StatCard
-              title="Clientes Nuevos"
-              value={stats?.newCustomers?.count || "0"}
-              change=""
-              trend="neutral"
-              icon={<Users className="h-5 w-5" />}
-              color="green"
             />
           </div>
           

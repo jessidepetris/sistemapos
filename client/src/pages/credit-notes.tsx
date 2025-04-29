@@ -592,17 +592,11 @@ export default function CreditNotesPage() {
                     <span className="font-medium">
                       Venta #{selectedNote.relatedSale.id} - ${parseFloat(selectedNote.relatedSale.total).toFixed(2)}
                     </span>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-8 ml-2" 
-                      asChild
-                    >
-                      <Link to={`/sales/${selectedNote.relatedSale.id}`}>
-                        <Eye className="h-3.5 w-3.5 mr-1" />
-                        Ver
-                      </Link>
-                    </Button>
+                    <Link href={`/sales/${selectedNote.relatedSale.id}`}>
+                      <Button variant="ghost" size="sm">
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </Link>
                   </div>
                 </div>
               )}
@@ -660,16 +654,11 @@ export default function CreditNotesPage() {
                     </div>
                   </div>
                   <div className="flex justify-end mt-2">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      asChild
-                    >
-                      <Link to={`/accounts/${selectedNote.customer?.id}`}>
-                        <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                        Ver Cuenta Corriente
-                      </Link>
-                    </Button>
+                    <Link href={`/accounts/${selectedNote.customer?.id}`}>
+                      <Button variant="ghost" size="sm">
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </Link>
                   </div>
                 </div>
               )}

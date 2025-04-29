@@ -187,7 +187,7 @@ export default function DeliveriesTab() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const reactQueryClient = useQueryClient();
 
   // Obtener lista de entregas
   const { data: deliveries, isLoading: isLoadingDeliveries } = useQuery<Delivery[]>({
@@ -320,7 +320,7 @@ export default function DeliveriesTab() {
         title: "Entrega creada",
         description: "La entrega ha sido creada exitosamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/deliveries"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/deliveries"] });
       setIsCreateOpen(false);
       form.reset({
         status: "pending",
@@ -349,7 +349,7 @@ export default function DeliveriesTab() {
         title: "Entrega actualizada",
         description: "La entrega ha sido actualizada exitosamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/deliveries"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/deliveries"] });
       setIsEditOpen(false);
       setSelectedDelivery(null);
     },
@@ -375,7 +375,7 @@ export default function DeliveriesTab() {
         title: "Estado actualizado",
         description: "El estado de la entrega ha sido actualizado",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/deliveries"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/deliveries"] });
       if (selectedDelivery) {
         // Refrescar los detalles de la entrega seleccionada
         fetch(`/api/deliveries/${selectedDelivery.id}`)
@@ -406,7 +406,7 @@ export default function DeliveriesTab() {
         title: "Entrega eliminada",
         description: "La entrega ha sido cancelada exitosamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/deliveries"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/deliveries"] });
       setIsDetailsOpen(false);
       setSelectedDelivery(null);
     },
@@ -1028,7 +1028,7 @@ export default function DeliveriesTab() {
             variant="ghost"
             size="sm"
             className="ml-auto"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/deliveries"] })}
+            onClick={() => reactQueryClient.invalidateQueries({ queryKey: ["/api/deliveries"] })}
             title="Actualizar"
           >
             <RotateCw className="h-4 w-4" />

@@ -52,6 +52,9 @@ export const InvoiceContent = forwardRef<HTMLDivElement, InvoiceDetailProps>(
       }
     };
 
+    // Calcular el subtotal real sumando los totales de los ítems (ya con descuento prorrateado)
+    const itemsSubtotal = items.reduce((sum, item) => sum + parseFloat(item.total), 0);
+
     return (
       <div ref={ref} className="bg-white p-6 rounded-lg shadow-sm w-full max-w-3xl mx-auto">
         {/* Encabezado del documento */}
@@ -136,12 +139,20 @@ export const InvoiceContent = forwardRef<HTMLDivElement, InvoiceDetailProps>(
           <div className="w-64">
             <div className="flex justify-between py-2">
               <span className="font-medium">Subtotal:</span>
-              <span>${parseFloat(invoice.total).toFixed(2)}</span>
+              <span>${itemsSubtotal.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between py-2 text-muted-foreground">
-              <span>IVA (21%):</span>
-              <span>${(parseFloat(invoice.total) * 0.21 / 1.21).toFixed(2)}</span>
-            </div>
+            {parseFloat(invoice.discountPercent) > 0 && (
+              <div className="flex justify-between py-2 text-green-700">
+                <span>Descuento ({invoice.discountPercent}%):</span>
+                <span>- ${parseFloat(invoice.discount).toFixed(2)}</span>
+              </div>
+            )}
+            {parseFloat(invoice.surchargePercent) > 0 && (
+              <div className="flex justify-between py-2 text-orange-700">
+                <span>Recargo ({invoice.surchargePercent}%):</span>
+                <span>+ ${parseFloat(invoice.surcharge).toFixed(2)}</span>
+              </div>
+            )}
             <div className="flex justify-between py-2 font-bold text-lg border-t mt-2">
               <span>TOTAL:</span>
               <span>${parseFloat(invoice.total).toFixed(2)}</span>

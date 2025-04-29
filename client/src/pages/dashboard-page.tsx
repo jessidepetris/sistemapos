@@ -21,7 +21,7 @@ import {
 import { Product, Sale, Customer } from "@shared/schema";
 
 export default function DashboardPage() {
-  // Fetch low stock products
+  // Fetch dashboard data
   const { 
     data: lowStockProducts, 
     isLoading: isLoadingLowStock 
@@ -37,18 +37,43 @@ export default function DashboardPage() {
     queryKey: ["/api/sales/recent"],
   });
   
+  // Fetch dashboard stats
+  const {
+    data: dashboardStats,
+    isLoading: isLoadingStats
+  } = useQuery<{
+    todaySales?: {
+      total: string;
+      trend: "up" | "down" | "neutral";
+      change: string;
+    };
+    transactions?: {
+      count: string;
+      trend: "up" | "down" | "neutral";
+      change: string;
+    };
+    lowStock?: {
+      count: string;
+    };
+  }>({
+    queryKey: ["/api/dashboard/stats"],
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+    staleTime: 30000 // Considerar los datos obsoletos después de 30 segundos
+  });
+  
   return (
     <DashboardLayout
       title="Dashboard"
       description="Resumen del sistema"
     >
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4 mb-6">
         <StatCard 
           title="Ventas de Hoy"
-          value="$24,500"
-          changeType="increase"
-          changeValue="12%"
+          value={dashboardStats?.todaySales?.total || "$0"}
+          changeType={dashboardStats?.todaySales?.trend === "up" ? "increase" : dashboardStats?.todaySales?.trend === "down" ? "decrease" : "neutral"}
+          changeValue={dashboardStats?.todaySales?.change || "0%"}
           changeLabel="vs. ayer"
           icon={<DollarSign className="h-5 w-5" />}
           color="primary"
@@ -56,30 +81,20 @@ export default function DashboardPage() {
         
         <StatCard 
           title="Productos Vendidos"
-          value="158"
-          changeType="increase"
-          changeValue="5%"
+          value={dashboardStats?.transactions?.count || "0"}
+          changeType={dashboardStats?.transactions?.trend === "up" ? "increase" : dashboardStats?.transactions?.trend === "down" ? "decrease" : "neutral"}
+          changeValue={dashboardStats?.transactions?.change || "0%"}
           changeLabel="vs. ayer"
           icon={<Package className="h-5 w-5" />}
           color="secondary"
         />
         
         <StatCard 
-          title="Clientes Nuevos"
-          value="12"
-          changeType="decrease"
-          changeValue="3%"
-          changeLabel="vs. ayer"
-          icon={<Users className="h-5 w-5" />}
-          color="green"
-        />
-        
-        <StatCard 
           title="Stock Bajo"
-          value={lowStockProducts ? lowStockProducts.length.toString() : "..."}
-          changeType="decrease"
-          changeValue="2"
-          changeLabel="más que ayer"
+          value={dashboardStats?.lowStock?.count || lowStockProducts ? lowStockProducts.length.toString() : "0"}
+          changeType="neutral"
+          changeValue=""
+          changeLabel="productos"
           icon={<AlertTriangle className="h-5 w-5" />}
           color="red"
         />
@@ -164,7 +179,7 @@ export default function DashboardPage() {
 interface StatCardProps {
   title: string;
   value: string;
-  changeType: "increase" | "decrease";
+  changeType: "increase" | "decrease" | "neutral";
   changeValue: string;
   changeLabel: string;
   icon: React.ReactNode;
@@ -192,12 +207,12 @@ function StatCard({ title, value, changeType, changeValue, changeLabel, icon, co
           </div>
         </div>
         <div className="flex items-center mt-3 text-xs">
-          <span className={`flex items-center ${changeType === 'increase' ? 'text-green-600' : 'text-red-600'}`}>
+          <span className={`flex items-center ${changeType === 'increase' ? 'text-green-600' : changeType === 'decrease' ? 'text-red-600' : 'text-neutral-800'}`}>
             {changeType === 'increase' ? (
               <ArrowUp className="mr-1 h-3 w-3" />
-            ) : (
+            ) : changeType === 'decrease' ? (
               <ArrowDown className="mr-1 h-3 w-3" />
-            )}
+            ) : null}
             {changeValue}
           </span>
           <span className="ml-2 text-neutral-800">{changeLabel}</span>

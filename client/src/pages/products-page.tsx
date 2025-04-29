@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/api";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
@@ -11,19 +11,18 @@ import {
 } from "@/components/ui/table";
 import { 
   Dialog, DialogContent, DialogFooter, DialogHeader, 
-  DialogTitle
+  DialogTitle, DialogDescription
 } from "@/components/ui/dialog";
-import { 
-  Form
-} from "@/components/ui/form";
+import { Form } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { insertProductSchema } from "@shared/schema";
-import { Package, Plus, RefreshCw, Search, Thermometer, Scale, Calculator, Tag } from "lucide-react";
+import * as z from "zod";
+import { insertProductSchema } from "../../../shared/schema";
+import { Package, Plus, RefreshCw, Search, Thermometer, Scale, Calculator, Tag, Edit, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 // Importación de los componentes de pestañas
 import { GeneralTab } from "@/components/products/GeneralTab";
@@ -32,6 +31,7 @@ import { BarcodesTab } from "@/components/products/BarcodesTab";
 import { EnhancedConversionsTab } from "@/components/products/EnhancedConversionsTab";
 import { ComponentsTab } from "@/components/products/ComponentsTab";
 import { CategoriesTab } from "@/components/products/CategoriesTab";
+import { BulkCostUpdate } from "@/components/products/BulkCostUpdate";
 
 // Define a schema for unit conversions with barcodes
 const conversionRateSchema = z.object({
@@ -59,6 +59,7 @@ const productFormSchema = insertProductSchema.extend({
   ),
   // Form validation for numeric fields
   price: z.coerce.number().min(0, "El precio debe ser mayor o igual a 0"),
+  wholesalePrice: z.coerce.number().min(0, "El precio mayorista debe ser mayor o igual a 0"),
   cost: z.coerce.number().min(0, "El costo debe ser mayor o igual a 0").optional(),
   stock: z.coerce.number().min(0, "El stock debe ser mayor o igual a 0"),
   stockAlert: z.coerce.number().min(0, "La alerta de stock debe ser mayor o igual a 0").optional(),
@@ -70,9 +71,11 @@ const productFormSchema = insertProductSchema.extend({
   supplierCode: z.string().optional(),
   
   // Campos para cálculo automático del precio
-  iva: z.coerce.number().min(0).default(21),
+  iva: z.enum(["0", "10.5", "21"]).transform(val => parseFloat(val)).default("21"),
   shipping: z.coerce.number().min(0).default(0),
-  profit: z.coerce.number().min(0).default(30),
+  profit: z.coerce.number().min(0).default(55),
+  wholesaleProfit: z.coerce.number().min(0).default(35),
+  supplierDiscount: z.coerce.number().min(0).max(100).optional().default(0),
   
   // For bulk products, we need to manage conversion rates
   // This will be transformed before submission
@@ -98,7 +101,11 @@ type ProductFormValues = z.infer<typeof productFormSchema>;
 
 export default function ProductsPage() {
   const { toast } = useToast();
+  const reactQueryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isBulkUpdateDialogOpen, setIsBulkUpdateDialogOpen] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [editingProductId, setEditingProductId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState("general");
@@ -115,11 +122,17 @@ export default function ProductsPage() {
     quantity: number;
     unit: string;
   }>>([]);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [showOutOfStock, setShowOutOfStock] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any>(null);
 
   // Fetch products
   const { data: products, isLoading } = useQuery({
     queryKey: ["/api/products"],
     queryFn: undefined,
+    refetchInterval: 30000, // Refresca cada 30 segundos
+    refetchOnWindowFocus: true, // Refresca cuando la ventana recupera el foco
   });
   
   // Fetch suppliers for the dropdown
@@ -128,23 +141,126 @@ export default function ProductsPage() {
     queryFn: undefined,
   });
   
-  // Calculate selling price based on cost, iva, shipping, and profit
+  // Obtener todas las categorías
+  const { data: categories } = useQuery({
+    queryKey: ["/api/product-categories"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/product-categories");
+      if (!response.ok) throw new Error("Error al cargar categorías");
+      return response.json();
+    },
+  });
+
+  // Crear mapa de IDs a nombres de categorías
+  const categoryMap = React.useMemo(() => {
+    const map = new Map<string, string>();
+    categories?.forEach((category: any) => {
+      map.set(category.id.toString(), category.name);
+    });
+    return map;
+  }, [categories]);
+
+  // Función para calcular el costo de un producto compuesto basado en sus componentes
+  const calculateCompositeCost = () => {
+    // Si no es un producto compuesto o no hay componentes, retornar
+    const isComposite = form.getValues("isComposite");
+    if (!isComposite || componentsList.length === 0) {
+      return null;
+    }
+    
+    // Calculamos el costo sumando el costo de cada componente * su cantidad
+    let totalCost = 0;
+    
+    componentsList.forEach(component => {
+      // Buscar el producto componente para obtener su costo
+      const componentProduct = products?.find((p: any) => p.id === component.productId);
+      if (componentProduct && componentProduct.cost) {
+        // Multiplicar el costo por la cantidad
+        totalCost += (parseFloat(componentProduct.cost) * parseFloat(component.quantity));
+      }
+    });
+    
+    // Redondeo a 2 decimales
+    return Math.round(totalCost * 100) / 100;
+  };
+
+  // Recalcular el precio de venta basado en costo, IVA, flete y ganancia
   const recalculatePrice = () => {
-    const cost = form.getValues("cost") || 0;
-    const iva = form.getValues("iva") || 21;
-    const shipping = form.getValues("shipping") || 0;
-    const profit = form.getValues("profit") || 30;
+    let cost = form.getValues("cost") || 0;
+    const isComposite = form.getValues("isComposite");
     
-    // Cálculo del precio: costo + IVA + envío + margen de ganancia
-    const costWithIva = cost * (1 + iva / 100);
-    const costWithIvaAndShipping = costWithIva * (1 + shipping / 100);
-    const sellingPrice = costWithIvaAndShipping * (1 + profit / 100);
+    // Si es un producto compuesto, calculamos su costo basado en componentes
+    if (isComposite && componentsList.length > 0) {
+      const compositeCost = calculateCompositeCost();
+      if (compositeCost !== null) {
+        cost = compositeCost;
+        // Actualizamos el campo de costo en el formulario
+        form.setValue("cost", compositeCost);
+      }
+    }
     
-    // Redondear a 2 decimales
-    const roundedPrice = Math.round(sellingPrice * 100) / 100;
+    // Aplicar descuento del proveedor al costo si existe
+    const supplierDiscount = form.getValues("supplierDiscount") || 0;
+    if (supplierDiscount > 0) {
+      cost = cost * (1 - (supplierDiscount / 100));
+      // Redondeo a 2 decimales del costo con descuento
+      cost = Math.round(cost * 100) / 100;
+    }
+    
+    const ivaValue = form.getValues("iva") || "21";
+    const ivaRate = parseFloat(ivaValue);
+    const shippingRate = form.getValues("shipping") || 0;
+    const profitRate = form.getValues("profit") || 55;
+    
+    // Cálculo del precio
+    const costWithIva = cost * (1 + (ivaRate / 100));
+    const costWithShipping = costWithIva * (1 + (shippingRate / 100));
+    const finalPrice = costWithShipping * (1 + (profitRate / 100));
+    
+    // Redondeo a 2 decimales
+    const roundedPrice = Math.round(finalPrice * 100) / 100;
     
     // Actualizar el formulario
     form.setValue("price", roundedPrice);
+  };
+
+  // Recalcular el precio mayorista basado en costo, IVA, flete y ganancia mayorista
+  const recalculateWholesalePrice = () => {
+    let cost = form.getValues("cost") || 0;
+    const isComposite = form.getValues("isComposite");
+    
+    // Si es un producto compuesto, calculamos su costo basado en componentes
+    if (isComposite && componentsList.length > 0) {
+      const compositeCost = calculateCompositeCost();
+      if (compositeCost !== null) {
+        cost = compositeCost;
+        // No necesitamos actualizar el formulario aquí porque recalculatePrice ya lo haría
+      }
+    }
+    
+    // Aplicar descuento del proveedor al costo si existe
+    const supplierDiscount = form.getValues("supplierDiscount") || 0;
+    if (supplierDiscount > 0) {
+      cost = cost * (1 - (supplierDiscount / 100));
+      // Redondeo a 2 decimales del costo con descuento
+      cost = Math.round(cost * 100) / 100;
+    }
+    
+    const ivaValue = form.getValues("iva") || "21";
+    const ivaRate = parseFloat(ivaValue);
+    const shippingRate = form.getValues("shipping") || 0;
+    const wholesaleProfitRate = form.getValues("wholesaleProfit") || 35;
+    
+    // Cálculo del precio mayorista
+    const costWithIva = cost * (1 + (ivaRate / 100));
+    const costWithShipping = costWithIva * (1 + (shippingRate / 100));
+    const finalWholesalePrice = costWithShipping * (1 + (wholesaleProfitRate / 100));
+    
+    // Redondeo a 2 decimales
+    const roundedWholesalePrice = Math.round(finalWholesalePrice * 100) / 100;
+    
+    // Actualizar el formulario
+    form.setValue("wholesalePrice", roundedWholesalePrice);
   };
 
   // Form definition
@@ -156,12 +272,14 @@ export default function ProductsPage() {
       baseUnit: "unidad",
       barcodes: "", // Entrada como string que se convertirá a array
       price: 0,
+      wholesalePrice: 0,
       cost: 0,
       stock: 0,
       stockAlert: 0,
-      iva: 21,        // 21% por defecto
+      iva: "21",        // 21% por defecto
       shipping: 0,     // 0% por defecto
-      profit: 30,      // 30% por defecto
+      profit: 55,      // 55% por defecto
+      wholesaleProfit: 35, // 35% por defecto para mayoristas
       isRefrigerated: false,
       isBulk: false,
       isComposite: false,
@@ -191,18 +309,40 @@ export default function ProductsPage() {
       const res = await apiRequest("POST", "/api/products", data);
       return await res.json();
     },
+    onMutate: async (newProduct) => {
+      // Cancelar cualquier refresco pendiente para evitar sobrescribir nuestra actualización optimista
+      await reactQueryClient.cancelQueries({ queryKey: ["/api/products"] });
+
+      // Guardar el estado anterior
+      const previousProducts = reactQueryClient.getQueryData(["/api/products"]);
+
+      // Actualizar la caché de manera optimista
+      reactQueryClient.setQueryData(["/api/products"], (old: any) => {
+        const optimisticProduct = {
+          ...newProduct,
+          id: Date.now(), // ID temporal
+          createdAt: new Date().toISOString(),
+        };
+        return Array.isArray(old) ? [...old, optimisticProduct] : [optimisticProduct];
+      });
+
+      return { previousProducts };
+    },
+    onError: (err, newProduct, context: any) => {
+      // Si hay un error, revertir a los datos anteriores
+      reactQueryClient.setQueryData(["/api/products"], context.previousProducts);
+      toast({
+        title: "Error al crear el producto",
+        description: (err as Error).message,
+        variant: "destructive",
+      });
+    },
     onSuccess: () => {
       toast({ title: "Producto creado correctamente" });
       form.reset();
       setIsDialogOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error al crear el producto",
-        description: (error as Error).message,
-        variant: "destructive",
-      });
+      // Refrescar los datos para asegurarnos de tener la información más actualizada del servidor
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/products"] });
     }
   });
   
@@ -212,19 +352,38 @@ export default function ProductsPage() {
       const res = await apiRequest("PUT", `/api/products/${id}`, data);
       return await res.json();
     },
+    onMutate: async ({ id, data }) => {
+      await reactQueryClient.cancelQueries({ queryKey: ["/api/products"] });
+      
+      const previousProducts = reactQueryClient.getQueryData(["/api/products"]);
+      
+      reactQueryClient.setQueryData(["/api/products"], (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((product) => 
+          product.id === id ? { 
+            ...product, 
+            ...data,
+            lastUpdated: new Date() // Mantener como Date en lugar de convertir a ISO string
+          } : product
+        );
+      });
+      
+      return { previousProducts };
+    },
+    onError: (err, variables, context: any) => {
+      reactQueryClient.setQueryData(["/api/products"], context.previousProducts);
+      toast({
+        title: "Error al actualizar el producto",
+        description: (err as Error).message,
+        variant: "destructive",
+      });
+    },
     onSuccess: () => {
       toast({ title: "Producto actualizado correctamente" });
       form.reset();
       setIsDialogOpen(false);
       setEditingProductId(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error al actualizar el producto",
-        description: (error as Error).message,
-        variant: "destructive",
-      });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/products"] });
     }
   });
   
@@ -234,16 +393,30 @@ export default function ProductsPage() {
       const res = await apiRequest("DELETE", `/api/products/${id}`);
       return await res.json();
     },
-    onSuccess: () => {
-      toast({ title: "Producto eliminado correctamente" });
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+    onMutate: async (deletedId) => {
+      await reactQueryClient.cancelQueries({ queryKey: ["/api/products"] });
+      
+      const previousProducts = reactQueryClient.getQueryData(["/api/products"]);
+      
+      reactQueryClient.setQueryData(["/api/products"], (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.filter((product) => product.id !== deletedId);
+      });
+      
+      return { previousProducts };
     },
-    onError: (error) => {
+    onError: (err, variables, context: any) => {
+      reactQueryClient.setQueryData(["/api/products"], context.previousProducts);
       toast({
         title: "Error al eliminar el producto",
-        description: (error as Error).message,
+        description: (err as Error).message,
         variant: "destructive",
       });
+    },
+    onSuccess: () => {
+      toast({ title: "Producto eliminado correctamente" });
+      setIsDeleteDialogOpen(false);
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/products"] });
     }
   });
   
@@ -257,8 +430,10 @@ export default function ProductsPage() {
     : products;
   
   // Form submission handler
-  const onSubmit = (data: ProductFormValues) => {
+  const handleSubmit = (data: ProductFormValues) => {
     if (editingProductId) {
+      // No incluir lastUpdated en los datos que se envían al servidor
+      // Se actualizará automáticamente en el backend
       updateProductMutation.mutate({ id: editingProductId, data });
     } else {
       createProductMutation.mutate(data);
@@ -269,29 +444,20 @@ export default function ProductsPage() {
   const handleEditProduct = (product: any) => {
     setEditingProductId(product.id);
     
-    // Inicializar las conversiones desde el producto
-    const productConversions = product.conversionRates 
-      ? (typeof product.conversionRates === 'string' 
-          ? JSON.parse(product.conversionRates) 
-          : product.conversionRates)
-      : [];
+    // Preparar listas para componentes y conversiones
+    const productComponents = product.components ? product.components : [];
+    setComponentsList(productComponents);
     
+    // Preparar conversiones
+    const productConversions = product.conversionRates ? product.conversionRates : [];
     setConversionRates(productConversions);
     
-    // Inicializar la lista de códigos de barras
+    // Preparar códigos de barras
     const productBarcodes = product.barcodes || [];
     setBarcodesList(productBarcodes);
     
-    // Inicializar la lista de componentes para productos compuestos
-    let productComponents: any[] = [];
-    if (product.isComposite && product.components) {
-      const components = typeof product.components === 'string'
-        ? JSON.parse(product.components)
-        : product.components;
-      
-      productComponents = components;
-      setComponentsList(components);
-    }
+    // Establecer pestaña activa
+    setActiveTab("general");
     
     // Format data for form
     form.reset({
@@ -300,12 +466,15 @@ export default function ProductsPage() {
       baseUnit: product.baseUnit,
       barcodes: product.barcodes ? product.barcodes.join(", ") : "",
       price: parseFloat(product.price),
+      wholesalePrice: product.wholesalePrice ? parseFloat(product.wholesalePrice) : 0,
       cost: product.cost ? parseFloat(product.cost) : 0,
-      iva: product.iva || 21,
-      shipping: product.shipping || 0,
-      profit: product.profit || 30,
       stock: parseFloat(product.stock),
       stockAlert: product.stockAlert ? parseFloat(product.stockAlert) : 0,
+      iva: product.iva ? product.iva.toString() : "21",
+      shipping: product.shipping || 0,
+      profit: product.profit || 55,
+      wholesaleProfit: product.wholesaleProfit || 35,
+      supplierDiscount: product.supplierDiscount || 0,
       supplierId: product.supplierId,
       supplierCode: product.supplierCode || "",
       category: product.category || "",
@@ -345,12 +514,15 @@ export default function ProductsPage() {
       baseUnit: "unidad",
       barcodes: "", // Entrada como string que se convertirá a array
       price: 0,
+      wholesalePrice: 0,
       cost: 0,
       stock: 0,
       stockAlert: 0,
-      iva: 21,        // 21% por defecto
+      iva: "21",        // 21% por defecto
       shipping: 0,     // 0% por defecto
-      profit: 30,      // 30% por defecto
+      profit: 55,      // 55% por defecto
+      wholesaleProfit: 35, // 35% por defecto para mayoristas
+      supplierDiscount: 0, // 0% por defecto
       isRefrigerated: false,
       isBulk: false,
       isComposite: false,
@@ -370,7 +542,12 @@ export default function ProductsPage() {
     });
     setIsDialogOpen(true);
   };
-  
+
+  const handleDeleteClick = (product: any) => {
+    setProductToDelete(product);
+    setIsDeleteDialogOpen(true);
+  };
+
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
@@ -391,8 +568,10 @@ export default function ProductsPage() {
             </div>
             
             <div className="flex items-center gap-2 w-full md:w-auto">
-              <Button variant="outline" className="w-full md:w-auto">
-                <RefreshCw className="mr-2 h-4 w-4" />
+              <Button 
+                variant="outline"
+                onClick={() => setIsBulkUpdateDialogOpen(true)}
+              >
                 Actualizar Precios
               </Button>
               <Button onClick={handleNewProduct} className="w-full md:w-auto">
@@ -408,24 +587,26 @@ export default function ProductsPage() {
                 <TableRow>
                   <TableHead>Nombre</TableHead>
                   <TableHead>Categoría</TableHead>
-                  <TableHead>Precio</TableHead>
+                  <TableHead>Precio Minorista</TableHead>
+                  <TableHead>Precio Mayorista</TableHead>
                   <TableHead>Stock</TableHead>
                   <TableHead>Proveedor</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Características</TableHead>
+                  <TableHead>Última Actualización</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={10} className="text-center py-8">
                       Cargando productos...
                     </TableCell>
                   </TableRow>
                 ) : filteredProducts?.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={10} className="text-center py-8">
                       No hay productos para mostrar
                     </TableCell>
                   </TableRow>
@@ -446,8 +627,13 @@ export default function ProductsPage() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>{product.category || "-"}</TableCell>
+                      <TableCell>{categoryMap.get(product.category) || "-"}</TableCell>
                       <TableCell>${parseFloat(product.price).toFixed(2)}</TableCell>
+                      <TableCell>
+                        {product.wholesalePrice 
+                          ? `$${parseFloat(product.wholesalePrice).toFixed(2)}` 
+                          : "-"}
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center">
                           <span className={`${parseFloat(product.stock) <= (parseFloat(product.stockAlert) || 0) ? "text-destructive font-semibold" : ""}`}>
@@ -496,13 +682,23 @@ export default function ProductsPage() {
                           )}
                         </div>
                       </TableCell>
+                      <TableCell>
+                        {product.lastUpdated ? new Date(product.lastUpdated).toLocaleString() : "-"}
+                      </TableCell>
                       <TableCell className="text-right">
                         <Button
                           variant="ghost"
-                          size="sm"
+                          size="icon"
                           onClick={() => handleEditProduct(product)}
                         >
-                          Editar
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteClick(product)}
+                        >
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -524,7 +720,7 @@ export default function ProductsPage() {
           </DialogHeader>
           
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
               <Tabs
                 defaultValue="general"
                 value={activeTab}
@@ -569,7 +765,11 @@ export default function ProductsPage() {
                 
                 {/* Pestaña de Precios */}
                 <TabsContent value="pricing">
-                  <PricingTab form={form} recalculatePrice={recalculatePrice} />
+                  <PricingTab 
+                    form={form} 
+                    recalculatePrice={recalculatePrice} 
+                    recalculateWholesalePrice={recalculateWholesalePrice}
+                  />
                 </TabsContent>
                 
                 {/* Pestaña de Códigos de Barras */}
@@ -624,6 +824,41 @@ export default function ProductsPage() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de confirmación de eliminación */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. Se eliminará permanentemente el producto "{productToDelete?.name}".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (productToDelete) {
+                  deleteProductMutation.mutate(productToDelete.id);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog for bulk cost updates */}
+      <Dialog open={isBulkUpdateDialogOpen} onOpenChange={setIsBulkUpdateDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Actualización Masiva de Precios</DialogTitle>
+          </DialogHeader>
+          <BulkCostUpdate />
         </DialogContent>
       </Dialog>
     </div>

@@ -1,7 +1,8 @@
 import React, { useState, useRef } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
+import { PaymentMethod, PaymentDetails } from "@/shared/types";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,12 +13,13 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Minus, Plus, Search, ShoppingCart, Trash2, X } from "lucide-react";
+import { Loader2, Package, ShoppingBag, Search, Trash2, X, ShoppingCart, Plus, Minus, Tag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ThermalTicket } from "@/components/printing/ThermalTicket";
 import { InvoicePDF } from "@/components/printing/InvoicePDF";
 import { InvoiceContent } from "@/components/invoices/InvoiceDetail";
 import { PDFService } from "@/services/pdfService";
+import { formatCurrency } from "@/lib/utils";
 
 type CartItem = {
   id: number;
@@ -31,6 +33,7 @@ type CartItem = {
   isBulk: boolean;
   isRefrigerated: boolean;
   conversionRates?: any;
+  imageUrl?: string;
   // Campos para conversiones mejoradas
   isConversion?: boolean;
   conversionUnit?: string;
@@ -38,13 +41,33 @@ type CartItem = {
   conversionBarcode?: string;
 };
 
-export default function POSPage() {
-  const { user } = useAuth();
+const POSPage = () => {
+  const { user, isLoading: isLoadingUser } = useAuth();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("");
+  const [paymentDetails, setPaymentDetails] = useState<PaymentDetails>({
+    cardType: 'credit',
+    cardNumber: '',
+    cardHolder: '',
+    cardExpiry: '',
+    cardCvv: '',
+    bankName: '',
+    accountNumber: '',
+    checkNumber: '',
+    qrCode: '',
+    mixedPayment: {
+      cash: 0,
+      transfer: 0,
+      qr: 0,
+      credit_card: 0,
+      debit_card: 0,
+      check: 0,
+      current_account: 0
+    }
+  });
   const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
   const [barcodeInput, setBarcodeInput] = useState("");
   const [documentType, setDocumentType] = useState("remito");
@@ -52,15 +75,22 @@ export default function POSPage() {
   const [printTicket, setPrintTicket] = useState(true);
   const [sendEmail, setSendEmail] = useState(false);
   const [cardType, setCardType] = useState("credit");
+  const [discountPercent, setDiscountPercent] = useState(0);
+  const [surchargePercent, setSurchargePercent] = useState(0);
+  const [priceType, setPriceType] = useState("retail"); // 'retail' o 'wholesale'
   const [mixedPayment, setMixedPayment] = useState({
     cash: 0,
-    card: 0,
     transfer: 0,
-    account: 0
+    qr: 0,
+    credit_card: 0,
+    debit_card: 0,
+    check: 0,
+    current_account: 0
   });
   const [completedSale, setCompletedSale] = useState<any | null>(null);
   const [showReceiptDialog, setShowReceiptDialog] = useState(false);
   const receiptRef = useRef<HTMLDivElement>(null);
+  const [lastSaleData, setLastSaleData] = useState<any>(null);
   
   // Get products
   const { data: products = [], isLoading: isLoadingProducts } = useQuery<any[]>({
@@ -74,31 +104,73 @@ export default function POSPage() {
     retry: false,
   });
   
+  // Get bank accounts
+  const { data: bankAccounts = [], isLoading: isLoadingBankAccounts } = useQuery({
+    queryKey: ["/api/bank-accounts"],
+    retry: false,
+  });
+  
   // Process sale mutation
   const processSaleMutation = useMutation({
     mutationFn: async (saleData: any) => {
       const res = await apiRequest("POST", "/api/sales", saleData);
+      if (!res.ok) {
+        const errorData = await res.json();
+        if (res.status === 401 && errorData.code === "SESSION_EXPIRED") {
+          throw new Error("SESSION_EXPIRED");
+        }
+        throw new Error(errorData.message || "Error al procesar la venta");
+      }
       return await res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       // Invalidar consultas para actualizar los datos
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/recent-sales"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/recent-activity"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/inventory-alerts"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/dashboard/recent-sales"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/dashboard/recent-activity"] });
+      reactQueryClient.invalidateQueries({ queryKey: ["/api/dashboard/inventory-alerts"] });
       
-      toast({
-        title: "Venta completada",
-        description: "La venta se ha procesado correctamente y el stock ha sido actualizado"
+      // Guardar la venta completada y mostrar el recibo
+      setCompletedSale({
+        ...data,
+        items: cart,
+        timestamp: new Date().toISOString(),
+        paymentMethod: lastSaleData?.paymentMethod,
+        paymentDetails: lastSaleData?.paymentDetails,
+        documentType: lastSaleData?.documentType,
+        notes: lastSaleData?.notes,
+        subtotal: lastSaleData?.subtotal,
+        discountPercent: lastSaleData?.discountPercent,
+        discountAmount: data.discount !== undefined ? parseFloat(data.discount) : (lastSaleData?.discountAmount !== undefined ? parseFloat(lastSaleData.discountAmount) : 0),
+        surchargePercent: lastSaleData?.surchargePercent,
+        surchargeAmount: lastSaleData?.surchargeAmount,
+        customer: customers?.find((c: any) => c.id === lastSaleData?.customerId)
       });
+      setShowReceiptDialog(true);
       
       // Limpiar estado
       setCart([]);
       setSelectedCustomerId(null);
       setCheckoutDialogOpen(false);
+      
+      toast({
+        title: "Venta completada",
+        description: "La venta se ha procesado correctamente y el stock ha sido actualizado"
+      });
     },
     onError: (error) => {
+      if ((error as Error).message === "SESSION_EXPIRED") {
+        toast({
+          title: "Sesión expirada",
+          description: "Por favor, inicie sesión nuevamente para continuar",
+          variant: "destructive",
+        });
+        // Redirigir a la página de login
+        window.location.href = "/login";
+        return;
+      }
+      
       toast({
         title: "Error al procesar la venta",
         description: (error as Error).message,
@@ -117,6 +189,11 @@ export default function POSPage() {
   
   // Handle adding product to cart
   const addToCart = (product: any) => {
+    // Determinar qué precio usar
+    const price = priceType === "wholesale" && product.wholesalePrice 
+      ? parseFloat(product.wholesalePrice) 
+      : parseFloat(product.price);
+    
     setCart(prevCart => {
       const existingItem = prevCart.find(item => 
         item.productId === product.id && item.isConversion === false
@@ -133,14 +210,15 @@ export default function POSPage() {
           id: Date.now(),
           productId: product.id,
           name: product.name,
-          price: parseFloat(product.price),
+          price: price,
           quantity: 1,
           unit: product.baseUnit,
-          total: parseFloat(product.price),
+          total: price,
           stockAvailable: parseFloat(product.stock),
           isBulk: product.isBulk,
           isRefrigerated: product.isRefrigerated,
           conversionRates: product.conversionRates,
+          imageUrl: product.imageUrl || null,
           isConversion: false,
           conversionFactor: 1  // Factor 1 para producto principal
         }];
@@ -154,10 +232,13 @@ export default function POSPage() {
       ? `${product.name} - ${conversion.description}` 
       : `${product.name} (${conversion.unit})`;
       
+    // Determinamos qué precio base usar (minorista o mayorista)
+    const basePrice = priceType === "wholesale" && product.wholesalePrice 
+      ? parseFloat(product.wholesalePrice) 
+      : parseFloat(product.price);
+      
     // Calculamos el precio basado en el factor de conversión
-    // Por ejemplo, si vende en unidades de 500g, y el factor es 0.5,
-    // entonces el precio es el 50% del precio total
-    const conversionPrice = parseFloat(product.price) * conversion.factor;
+    const conversionPrice = basePrice * conversion.factor;
     
     setCart(prevCart => {
       // Buscar si ya existe este producto con esta conversión específica
@@ -188,6 +269,7 @@ export default function POSPage() {
           isBulk: product.isBulk,
           isRefrigerated: product.isRefrigerated,
           conversionRates: product.conversionRates,
+          imageUrl: product.imageUrl || null,
           isConversion: true,
           conversionUnit: conversion.unit,
           conversionFactor: conversion.factor,
@@ -279,7 +361,10 @@ export default function POSPage() {
   };
   
   // Calculate cart totals
-  const cartTotal = cart.reduce((sum, item) => sum + item.total, 0);
+  const cartSubtotal = cart.reduce((sum, item) => sum + item.total, 0);
+  const discountAmount = (cartSubtotal * discountPercent) / 100;
+  const surchargeAmount = (cartSubtotal * surchargePercent) / 100;
+  const cartTotal = cartSubtotal - discountAmount + surchargeAmount;
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   
   // Process checkout
@@ -297,44 +382,51 @@ export default function POSPage() {
   };
   
   // Finalize sale
-  const finalizeSale = () => {
-    if (!user) return;
+  const finalizeSale = async () => {
+    if (isLoadingUser) {
+      toast({
+        title: "Verificando sesión",
+        description: "Por favor espere mientras verificamos su sesión",
+      });
+      return;
+    }
 
-    // Validación para pago mixto
-    if (paymentMethod === 'mixed') {
-      const totalPagos = mixedPayment.cash + mixedPayment.card + mixedPayment.transfer + mixedPayment.account;
-      if (Math.abs(totalPagos - cartTotal) > 0.01) { // Tolerancia para errores de punto flotante
-        toast({
-          title: "Error en el pago",
-          description: "El total de los pagos mixtos debe ser igual al total de la venta",
-          variant: "destructive"
-        });
-        return;
-      }
+    if (!user) {
+      toast({
+        title: "Error de autenticación",
+        description: "Debe estar autenticado para realizar una venta",
+        variant: "destructive"
+      });
+      window.location.href = '/login';
+      return;
     }
-    
-    // Preparamos datos adicionales según el tipo de pago
-    let paymentDetails = {};
-    
-    if (paymentMethod === 'card') {
-      paymentDetails = { cardType };
-    } else if (paymentMethod === 'mixed') {
-      paymentDetails = { 
-        mixedPayment: {
-          cash: mixedPayment.cash,
-          card: mixedPayment.card,
-          transfer: mixedPayment.transfer,
-          account: mixedPayment.account
-        }
-      };
+
+    if (!paymentMethod) {
+      toast({
+        title: "Error",
+        description: "Debe seleccionar un método de pago",
+        variant: "destructive",
+      });
+      return;
     }
-    
+
     const saleData = {
       userId: user.id,
       customerId: selectedCustomerId,
+      subtotal: cartSubtotal,
       total: cartTotal,
-      paymentMethod,
-      paymentDetails: JSON.stringify(paymentDetails),
+      discount: discountAmount,
+      surcharge: surchargeAmount,
+      discountPercent,
+      surchargePercent,
+      paymentMethods: [
+        {
+          method: paymentMethod,
+          amount: cartTotal,
+          accountId: paymentDetails?.bankAccountId || null
+        }
+      ],
+      paymentDetails,
       documentType,
       notes: observations,
       status: "completed",
@@ -348,54 +440,22 @@ export default function POSPage() {
         unit: item.unit,
         price: item.price,
         total: item.total,
-        // Incluir información de conversión si es una presentación específica
         isConversion: item.isConversion || false,
         conversionFactor: item.conversionFactor || 1,
         conversionUnit: item.conversionUnit || item.unit,
         conversionBarcode: item.conversionBarcode || null
       }))
     };
-    
-    // Verificamos si hay que generar factura
-    const requiresInvoice = documentType.startsWith('factura');
-    
-    if (requiresInvoice) {
-      toast({
-        title: "Generando factura electrónica",
-        description: "Procesando facturación con AFIP...",
-      });
+
+    setLastSaleData(saleData);
+    try {
+      await processSaleMutation.mutateAsync(saleData);
+    } catch (error) {
+      console.error("Error al finalizar la venta:", error);
     }
-    
-    processSaleMutation.mutate(saleData, {
-      onSuccess: (data) => {
-        // Invalidar la caché de productos para refrescar los stocks
-        queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-        
-        // Mostrar notificación de éxito
-        toast({
-          title: "Venta finalizada exitosamente",
-          description: "El stock ha sido actualizado automáticamente"
-        });
-        
-        // Guardar la venta completada y mostrar el recibo
-        setCompletedSale({
-          ...data,
-          items: cart,
-          timestamp: new Date().toISOString(),
-          paymentMethod,
-          paymentDetails,
-          documentType,
-          notes: observations,
-          customer: customers?.find((c: any) => c.id === selectedCustomerId)
-        });
-        setShowReceiptDialog(true);
-        
-        // Cerrar el diálogo de checkout y limpiar el carrito
-        setCheckoutDialogOpen(false);
-        setCart([]);
-      }
-    });
   };
+  
+  const reactQueryClient = useQueryClient();
   
   return (
     <div className="flex h-screen overflow-hidden">
@@ -431,6 +491,20 @@ export default function POSPage() {
                     />
                     <Search className="absolute right-3 text-muted-foreground" size={18} />
                   </div>
+                  
+                  {/* Tipo de precio */}
+                  <Select
+                    value={priceType}
+                    onValueChange={setPriceType}
+                  >
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue placeholder="Tipo de precio" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="retail">Minorista</SelectItem>
+                      <SelectItem value="wholesale">Mayorista</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </CardHeader>
               
@@ -439,54 +513,106 @@ export default function POSPage() {
                   <div className="flex items-center justify-center h-full">
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
-                ) : filteredProducts && filteredProducts.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-6">
-                    {filteredProducts.map((product: any) => (
-                      <Card 
-                        key={product.id} 
-                        className="cursor-pointer hover:shadow-md transition"
-                        onClick={() => addToCart(product)}
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex flex-col h-full">
-                            <div className="flex justify-between items-start mb-2">
-                              <h3 className="font-medium text-sm">{product.name}</h3>
-                              <div className="flex gap-1">
-                                {product.isRefrigerated && (
-                                  <Badge variant="secondary" className="text-xs">Refrigerado</Badge>
-                                )}
-                                {product.isBulk && (
-                                  <Badge variant="outline" className="text-xs">A granel</Badge>
-                                )}
-                              </div>
-                            </div>
-                            
-                            <div className="mt-auto flex justify-between items-center">
-                              <span className="text-lg font-semibold">
-                                ${parseFloat(product.price).toFixed(2)}
-                              </span>
-                              <div className="text-xs text-muted-foreground">
-                                Stock: {parseFloat(product.stock)} {product.baseUnit}
-                              </div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                    <ShoppingCart className="h-12 w-12 text-muted-foreground mb-4" />
-                    <h3 className="text-lg font-medium mb-2">
-                      {searchQuery ? "No se encontraron productos" : "Comience a buscar productos"}
-                    </h3>
-                    <p className="text-muted-foreground">
-                      {searchQuery 
-                        ? `No hay resultados para "${searchQuery}"`
-                        : "Use la barra de búsqueda o escanee un código de barras"
-                      }
-                    </p>
-                  </div>
+                  <>
+                    <div className="p-3 bg-muted/30 border-b flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Tag size={16} />
+                        <span className="text-sm font-medium">Lista de precios: </span>
+                        <Badge variant={priceType === "wholesale" ? "secondary" : "default"}>
+                          {priceType === "wholesale" ? "Mayorista (35%)" : "Minorista (55%)"}
+                        </Badge>
+                      </div>
+                      
+                      <span className="text-xs text-muted-foreground">
+                        {filteredProducts?.length || 0} productos
+                      </span>
+                    </div>
+                    
+                    {filteredProducts && filteredProducts.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-6">
+                        {filteredProducts.map((product: any) => (
+                          <Card key={product.id} className="cursor-pointer hover:bg-accent/50 transition-colors">
+                            <CardContent className="p-4">
+                              <div className="flex flex-col text-sm">
+                                <div className="mt-1 flex justify-between items-center">
+                                  <div className="flex flex-col">
+                                    {/* Precio que aplica según la selección actual */}
+                                    <div className="font-bold text-base">
+                                      {formatCurrency(
+                                        priceType === "wholesale" && product.wholesalePrice 
+                                          ? parseFloat(product.wholesalePrice) 
+                                          : parseFloat(product.price),
+                                        product.currency || "ARS"
+                                      )}
+                                    </div>
+                                    
+                                    {/* Mostrar el otro precio si existe */}
+                                    {product.wholesalePrice && (
+                                      <div className="text-xs text-muted-foreground">
+                                        {priceType === "wholesale" 
+                                          ? `Min: ${formatCurrency(parseFloat(product.price), product.currency || "ARS")}` 
+                                          : `May: ${formatCurrency(parseFloat(product.wholesalePrice), product.currency || "ARS")}`
+                                        }
+                                      </div>
+                                    )}
+                                  </div>
+                                  
+                                  <div className="text-xs">
+                                    <Badge variant={parseFloat(product.stock) > 0 ? "default" : "destructive"} className="text-xs">
+                                      {parseFloat(product.stock).toFixed(2)} {product.baseUnit}
+                                    </Badge>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Si tiene presentaciones alternativas */}
+                              {product.conversionRates && product.conversionRates.length > 0 && (
+                                <div className="mt-2 pt-2 border-t">
+                                  <div className="text-xs font-medium mb-1 text-muted-foreground">Presentaciones:</div>
+                                  <div className="space-y-1">
+                                    {product.conversionRates.map((conversion: any, index: number) => (
+                                      <div 
+                                        key={`${product.id}-${index}`}
+                                        className="text-xs py-1 px-2 rounded bg-secondary/20 hover:bg-secondary/40 cursor-pointer flex justify-between items-center"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          addConversionToCart(product, conversion);
+                                        }}
+                                      >
+                                        <span>{conversion.unit}</span>
+                                        <span className="font-medium">
+                                          {formatCurrency(
+                                            priceType === "wholesale" && product.wholesalePrice 
+                                              ? parseFloat(product.wholesalePrice) * conversion.factor
+                                              : parseFloat(product.price) * conversion.factor,
+                                            product.currency || "ARS"
+                                          )}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+                        <ShoppingCart className="h-12 w-12 text-muted-foreground mb-4" />
+                        <h3 className="text-lg font-medium mb-2">
+                          {searchQuery ? "No se encontraron productos" : "Comience a buscar productos"}
+                        </h3>
+                        <p className="text-muted-foreground">
+                          {searchQuery 
+                            ? `No hay resultados para "${searchQuery}"`
+                            : "Use la barra de búsqueda o escanee un código de barras"
+                          }
+                        </p>
+                      </div>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -520,20 +646,35 @@ export default function POSPage() {
                       {cart.map((item) => (
                         <TableRow key={item.id}>
                           <TableCell className="font-medium">
-                            <div>
-                              {item.name}
-                              <div className="flex gap-1 mt-1">
-                                {item.isRefrigerated && (
-                                  <Badge variant="secondary" className="text-xs">Refrigerado</Badge>
+                            <div className="flex items-center gap-2">
+                              <div className="h-10 w-10 rounded overflow-hidden bg-gray-100 flex-shrink-0">
+                                {item.imageUrl ? (
+                                  <img 
+                                    src={item.imageUrl} 
+                                    alt={item.name}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center bg-gray-100 text-gray-400">
+                                    <Package className="h-5 w-5" />
+                                  </div>
                                 )}
-                                {item.isBulk && (
-                                  <Badge variant="outline" className="text-xs">A granel</Badge>
-                                )}
-                                {item.isConversion && (
-                                  <Badge variant="outline" className="text-green-500 border-green-200 bg-green-100 text-xs">
-                                    Presentación: {item.unit}
-                                  </Badge>
-                                )}
+                              </div>
+                              <div>
+                                {item.name}
+                                <div className="flex gap-1 mt-1">
+                                  {item.isRefrigerated && (
+                                    <Badge variant="secondary" className="text-xs">Refrigerado</Badge>
+                                  )}
+                                  {item.isBulk && (
+                                    <Badge variant="outline" className="text-xs">A granel</Badge>
+                                  )}
+                                  {item.isConversion && (
+                                    <Badge variant="outline" className="text-green-500 border-green-200 bg-green-100 text-xs">
+                                      Presentación: {item.unit}
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </TableCell>
@@ -661,40 +802,111 @@ export default function POSPage() {
                 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Método de pago</label>
-                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <Select value={paymentMethod} onValueChange={(value) => {
+                    setPaymentMethod(value);
+                    if (value === 'cash') {
+                      setDiscountPercent(5);
+                    } else {
+                      setDiscountPercent(0);
+                    }
+                  }}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Seleccionar método de pago" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="cash">Efectivo</SelectItem>
-                      <SelectItem value="card">Tarjeta</SelectItem>
                       <SelectItem value="transfer">Transferencia</SelectItem>
-                      <SelectItem value="account">Cuenta Corriente</SelectItem>
+                      <SelectItem value="qr">QR</SelectItem>
+                      <SelectItem value="credit_card">Tarjeta de Crédito</SelectItem>
+                      <SelectItem value="debit_card">Tarjeta de Débito</SelectItem>
+                      <SelectItem value="check">Cheque</SelectItem>
+                      <SelectItem value="current_account">Cuenta Corriente</SelectItem>
                       <SelectItem value="mixed">Pago mixto</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 
-                {/* Opciones adicionales según el método de pago */}
-                {paymentMethod === 'card' && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Tipo de tarjeta</label>
-                    <Select value={cardType} onValueChange={setCardType}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="credit">Crédito</SelectItem>
-                        <SelectItem value="debit">Débito</SelectItem>
-                      </SelectContent>
-                    </Select>
+                {/* Payment details based on selected method */}
+                {paymentMethod === 'credit_card' && (
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">Pago con tarjeta de crédito</p>
+                  </div>
+                )}
+                
+                {paymentMethod === 'debit_card' && (
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">Pago con tarjeta de débito</p>
+                  </div>
+                )}
+                
+                {paymentMethod === 'transfer' && (
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-sm">Cuenta bancaria</label>
+                      <Select
+                        value={paymentDetails.bankAccountId?.toString() || ''}
+                        onValueChange={(value) => setPaymentDetails({
+                          ...paymentDetails,
+                          bankAccountId: parseInt(value)
+                        })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar cuenta" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {bankAccounts.map((account: any) => (
+                            <SelectItem key={account.id} value={account.id.toString()}>
+                              {account.alias} - {account.bankName} ({account.accountNumber})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+                
+                {paymentMethod === 'check' && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-sm">Banco</label>
+                        <Input 
+                          type="text"
+                          value={paymentDetails.bankName || ''}
+                          onChange={(e) => setPaymentDetails({...paymentDetails, bankName: e.target.value})}
+                          placeholder="Nombre del banco"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-sm">Número de cheque</label>
+                        <Input 
+                          type="text"
+                          value={paymentDetails.checkNumber || ''}
+                          onChange={(e) => setPaymentDetails({...paymentDetails, checkNumber: e.target.value})}
+                          placeholder="Número de cheque"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {paymentMethod === 'qr' && (
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-sm">Código QR</label>
+                      <Input 
+                        type="text"
+                        value={paymentDetails.qrCode || ''}
+                        onChange={(e) => setPaymentDetails({...paymentDetails, qrCode: e.target.value})}
+                        placeholder="Código QR"
+                      />
+                    </div>
                   </div>
                 )}
                 
                 {paymentMethod === 'mixed' && (
                   <div className="space-y-3 border rounded-md p-3">
                     <h4 className="text-sm font-medium">Detalles del pago mixto</h4>
-                    
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
                         <label className="text-xs">Efectivo</label>
@@ -709,21 +921,6 @@ export default function POSPage() {
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs">Tarjeta</label>
-                        <Input 
-                          type="number" 
-                          min="0" 
-                          value={mixedPayment.card.toString()} 
-                          onChange={(e) => setMixedPayment({
-                            ...mixedPayment,
-                            card: parseFloat(e.target.value) || 0
-                          })}
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
                         <label className="text-xs">Transferencia</label>
                         <Input 
                           type="number" 
@@ -736,14 +933,62 @@ export default function POSPage() {
                         />
                       </div>
                       <div className="space-y-1">
+                        <label className="text-xs">QR</label>
+                        <Input 
+                          type="number" 
+                          min="0" 
+                          value={mixedPayment.qr.toString()} 
+                          onChange={(e) => setMixedPayment({
+                            ...mixedPayment,
+                            qr: parseFloat(e.target.value) || 0
+                          })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs">Tarjeta Crédito</label>
+                        <Input 
+                          type="number" 
+                          min="0" 
+                          value={mixedPayment.credit_card.toString()} 
+                          onChange={(e) => setMixedPayment({
+                            ...mixedPayment,
+                            credit_card: parseFloat(e.target.value) || 0
+                          })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs">Tarjeta Débito</label>
+                        <Input 
+                          type="number" 
+                          min="0" 
+                          value={mixedPayment.debit_card.toString()} 
+                          onChange={(e) => setMixedPayment({
+                            ...mixedPayment,
+                            debit_card: parseFloat(e.target.value) || 0
+                          })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs">Cheque</label>
+                        <Input 
+                          type="number" 
+                          min="0" 
+                          value={mixedPayment.check.toString()} 
+                          onChange={(e) => setMixedPayment({
+                            ...mixedPayment,
+                            check: parseFloat(e.target.value) || 0
+                          })}
+                        />
+                      </div>
+                      <div className="space-y-1">
                         <label className="text-xs">Cuenta Corriente</label>
                         <Input 
                           type="number" 
                           min="0" 
-                          value={mixedPayment.account.toString()} 
+                          value={mixedPayment.current_account.toString()} 
                           onChange={(e) => setMixedPayment({
                             ...mixedPayment,
-                            account: parseFloat(e.target.value) || 0
+                            current_account: parseFloat(e.target.value) || 0
                           })}
                         />
                       </div>
@@ -752,11 +997,11 @@ export default function POSPage() {
                     <div className="mt-2 text-right text-sm">
                       <span className="text-muted-foreground">Total de pagos: </span>
                       <span className={`font-medium ${
-                        mixedPayment.cash + mixedPayment.card + mixedPayment.transfer + mixedPayment.account === cartTotal
+                        Object.values(mixedPayment).reduce((a, b) => a + b, 0) === cartTotal
                           ? 'text-green-600'
                           : 'text-orange-600'
                       }`}>
-                        ${(mixedPayment.cash + mixedPayment.card + mixedPayment.transfer + mixedPayment.account).toFixed(2)}
+                        ${Object.values(mixedPayment).reduce((a, b) => a + b, 0).toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -770,6 +1015,36 @@ export default function POSPage() {
                     onChange={(e) => setObservations(e.target.value)}
                   />
                 </div>
+                
+                <div className="space-y-4 mt-4">
+                  <h4 className="text-sm font-medium">Ajustes al precio</h4>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Descuento (%)</label>
+                      <Input 
+                        type="number" 
+                        min="0" 
+                        max="100" 
+                        step="0.1"
+                        value={discountPercent}
+                        onChange={(e) => setDiscountPercent(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Recargo (%)</label>
+                      <Input 
+                        type="number" 
+                        min="0" 
+                        max="100" 
+                        step="0.1"
+                        value={surchargePercent}
+                        onChange={(e) => setSurchargePercent(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="border-t pt-4">
@@ -777,6 +1052,26 @@ export default function POSPage() {
                   <span>Total a pagar</span>
                   <span>${cartTotal.toFixed(2)}</span>
                 </div>
+                {(discountPercent > 0 || surchargePercent > 0) && (
+                  <div className="mt-2 text-sm text-muted-foreground">
+                    <div className="flex justify-between">
+                      <span>Subtotal:</span>
+                      <span>${cartSubtotal.toFixed(2)}</span>
+                    </div>
+                    {discountPercent > 0 && (
+                      <div className="flex justify-between">
+                        <span>Descuento ({discountPercent}%):</span>
+                        <span>-${discountAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {surchargePercent > 0 && (
+                      <div className="flex justify-between">
+                        <span>Recargo ({surchargePercent}%):</span>
+                        <span>+${surchargeAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             
@@ -791,15 +1086,30 @@ export default function POSPage() {
                   {cart.map((item) => (
                     <div key={item.id} className="py-2 border-b last:border-0">
                       <div className="flex justify-between">
-                        <div>
-                          <div className="font-medium">{item.name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {item.quantity} x ${item.price.toFixed(2)} ({item.unit})
-                            {item.isConversion && (
-                              <span className="ml-1 text-xs text-green-600">
-                                Factor: {item.conversionFactor}
-                              </span>
+                        <div className="flex items-center gap-2">
+                          <div className="h-8 w-8 rounded overflow-hidden bg-gray-100 flex-shrink-0">
+                            {item.imageUrl ? (
+                              <img 
+                                src={item.imageUrl} 
+                                alt={item.name}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center bg-gray-100 text-gray-400">
+                                <Package className="h-4 w-4" />
+                              </div>
                             )}
+                          </div>
+                          <div>
+                            <div className="font-medium">{item.name}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {item.quantity} x ${item.price.toFixed(2)} ({item.unit})
+                              {item.isConversion && (
+                                <span className="ml-1 text-xs text-green-600">
+                                  Factor: {item.conversionFactor}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                         <div className="font-medium">${item.total.toFixed(2)}</div>
@@ -811,11 +1121,13 @@ export default function POSPage() {
                 <div className="border-t px-4 py-3">
                   <div className="flex justify-between">
                     <span className="font-medium">Subtotal</span>
-                    <span>${cartTotal.toFixed(2)}</span>
+                    <span>${cartSubtotal.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
-                    <span>IVA (incluido)</span>
-                    <span>${(cartTotal * 0.21 / 1.21).toFixed(2)}</span>
+                    <span>Descuento: ${discountAmount.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Recargo: ${surchargeAmount.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between font-semibold mt-2 text-lg">
                     <span>Total</span>
@@ -949,6 +1261,17 @@ export default function POSPage() {
                       <div className="border-t border-dashed my-4"></div>
                       <div className="font-mono text-sm text-right">
                         <p className="font-bold">TOTAL: ${parseFloat(completedSale.total).toFixed(2)}</p>
+                        {(completedSale.discountPercent > 0 || completedSale.surchargePercent > 0) && (
+                          <>
+                            <p className="text-xs mt-2">Subtotal: ${parseFloat(completedSale.subtotal).toFixed(2)}</p>
+                            {completedSale.discountPercent > 0 && (
+                              <p className="text-xs">Descuento ({completedSale.discountPercent}%): -${parseFloat((completedSale.discountAmount ?? 0).toString()).toFixed(2)}</p>
+                            )}
+                            {completedSale.surchargePercent > 0 && (
+                              <p className="text-xs">Recargo ({completedSale.surchargePercent}%): +${parseFloat(completedSale.surchargeAmount).toFixed(2)}</p>
+                            )}
+                          </>
+                        )}
                       </div>
                       <div className="font-mono text-xs text-center mt-4">
                         <p>Gracias por su compra!</p>
@@ -967,33 +1290,31 @@ export default function POSPage() {
                   Cerrar
                 </Button>
                 
-                {completedSale.documentType.startsWith('factura') ? (
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      // Generar un PDF con la factura
-                      PDFService.generateInvoicePDF(
-                        completedSale,
-                        completedSale.items,
-                        completedSale.customer
-                      );
-                    }}
-                  >
-                    Exportar a PDF
-                  </Button>
-                ) : (
-                  <ThermalTicket
-                    sale={completedSale}
-                    items={completedSale.items}
-                    customer={completedSale.customer}
-                    businessInfo={{
-                      name: 'PUNTO PASTELERO',
-                      address: 'Avenida Siempre Viva 123, Springfield',
-                      phone: '(555) 123-4567',
-                      taxId: '30-12345678-9'
-                    }}
-                  />
-                )}
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    // Generar un PDF con el comprobante (factura o remito)
+                    PDFService.generateInvoicePDF(
+                      completedSale,
+                      completedSale.items,
+                      completedSale.customer
+                    );
+                  }}
+                >
+                  Exportar a PDF
+                </Button>
+                
+                <ThermalTicket
+                  sale={completedSale}
+                  items={completedSale.items}
+                  customer={completedSale.customer}
+                  businessInfo={{
+                    name: 'PUNTO PASTELERO',
+                    address: 'Avenida Siempre Viva 123, Springfield',
+                    phone: '(555) 123-4567',
+                    taxId: '30-12345678-9'
+                  }}
+                />
                 
                 {completedSale.documentType.startsWith('factura') && (
                   <Button
@@ -1016,3 +1337,6 @@ export default function POSPage() {
     </div>
   );
 }
+
+export { POSPage };
+export default POSPage;
