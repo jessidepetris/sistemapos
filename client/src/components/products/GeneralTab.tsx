@@ -382,6 +382,27 @@ export function GeneralTab({ form, suppliers, onTabChange }: GeneralTabProps) {
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="isDiscontinued"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 bg-orange-50">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel>Producto Discontinuado</FormLabel>
+                      <FormDescription>
+                        Marcar como discontinuado (últimas unidades)
+                      </FormDescription>
+                    </div>
+                  </FormItem>
+                )}
+              />
             </div>
           </div>
           
@@ -389,13 +410,36 @@ export function GeneralTab({ form, suppliers, onTabChange }: GeneralTabProps) {
             control={form.control}
             name="imageUrl"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="col-span-2">
                 <FormLabel>URL de Imagen</FormLabel>
                 <FormControl>
-                  <Input {...field} />
+                  <Input 
+                    placeholder="https://ejemplo.com/imagen.jpg" 
+                    {...field} 
+                  />
                 </FormControl>
                 <FormDescription>
-                  Dirección web de la imagen del producto
+                  URL de la imagen del producto (opcional)
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="location"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Ubicación</FormLabel>
+                <FormControl>
+                  <Input 
+                    placeholder="Ej: Estante A, Fila 2" 
+                    {...field} 
+                  />
+                </FormControl>
+                <FormDescription>
+                  Ubicación del producto en el almacén
                 </FormDescription>
                 <FormMessage />
               </FormItem>

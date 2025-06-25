@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ChevronDown, ChevronRight, Edit, Plus, Trash2 } from "lucide-react";
+import { DashboardLayout } from "@/layouts/dashboard-layout";
 
 interface Category {
   id: number;
@@ -245,200 +246,205 @@ export default function CategoriesPage() {
   const categoryTree = buildCategoryTree(categories || []);
 
   return (
-    <div className="container py-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Gestión de Categorías</h1>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Nueva Categoría
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Nueva Categoría</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Nombre
-                </label>
-                <Input
-                  value={newCategory.name}
-                  onChange={(e) =>
-                    setNewCategory({ ...newCategory, name: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Slug (URL amigable)
-                </label>
-                <Input
-                  value={newCategory.slug}
-                  onChange={(e) =>
-                    setNewCategory({ ...newCategory, slug: e.target.value })
-                  }
-                  placeholder="Se generará automáticamente"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Descripción
-                </label>
-                <Textarea
-                  value={newCategory.description || ""}
-                  onChange={(e) =>
-                    setNewCategory({ ...newCategory, description: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Orden de visualización
-                </label>
-                <Input
-                  type="number"
-                  value={newCategory.displayOrder}
-                  onChange={(e) =>
-                    setNewCategory({
-                      ...newCategory,
-                      displayOrder: parseInt(e.target.value) || 0,
-                    })
-                  }
-                />
-              </div>
-
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="active"
-                  checked={newCategory.active}
-                  onChange={(e) => setNewCategory({ ...newCategory, active: e.target.checked })}
-                  className="mr-2"
-                />
-                <label htmlFor="active">Activa</label>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Categoría Padre</label>
-                <select
-                  className="w-full p-2 border rounded"
-                  value={newCategory.parentId || ""}
-                  onChange={(e) => setNewCategory({ ...newCategory, parentId: e.target.value ? Number(e.target.value) : null })}
-                >
-                  <option value="">Ninguna (Categoría Principal)</option>
-                  {categories?.map((cat: Category) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <Button
-                onClick={() => createCategoryMutation.mutate(newCategory)}
-                className="w-full"
-              >
-                Crear Categoría
+    <DashboardLayout
+      title="Gestión de Categorías"
+      description="Organiza tus productos en categorías"
+    >
+      <div className="container py-6">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold">Gestión de Categorías</h1>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Nueva Categoría
               </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Nueva Categoría</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Nombre
+                  </label>
+                  <Input
+                    value={newCategory.name}
+                    onChange={(e) =>
+                      setNewCategory({ ...newCategory, name: e.target.value })
+                    }
+                  />
+                </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Lista de Categorías</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nombre</TableHead>
-                <TableHead>Descripción</TableHead>
-                <TableHead>Orden</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {categoryTree.map(category => renderCategoryRow(category))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Slug (URL amigable)
+                  </label>
+                  <Input
+                    value={newCategory.slug}
+                    onChange={(e) =>
+                      setNewCategory({ ...newCategory, slug: e.target.value })
+                    }
+                    placeholder="Se generará automáticamente"
+                  />
+                </div>
 
-      {editingCategory && (
-        <Dialog open={!!editingCategory} onOpenChange={() => setEditingCategory(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Editar Categoría</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Nombre</label>
-                <Input
-                  value={editingCategory.name}
-                  onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Descripción</label>
-                <Textarea
-                  value={editingCategory.description || ""}
-                  onChange={(e) => setEditingCategory({ ...editingCategory, description: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Categoría Padre</label>
-                <select
-                  className="w-full p-2 border rounded"
-                  value={editingCategory.parentId || ""}
-                  onChange={(e) => setEditingCategory({ ...editingCategory, parentId: e.target.value ? Number(e.target.value) : null })}
-                >
-                  <option value="">Ninguna (Categoría Principal)</option>
-                  {categories
-                    ?.filter((cat: Category) => cat.id !== editingCategory.id)
-                    .map((cat: Category) => (
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Descripción
+                  </label>
+                  <Textarea
+                    value={newCategory.description || ""}
+                    onChange={(e) =>
+                      setNewCategory({ ...newCategory, description: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Orden de visualización
+                  </label>
+                  <Input
+                    type="number"
+                    value={newCategory.displayOrder}
+                    onChange={(e) =>
+                      setNewCategory({
+                        ...newCategory,
+                        displayOrder: parseInt(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="active"
+                    checked={newCategory.active}
+                    onChange={(e) => setNewCategory({ ...newCategory, active: e.target.checked })}
+                    className="mr-2"
+                  />
+                  <label htmlFor="active">Activa</label>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Categoría Padre</label>
+                  <select
+                    className="w-full p-2 border rounded"
+                    value={newCategory.parentId || ""}
+                    onChange={(e) => setNewCategory({ ...newCategory, parentId: e.target.value ? Number(e.target.value) : null })}
+                  >
+                    <option value="">Ninguna (Categoría Principal)</option>
+                    {categories?.map((cat: Category) => (
                       <option key={cat.id} value={cat.id}>
                         {cat.name}
                       </option>
                     ))}
-                </select>
+                  </select>
+                </div>
+
+                <Button
+                  onClick={() => createCategoryMutation.mutate(newCategory)}
+                  className="w-full"
+                >
+                  Crear Categoría
+                </Button>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Orden de Visualización</label>
-                <Input
-                  type="number"
-                  value={editingCategory.displayOrder}
-                  onChange={(e) => setEditingCategory({ ...editingCategory, displayOrder: Number(e.target.value) })}
-                />
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Lista de Categorías</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nombre</TableHead>
+                  <TableHead>Descripción</TableHead>
+                  <TableHead>Orden</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {categoryTree.map(category => renderCategoryRow(category))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        {editingCategory && (
+          <Dialog open={!!editingCategory} onOpenChange={() => setEditingCategory(null)}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Editar Categoría</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Nombre</label>
+                  <Input
+                    value={editingCategory.name}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Descripción</label>
+                  <Textarea
+                    value={editingCategory.description || ""}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, description: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Categoría Padre</label>
+                  <select
+                    className="w-full p-2 border rounded"
+                    value={editingCategory.parentId || ""}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, parentId: e.target.value ? Number(e.target.value) : null })}
+                  >
+                    <option value="">Ninguna (Categoría Principal)</option>
+                    {categories
+                      ?.filter((cat: Category) => cat.id !== editingCategory.id)
+                      .map((cat: Category) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Orden de Visualización</label>
+                  <Input
+                    type="number"
+                    value={editingCategory.displayOrder}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, displayOrder: Number(e.target.value) })}
+                  />
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="active"
+                    checked={editingCategory.active}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, active: e.target.checked })}
+                    className="mr-2"
+                  />
+                  <label htmlFor="active">Activa</label>
+                </div>
+                <Button
+                  onClick={() => updateCategoryMutation.mutate({ id: editingCategory.id, category: editingCategory })}
+                  className="w-full"
+                >
+                  Actualizar Categoría
+                </Button>
               </div>
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="active"
-                  checked={editingCategory.active}
-                  onChange={(e) => setEditingCategory({ ...editingCategory, active: e.target.checked })}
-                  className="mr-2"
-                />
-                <label htmlFor="active">Activa</label>
-              </div>
-              <Button
-                onClick={() => updateCategoryMutation.mutate({ id: editingCategory.id, category: editingCategory })}
-                className="w-full"
-              >
-                Actualizar Categoría
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
-    </div>
+            </DialogContent>
+          </Dialog>
+        )}
+      </div>
+    </DashboardLayout>
   );
 }

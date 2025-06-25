@@ -42,6 +42,8 @@ interface Product {
   isRefrigerated: boolean;
   baseUnit: string;
   conversionRates: Record<string, { factor: string; price: string }> | null;
+  isDiscontinued: boolean;
+  stock: number;
 }
 
 export default function WebProductsPage() {
@@ -81,7 +83,7 @@ export default function WebProductsPage() {
 
   // Lista única de categorías de productos (para usar si falla la API de categorías)
   const productCategories = products 
-    ? [...new Set(products.map(p => p.category).filter(Boolean))]
+    ? Array.from(new Set(products.map(p => p.category).filter(Boolean)))
     : [];
 
   // Filtrar productos
@@ -159,7 +161,7 @@ export default function WebProductsPage() {
       if (currentPage > 3) {
         items.push(
           <PaginationItem key="ellipsis1">
-            <PaginationLink disabled>...</PaginationLink>
+            <PaginationLink isActive={false}>...</PaginationLink>
           </PaginationItem>
         );
       }
@@ -185,7 +187,7 @@ export default function WebProductsPage() {
       if (currentPage < totalPages - 2) {
         items.push(
           <PaginationItem key="ellipsis2">
-            <PaginationLink disabled>...</PaginationLink>
+            <PaginationLink isActive={false}>...</PaginationLink>
           </PaginationItem>
         );
       }
@@ -305,17 +307,27 @@ export default function WebProductsPage() {
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <CardTitle className="line-clamp-1">{product.name}</CardTitle>
-                      {!product.inStock && (
-                        <Badge variant="outline" className="ml-2 text-red-500 border-red-200">
-                          Agotado
-                        </Badge>
-                      )}
-                      {product.isRefrigerated && (
-                        <Badge variant="outline" className="ml-2 text-blue-500 border-blue-200">
-                          <Refrigerator className="h-3 w-3 mr-1" />
-                          Refrigerado
-                        </Badge>
-                      )}
+                      <div className="flex items-center gap-2 mb-2">
+                        {!product.inStock && (
+                          <Badge variant="outline" className="text-red-500 border-red-200">
+                            Agotado
+                          </Badge>
+                        )}
+                        {product.isDiscontinued && product.inStock && (
+                          <Badge variant="outline" className="text-orange-500 border-orange-200">
+                            Últimas unidades
+                          </Badge>
+                        )}
+                        {product.isRefrigerated && (
+                          <Badge variant="outline" className="text-blue-500 border-blue-200">
+                            <Refrigerator className="h-3 w-3 mr-1" />
+                            Refrigerado
+                          </Badge>
+                        )}
+                        {product.category && (
+                          <Badge variant="secondary">{product.category}</Badge>
+                        )}
+                      </div>
                     </div>
                     <div className="line-clamp-2 text-sm text-gray-500 mt-2">
                       {product.description || "Sin descripción"}

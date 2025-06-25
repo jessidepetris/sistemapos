@@ -69,6 +69,7 @@ const productFormSchema = insertProductSchema.extend({
   categoryIds: z.array(z.number()).optional(),
   imageUrl: z.string().optional(),
   supplierCode: z.string().optional(),
+  location: z.string().optional(),
   
   // Campos para cálculo automático del precio
   iva: z.enum(["0", "10.5", "21"]).transform(val => parseFloat(val)).default("21"),
@@ -95,6 +96,9 @@ const productFormSchema = insertProductSchema.extend({
   componentProductId: z.number().optional(),
   componentQuantity: z.coerce.number().optional(),
   componentUnit: z.string().optional(),
+
+  // Campo para marcar productos discontinuados
+  isDiscontinued: z.boolean().default(false),
 });
 
 type ProductFormValues = z.infer<typeof productFormSchema>;
@@ -188,6 +192,8 @@ export default function ProductsPage() {
   const recalculatePrice = () => {
     let cost = form.getValues("cost") || 0;
     const isComposite = form.getValues("isComposite");
+    const costCurrency = form.getValues("costCurrency") || "ARS";
+    const currency = form.getValues("currency") || "ARS";
     
     // Si es un producto compuesto, calculamos su costo basado en componentes
     if (isComposite && componentsList.length > 0) {
@@ -205,6 +211,14 @@ export default function ProductsPage() {
       cost = cost * (1 - (supplierDiscount / 100));
       // Redondeo a 2 decimales del costo con descuento
       cost = Math.round(cost * 100) / 100;
+    }
+    
+    // Convertir el costo a la moneda de venta si es necesario
+    if (costCurrency !== currency) {
+      // TODO: Implementar la conversión de moneda usando una API de tipo de cambio
+      // Por ahora asumimos una tasa fija de 1000 ARS = 1 USD
+      const exchangeRate = costCurrency === "USD" ? 1000 : 1/1000;
+      cost = cost * exchangeRate;
     }
     
     const ivaValue = form.getValues("iva") || "21";
@@ -228,6 +242,8 @@ export default function ProductsPage() {
   const recalculateWholesalePrice = () => {
     let cost = form.getValues("cost") || 0;
     const isComposite = form.getValues("isComposite");
+    const costCurrency = form.getValues("costCurrency") || "ARS";
+    const currency = form.getValues("currency") || "ARS";
     
     // Si es un producto compuesto, calculamos su costo basado en componentes
     if (isComposite && componentsList.length > 0) {
@@ -244,6 +260,14 @@ export default function ProductsPage() {
       cost = cost * (1 - (supplierDiscount / 100));
       // Redondeo a 2 decimales del costo con descuento
       cost = Math.round(cost * 100) / 100;
+    }
+    
+    // Convertir el costo a la moneda de venta si es necesario
+    if (costCurrency !== currency) {
+      // TODO: Implementar la conversión de moneda usando una API de tipo de cambio
+      // Por ahora asumimos una tasa fija de 1000 ARS = 1 USD
+      const exchangeRate = costCurrency === "USD" ? 1000 : 1/1000;
+      cost = cost * exchangeRate;
     }
     
     const ivaValue = form.getValues("iva") || "21";
@@ -289,6 +313,7 @@ export default function ProductsPage() {
       categoryIds: [],
       imageUrl: "",
       supplierCode: "",
+      location: "",    // Ubicación vacía por defecto
       conversionRates: [] as any[], // Array para conversiones mejoradas con códigos de barras
       conversionUnit: "",
       conversionFactor: 0,
@@ -296,6 +321,7 @@ export default function ProductsPage() {
       componentProductId: undefined,
       componentQuantity: 0,
       componentUnit: "unidad",
+      isDiscontinued: false,
     },
   });
   
@@ -485,6 +511,7 @@ export default function ProductsPage() {
       isComposite: product.isComposite || false,
       active: product.active !== undefined ? product.active : true,
       webVisible: product.webVisible || false,
+      isDiscontinued: product.isDiscontinued || false,
       conversionRates: productConversions,
       conversionUnit: "",
       conversionFactor: 0,
@@ -522,16 +549,17 @@ export default function ProductsPage() {
       shipping: 0,     // 0% por defecto
       profit: 55,      // 55% por defecto
       wholesaleProfit: 35, // 35% por defecto para mayoristas
-      supplierDiscount: 0, // 0% por defecto
       isRefrigerated: false,
       isBulk: false,
       isComposite: false,
-      active: true,
-      webVisible: false,
+      active: true,    // Activo por defecto
+      webVisible: false, // No visible en web por defecto
+      isDiscontinued: false, // No discontinuado por defecto
       category: "",
       categoryIds: [],
       imageUrl: "",
       supplierCode: "",
+      location: "",    // Ubicación vacía por defecto
       conversionRates: [] as any[], // Array para conversiones mejoradas con códigos de barras
       conversionUnit: "",
       conversionFactor: 0,
@@ -590,6 +618,7 @@ export default function ProductsPage() {
                   <TableHead>Precio Minorista</TableHead>
                   <TableHead>Precio Mayorista</TableHead>
                   <TableHead>Stock</TableHead>
+                  <TableHead>Ubicación</TableHead>
                   <TableHead>Proveedor</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Características</TableHead>
@@ -600,48 +629,22 @@ export default function ProductsPage() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8">
+                    <TableCell colSpan={11} className="text-center">
                       Cargando productos...
                     </TableCell>
                   </TableRow>
-                ) : filteredProducts?.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8">
-                      No hay productos para mostrar
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredProducts?.map((product: any) => (
+                ) : filteredProducts && filteredProducts.length > 0 ? (
+                  filteredProducts.map((product: any) => (
                     <TableRow key={product.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex flex-col">
-                          <span>{product.name}</span>
-                          {product.isComposite && product.components && (
-                            <div className="text-xs text-muted-foreground mt-1">
-                              <span className="font-semibold">Componentes:</span>{" "}
-                              {typeof product.components === 'string' 
-                                ? JSON.parse(product.components).map((c: any) => c.productName).join(", ")
-                                : product.components.map((c: any) => c.productName).join(", ")
-                              }
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>{categoryMap.get(product.category) || "-"}</TableCell>
+                      <TableCell className="font-medium">{product.name}</TableCell>
+                      <TableCell>{product.category || '-'}</TableCell>
                       <TableCell>${parseFloat(product.price).toFixed(2)}</TableCell>
+                      <TableCell>${product.wholesalePrice ? parseFloat(product.wholesalePrice).toFixed(2) : '-'}</TableCell>
+                      <TableCell>{parseFloat(product.stock)}</TableCell>
+                      <TableCell>{product.location || '-'}</TableCell>
                       <TableCell>
-                        {product.wholesalePrice 
-                          ? `$${parseFloat(product.wholesalePrice).toFixed(2)}` 
-                          : "-"}
+                        {product.supplier ? product.supplier.name : '-'}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center">
-                          <span className={`${parseFloat(product.stock) <= (parseFloat(product.stockAlert) || 0) ? "text-destructive font-semibold" : ""}`}>
-                            {parseFloat(product.stock).toFixed(2)} {product.baseUnit}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{product.supplierCode || "-"}</TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
                           {product.active ? (
@@ -656,6 +659,11 @@ export default function ProductsPage() {
                           {product.webVisible && (
                             <Badge variant="secondary" className="text-blue-600 border-blue-200 bg-blue-100">
                               Web
+                            </Badge>
+                          )}
+                          {product.isDiscontinued && (
+                            <Badge variant="secondary" className="text-orange-600 border-orange-200 bg-orange-100">
+                              Discontinuado
                             </Badge>
                           )}
                         </div>
@@ -703,6 +711,12 @@ export default function ProductsPage() {
                       </TableCell>
                     </TableRow>
                   ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={11} className="text-center py-8">
+                      No hay productos para mostrar
+                    </TableCell>
+                  </TableRow>
                 )}
               </TableBody>
             </Table>

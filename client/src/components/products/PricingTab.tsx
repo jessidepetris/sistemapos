@@ -25,6 +25,7 @@ type PricingTabProps = {
 
 export function PricingTab({ form, recalculatePrice, recalculateWholesalePrice }: PricingTabProps) {
   const currency = form.watch("currency") || "ARS";
+  const costCurrency = form.watch("costCurrency") || "ARS";
 
   return (
     <div className="space-y-6">
@@ -39,10 +40,39 @@ export function PricingTab({ form, recalculatePrice, recalculateWholesalePrice }
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <FormField
               control={form.control}
+              name="costCurrency"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Moneda del Costo</FormLabel>
+                  <Select
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      recalculatePrice();
+                      recalculateWholesalePrice();
+                    }}
+                    defaultValue={field.value || "ARS"}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccione la moneda" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="ARS">Pesos Argentinos (ARS)</SelectItem>
+                      <SelectItem value="USD">Dólares (USD)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
               name="currency"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Moneda</FormLabel>
+                  <FormLabel>Moneda de Venta</FormLabel>
                   <Select
                     onValueChange={(value) => {
                       field.onChange(value);
@@ -71,7 +101,7 @@ export function PricingTab({ form, recalculatePrice, recalculateWholesalePrice }
               name="cost"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Costo ({currency})</FormLabel>
+                  <FormLabel>Costo ({costCurrency})</FormLabel>
                   <FormControl>
                     <Input 
                       type="number" 

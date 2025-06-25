@@ -38,6 +38,8 @@ interface Product {
   isRefrigerated: boolean;
   baseUnit: string;
   conversionRates: Record<string, { factor: string; price: string }> | null;
+  isDiscontinued: boolean;
+  stock: number;
 }
 
 export default function ProductDetailsPage() {
@@ -199,6 +201,11 @@ export default function ProductDetailsPage() {
                 {!product.inStock && (
                   <Badge variant="outline" className="text-red-500 border-red-200">
                     Agotado
+                  </Badge>
+                )}
+                {product.isDiscontinued && product.inStock && (
+                  <Badge variant="outline" className="text-orange-500 border-orange-200">
+                    Últimas unidades
                   </Badge>
                 )}
                 {product.isRefrigerated && (

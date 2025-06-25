@@ -83,6 +83,7 @@ export const products = pgTable("products", {
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
   wholesalePrice: numeric("wholesale_price", { precision: 10, scale: 2 }),
   cost: numeric("cost", { precision: 10, scale: 2 }),
+  costCurrency: text("cost_currency").notNull().default("ARS"), // Moneda del costo
   stock: numeric("stock", { precision: 10, scale: 2 }).notNull().default("0"),
   reservedStock: numeric("reserved_stock", { precision: 10, scale: 2 }).notNull().default("0"),
   stockAlert: numeric("stock_alert", { precision: 10, scale: 2 }),
@@ -97,11 +98,15 @@ export const products = pgTable("products", {
   active: boolean("active").default(true),
   // Indicar si el producto es visible en el catálogo web
   webVisible: boolean("web_visible").default(false),
+  // Indicar si el producto está discontinuado
+  isDiscontinued: boolean("is_discontinued").default(false),
   conversionRates: json("conversion_rates"),
   // Categoría del producto
   category: text("category"),
   // Ruta de la imagen del producto
   imageUrl: text("image_url"),
+  // Ubicación del producto en el almacén
+  location: text("location"),
   // Valores relacionados con el cálculo de precios
   iva: numeric("iva", { precision: 5, scale: 2 }).default("21"),
   shipping: numeric("shipping", { precision: 5, scale: 2 }).default("0"),
@@ -111,7 +116,7 @@ export const products = pgTable("products", {
   components: json("components"),
   // Fecha de última actualización del producto
   lastUpdated: timestamp("last_updated").defaultNow(),
-  currency: text("currency").notNull().default("ARS"), // ARS o USD
+  currency: text("currency").default("ARS"), // Moneda del precio de venta (opcional)
 });
 
 export const insertProductSchema = createInsertSchema(products).pick({
@@ -122,6 +127,7 @@ export const insertProductSchema = createInsertSchema(products).pick({
   price: true,
   wholesalePrice: true,
   cost: true,
+  costCurrency: true,
   stock: true,
   stockAlert: true,
   supplierId: true,
@@ -131,9 +137,11 @@ export const insertProductSchema = createInsertSchema(products).pick({
   isComposite: true,
   active: true,
   webVisible: true,
+  isDiscontinued: true,
   conversionRates: true,
   category: true,
   imageUrl: true,
+  location: true,
   iva: true,
   shipping: true,
   profit: true,
@@ -868,3 +876,48 @@ export const insertBankAccountSchema = createInsertSchema(bankAccounts).pick({
 
 export type BankAccount = typeof bankAccounts.$inferSelect;
 export type InsertBankAccount = z.infer<typeof insertBankAccountSchema>;
+
+// Quotations table
+export const quotations = pgTable("quotations", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => customers.id),
+  dateCreated: timestamp("date_created").notNull().defaultNow(),
+  dateValidUntil: timestamp("date_valid_until").notNull(),
+  status: text("status").notNull().default("pending"),
+  totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).notNull(),
+  notes: text("notes"),
+  createdBy: integer("created_by").notNull().references(() => users.id),
+});
+
+export const insertQuotationSchema = createInsertSchema(quotations).pick({
+  clientId: true,
+  dateValidUntil: true,
+  status: true,
+  totalAmount: true,
+  notes: true,
+  createdBy: true,
+});
+
+// Quotation items table
+export const quotationItems = pgTable("quotation_items", {
+  id: serial("id").primaryKey(),
+  quotationId: integer("quotation_id").notNull().references(() => quotations.id, { onDelete: "cascade" }),
+  productId: integer("product_id").notNull().references(() => products.id),
+  quantity: integer("quantity").notNull(),
+  unitPrice: numeric("unit_price", { precision: 10, scale: 2 }).notNull(),
+  subtotal: numeric("subtotal", { precision: 10, scale: 2 }).notNull(),
+});
+
+export const insertQuotationItemSchema = createInsertSchema(quotationItems).pick({
+  quotationId: true,
+  productId: true,
+  quantity: true,
+  unitPrice: true,
+  subtotal: true,
+});
+
+// Types
+export type Quotation = typeof quotations.$inferSelect;
+export type InsertQuotation = z.infer<typeof insertQuotationSchema>;
+export type QuotationItem = typeof quotationItems.$inferSelect;
+export type InsertQuotationItem = z.infer<typeof insertQuotationItemSchema>;

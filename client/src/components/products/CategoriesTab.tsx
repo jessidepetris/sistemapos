@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tag, Plus, X, ChevronDown, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 interface Category {
   id: number;
@@ -258,14 +259,12 @@ export function CategoriesTab({ form, productId }: CategoriesTabProps) {
             <div className="text-center py-4">
               <p className="text-muted-foreground">No hay categorías disponibles.</p>
               <p className="mt-2">
-                <a 
+                <Link 
                   href="/categories" 
                   className="text-primary hover:underline"
-                  target="_blank"
-                  rel="noopener noreferrer"
                 >
                   Gestionar categorías
-                </a>
+                </Link>
               </p>
             </div>
           )}

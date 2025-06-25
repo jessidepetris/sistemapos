@@ -9,6 +9,8 @@ import { CartProvider } from "@/hooks/use-cart";
 import { ProtectedRoute } from "@/lib/protected-route";
 import { RouterProvider } from "@/lib/router-provider";
 import { useEffect } from "react";
+import { QuotationRoutes } from "@/routes";
+import BudgetsPage from "@/pages/budgets";
 
 // Admin Panel Pages
 import Dashboard from "@/pages/dashboard";
@@ -52,6 +54,9 @@ function AppRoutes() {
     <Switch>
       {/* Admin Routes */}
       <Route path="/auth" component={AuthPage} />
+      <Route path="/quotations">
+        <QuotationRoutes />
+      </Route>
       <ProtectedRoute path="/" component={Dashboard} />
       <ProtectedRoute path="/pos" component={POSPage} />
       <ProtectedRoute path="/products" component={ProductsPage} />
@@ -68,6 +73,7 @@ function AppRoutes() {
       <ProtectedRoute path="/users" component={UsersPage} />
       <ProtectedRoute path="/settings" component={SettingsPage} />
       <ProtectedRoute path="/purchases" component={PurchasesPage} />
+      <ProtectedRoute path="/budgets" component={BudgetsPage} />
       
       {/* Web Catalog Routes */}
       <Route path="/web">

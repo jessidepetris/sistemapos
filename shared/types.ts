@@ -104,4 +104,50 @@ export interface InsertPurchaseItem {
   conversionFactor?: number;
   conversionUnit?: string | null;
   conversionBarcode?: string | null;
+}
+
+export interface Budget {
+  id: number;
+  timestamp: Date;
+  customerId: number;
+  userId: number;
+  items: BudgetItem[];
+  subtotal: number;
+  discount: number;
+  discountPercent: number;
+  total: number;
+  paymentMethod: string;
+  observations: string;
+  validityDays: number;
+  status: string;
+}
+
+export interface BudgetItem {
+  id: number;
+  budgetId: number;
+  productId: number;
+  quantity: number;
+  unit: string;
+  price: number;
+  total: number;
+}
+
+export interface InsertBudget {
+  customerId: number;
+  userId: number;
+  items: {
+    productId: number;
+    quantity: number;
+    unit: string;
+    price: number;
+    total: number;
+  }[];
+  subtotal: number;
+  discount: number;
+  discountPercent: number;
+  total: number;
+  paymentMethod: string;
+  observations: string;
+  validityDays: number;
+  status?: string;
 } 

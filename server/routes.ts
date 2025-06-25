@@ -609,6 +609,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Debe especificar al menos un método de pago' });
       }
 
+      // Verificar stock y disponibilidad de productos
+      for (const item of items) {
+        const product = await storage.getProduct(item.productId);
+        if (!product) {
+          return res.status(400).json({ message: `Producto con ID ${item.productId} no encontrado` });
+        }
+        
+        // Verificar si el producto está activo o es discontinuo con stock
+        if (!product.active && !(product.isDiscontinued && parseFloat(product.stock.toString()) > 0)) {
+          return res.status(400).json({ message: `El producto "${product.name}" no está disponible para la venta` });
+        }
+        
+        // Verificar stock suficiente
+        if (parseFloat(product.stock.toString()) < item.quantity) {
+          return res.status(400).json({ message: `Stock insuficiente para el producto "${product.name}"` });
+        }
+      }
+
       // Calcular subtotal
       const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       // Calcular descuento y recargo
@@ -2184,7 +2202,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           inStock: parseFloat(p.stock.toString()) > 0,
           isRefrigerated: p.isRefrigerated,
           baseUnit: p.baseUnit,
-          conversionRates: p.conversionRates
+          conversionRates: p.conversionRates,
+          isDiscontinued: p.isDiscontinued,
+          stock: parseFloat(p.stock.toString())
         }));
       
       res.json(catalogProducts);
@@ -2220,7 +2240,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         inStock: parseFloat(product.stock.toString()) > 0,
         isRefrigerated: product.isRefrigerated,
         baseUnit: product.baseUnit,
-        conversionRates: product.conversionRates
+        conversionRates: product.conversionRates,
+        isDiscontinued: product.isDiscontinued,
+        stock: parseFloat(product.stock.toString())
       });
     } catch (error) {
       res.status(500).json({ message: "Error al obtener producto", error: (error as Error).message });
@@ -4518,6 +4540,137 @@ export async function registerRoutes(app: Express): Promise<Server> {
         code: "INTERNAL_ERROR",
         message: "Error al renovar la sesión" 
       });
+    }
+  });
+
+  // Quotation endpoints
+  app.post("/api/quotations", async (req, res) => {
+    const { clientId, dateValidUntil, items, notes } = req.body;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    try {
+      // Calcular el total del presupuesto
+      const totalAmount = items.reduce((sum: number, item: any) => sum + item.subtotal, 0);
+
+      // Crear el presupuesto
+      const [quotation] = await db.insert(quotations).values({
+        clientId: Number(clientId),
+        dateValidUntil: new Date(dateValidUntil),
+        status: "pending",
+        totalAmount: totalAmount.toString(),
+        notes,
+        createdBy: userId,
+      }).returning();
+
+      // Agregar los items del presupuesto
+      const quotationItems = items.map((item: any) => ({
+        quotationId: quotation.id,
+        productId: item.productId,
+        quantity: item.quantity.toString(),
+        unitPrice: item.unitPrice.toString(),
+        subtotal: item.subtotal.toString(),
+      }));
+
+      await db.insert(quotationItems).values(quotationItems);
+
+      return res.status(201).json({ success: true, quotation });
+    } catch (error) {
+      console.error("Error creating quotation:", error);
+      return res.status(500).json({ error: "Failed to create quotation" });
+    }
+  });
+
+  app.get("/api/quotations", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    try {
+      const quotations = await db.select().from(quotations).orderBy(quotations.dateCreated);
+      return res.json(quotations);
+    } catch (error) {
+      console.error("Error fetching quotations:", error);
+      return res.status(500).json({ error: "Failed to fetch quotations" });
+    }
+  });
+
+  app.get("/api/quotations/:id", async (c) => {
+    const userId = c.get("userId");
+    if (!userId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const id = c.req.param("id");
+
+    try {
+      const [quotation] = await db.select().from(quotations).where(eq(quotations.id, parseInt(id)));
+      if (!quotation) {
+        return c.json({ error: "Quotation not found" }, 404);
+      }
+
+      const items = await db.select().from(quotationItems).where(eq(quotationItems.quotationId, quotation.id));
+      return c.json({ ...quotation, items });
+    } catch (error) {
+      console.error("Error fetching quotation:", error);
+      return c.json({ error: "Failed to fetch quotation" }, 500);
+    }
+  });
+
+  app.put("/api/quotations/:id/status", async (c) => {
+    const userId = c.get("userId");
+    if (!userId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const id = c.req.param("id");
+    const { status } = await c.req.json();
+
+    try {
+      const [quotation] = await db.select().from(quotations).where(eq(quotations.id, parseInt(id)));
+      if (!quotation) {
+        return c.json({ error: "Quotation not found" }, 404);
+      }
+
+      // Si el presupuesto es aprobado, crear una factura
+      if (status === "approved") {
+        const items = await db.select().from(quotationItems).where(eq(quotationItems.quotationId, quotation.id));
+        
+        // Crear la factura
+        const [invoice] = await db.insert(invoices).values({
+          clientId: quotation.clientId,
+          date: new Date(),
+          totalAmount: quotation.totalAmount,
+          status: "pending",
+          createdBy: userId,
+          quotationId: quotation.id,
+        }).returning();
+
+        // Agregar los items a la factura
+        const invoiceItems = items.map((item) => ({
+          invoiceId: invoice.id,
+          productId: item.productId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          subtotal: item.subtotal,
+        }));
+
+        await db.insert(invoiceItems).values(invoiceItems);
+      }
+
+      // Actualizar el estado del presupuesto
+      await db.update(quotations)
+        .set({ status })
+        .where(eq(quotations.id, parseInt(id)));
+
+      return c.json({ success: true });
+    } catch (error) {
+      console.error("Error updating quotation status:", error);
+      return c.json({ error: "Failed to update quotation status" }, 500);
     }
   });
 

@@ -174,6 +174,11 @@ export interface IStorage {
 
   // Payments
   createPayment(payment: any): Promise<any>;
+
+  // Budgets
+  getBudget(id: number): Promise<import("../shared/types").Budget | undefined>;
+  getAllBudgets(): Promise<import("../shared/types").Budget[]>;
+  createBudget(insertBudget: import("../shared/types").InsertBudget): Promise<import("../shared/types").Budget>;
 }
 
 export class MemStorage implements IStorage {
@@ -249,6 +254,10 @@ export class MemStorage implements IStorage {
   // Payments
   private payments: any[] = [];
   
+  // Budgets
+  private budgets: Map<number, import("../shared/types").Budget> = new Map();
+  private budgetIdCounter: number = 1;
+  
   sessionStore: session.Store;
 
   constructor() {
@@ -313,6 +322,9 @@ export class MemStorage implements IStorage {
     // Inicializar contadores de categorías
     this.productCategoryIdCounter = 1;
     this.productCategoryRelationIdCounter = 1;
+    
+    this.budgets = new Map();
+    this.budgetIdCounter = 1;
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000 // prune expired entries every 24h
@@ -1910,6 +1922,42 @@ export class MemStorage implements IStorage {
     const newPayment = { id: this.payments.length + 1, ...payment };
     this.payments.push(newPayment);
     return newPayment;
+  }
+
+  // Budgets
+  async getBudget(id: number): Promise<import("../shared/types").Budget | undefined> {
+    return this.budgets.get(id);
+  }
+
+  async getAllBudgets(): Promise<import("../shared/types").Budget[]> {
+    return Array.from(this.budgets.values());
+  }
+
+  async createBudget(insertBudget: import("../shared/types").InsertBudget): Promise<import("../shared/types").Budget> {
+    const id = this.budgetIdCounter++;
+    const timestamp = new Date();
+    const items = insertBudget.items.map((item, idx) => ({
+      id: idx + 1,
+      budgetId: id,
+      ...item
+    }));
+    const budget = {
+      id,
+      timestamp,
+      customerId: insertBudget.customerId,
+      userId: insertBudget.userId,
+      items,
+      subtotal: insertBudget.subtotal,
+      discount: insertBudget.discount,
+      discountPercent: insertBudget.discountPercent,
+      total: insertBudget.total,
+      paymentMethod: insertBudget.paymentMethod,
+      observations: insertBudget.observations,
+      validityDays: insertBudget.validityDays,
+      status: insertBudget.status || "pending"
+    };
+    this.budgets.set(id, budget);
+    return budget;
   }
 }
 

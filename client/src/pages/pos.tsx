@@ -1,8 +1,8 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
-import { PaymentMethod, PaymentDetails } from "@/shared/types";
+import { PaymentMethod, PaymentDetails, BankAccount } from "@/shared/types";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Package, ShoppingBag, Search, Trash2, X, ShoppingCart, Plus, Minus, Tag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -20,6 +20,8 @@ import { InvoicePDF } from "@/components/printing/InvoicePDF";
 import { InvoiceContent } from "@/components/invoices/InvoiceDetail";
 import { PDFService } from "@/services/pdfService";
 import { formatCurrency } from "@/lib/utils";
+import { jsPDF } from "jspdf";
+import { toPng } from "html-to-image";
 
 type CartItem = {
   id: number;
@@ -39,45 +41,45 @@ type CartItem = {
   conversionUnit?: string;
   conversionFactor?: number;
   conversionBarcode?: string;
+  currency: string;
 };
+
+// Utilidad para convertir precios entre monedas
+function convertPrice(price: number, fromCurrency: string, toCurrency: string): number {
+  if (fromCurrency === toCurrency) return price;
+  // Tasa fija de ejemplo: 1 USD = 1000 ARS
+  const exchangeRate = fromCurrency === "USD" && toCurrency === "ARS"
+    ? 1000
+    : fromCurrency === "ARS" && toCurrency === "USD"
+      ? 1 / 1000
+      : 1;
+  return price * exchangeRate;
+}
 
 const POSPage = () => {
   const { user, isLoading: isLoadingUser } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
+  const [priceType, setPriceType] = useState<"retail" | "wholesale">("retail");
+  const [saleCurrency, setSaleCurrency] = useState<"ARS" | "USD">("ARS");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [paymentDetails, setPaymentDetails] = useState<PaymentDetails>({
-    cardType: 'credit',
-    cardNumber: '',
-    cardHolder: '',
-    cardExpiry: '',
-    cardCvv: '',
-    bankName: '',
-    accountNumber: '',
-    checkNumber: '',
-    qrCode: '',
-    mixedPayment: {
-      cash: 0,
-      transfer: 0,
-      qr: 0,
-      credit_card: 0,
-      debit_card: 0,
-      check: 0,
-      current_account: 0
-    }
+    method: "cash",
+    amount: 0,
+    currency: "ARS"
   });
   const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
   const [barcodeInput, setBarcodeInput] = useState("");
-  const [documentType, setDocumentType] = useState("remito");
+  const [documentType, setDocumentType] = useState<"factura" | "remito" | "pedido" | "presupuesto">("remito");
   const [observations, setObservations] = useState("");
   const [printTicket, setPrintTicket] = useState(true);
   const [sendEmail, setSendEmail] = useState(false);
   const [cardType, setCardType] = useState("credit");
   const [discountPercent, setDiscountPercent] = useState(0);
   const [surchargePercent, setSurchargePercent] = useState(0);
-  const [priceType, setPriceType] = useState("retail"); // 'retail' o 'wholesale'
   const [mixedPayment, setMixedPayment] = useState({
     cash: 0,
     transfer: 0,
@@ -91,6 +93,24 @@ const POSPage = () => {
   const [showReceiptDialog, setShowReceiptDialog] = useState(false);
   const receiptRef = useRef<HTMLDivElement>(null);
   const [lastSaleData, setLastSaleData] = useState<any>(null);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [saleId, setSaleId] = useState<number | null>(null);
+  const [showInvoice, setShowInvoice] = useState(false);
+  const [invoiceType, setInvoiceType] = useState<"remito" | "factura_c">("remito");
+  const [showThermalTicket, setShowThermalTicket] = useState(false);
+  const [showInvoicePDF, setShowInvoicePDF] = useState(false);
+  const [printOptions, setPrintOptions] = useState({
+    printCustomer: true,
+    printPrices: true,
+    printBarcodes: true,
+    printNotes: true,
+    copies: 1
+  });
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [lastCart, setLastCart] = useState<CartItem[]>([]);
   
   // Get products
   const { data: products = [], isLoading: isLoadingProducts } = useQuery<any[]>({
@@ -105,7 +125,7 @@ const POSPage = () => {
   });
   
   // Get bank accounts
-  const { data: bankAccounts = [], isLoading: isLoadingBankAccounts } = useQuery({
+  const { data: bankAccounts = [], isLoading: isLoadingBankAccounts } = useQuery<BankAccount[]>({
     queryKey: ["/api/bank-accounts"],
     retry: false,
   });
@@ -113,50 +133,118 @@ const POSPage = () => {
   // Process sale mutation
   const processSaleMutation = useMutation({
     mutationFn: async (saleData: any) => {
-      const res = await apiRequest("POST", "/api/sales", saleData);
+      let endpoint = "/api/sales";
+      let data = saleData;
+      
+      // Determinar el endpoint según el tipo de documento
+      if (saleData.documentType === "presupuesto") {
+        endpoint = "/api/quotations";
+        // Transformar los datos al formato esperado por el endpoint de presupuestos
+        data = {
+          clientId: Number(saleData.customerId),
+          dateValidUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 días de validez
+          notes: saleData.notes || "",
+          items: saleData.items.map((item: any) => ({
+            productId: Number(item.productId),
+            quantity: Math.round(Number(item.quantity)), // Convertir a entero
+            unitPrice: Number(item.price),
+            subtotal: Number(item.total)
+          }))
+        };
+
+        // Validar que todos los valores numéricos sean válidos
+        if (isNaN(data.clientId)) {
+          throw new Error("ID de cliente inválido");
+        }
+        if (data.items.some((item: any) => 
+          isNaN(item.productId) || 
+          isNaN(item.quantity) || 
+          isNaN(item.unitPrice) || 
+          isNaN(item.subtotal)
+        )) {
+          throw new Error("Valores numéricos inválidos en los items");
+        }
+
+        // Validar que la cantidad sea un entero positivo
+        if (data.items.some((item: any) => 
+          !Number.isInteger(item.quantity) || 
+          item.quantity <= 0
+        )) {
+          throw new Error("Las cantidades deben ser números enteros positivos");
+        }
+      } else if (saleData.documentType === "pedido") {
+        endpoint = "/api/orders";
+      }
+
+      const res = await apiRequest("POST", endpoint, data);
       if (!res.ok) {
         const errorData = await res.json();
         if (res.status === 401 && errorData.code === "SESSION_EXPIRED") {
           throw new Error("SESSION_EXPIRED");
         }
-        throw new Error(errorData.message || "Error al procesar la venta");
+        throw new Error(errorData.message || "Error al procesar el documento");
       }
       return await res.json();
     },
     onSuccess: (data) => {
-      // Invalidar consultas para actualizar los datos
-      reactQueryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      reactQueryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
-      reactQueryClient.invalidateQueries({ queryKey: ["/api/dashboard/recent-sales"] });
-      reactQueryClient.invalidateQueries({ queryKey: ["/api/dashboard/recent-activity"] });
-      reactQueryClient.invalidateQueries({ queryKey: ["/api/dashboard/inventory-alerts"] });
+      // Invalidar consultas según el tipo de documento
+      if (data.documentType === "presupuesto") {
+        queryClient.invalidateQueries({ queryKey: ["/api/presupuestos"] });
+      } else if (data.documentType === "pedido") {
+        queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      } else {
+        // Para ventas (facturas y remitos)
+        queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/dashboard/recent-sales"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/dashboard/recent-activity"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/dashboard/inventory-alerts"] });
+      }
       
-      // Guardar la venta completada y mostrar el recibo
+      // Guardar el documento completado y mostrar el recibo
       setCompletedSale({
         ...data,
-        items: cart,
+        items: data.items || lastCart,
         timestamp: new Date().toISOString(),
-        paymentMethod: lastSaleData?.paymentMethod,
-        paymentDetails: lastSaleData?.paymentDetails,
-        documentType: lastSaleData?.documentType,
-        notes: lastSaleData?.notes,
-        subtotal: lastSaleData?.subtotal,
-        discountPercent: lastSaleData?.discountPercent,
+        paymentMethod: data.paymentMethod || lastSaleData?.paymentMethod,
+        paymentDetails: data.paymentDetails || lastSaleData?.paymentDetails,
+        documentType: data.documentType || lastSaleData?.documentType,
+        notes: data.notes || lastSaleData?.notes,
+        subtotal: data.subtotal || lastSaleData?.subtotal,
+        discountPercent: data.discountPercent || lastSaleData?.discountPercent,
         discountAmount: data.discount !== undefined ? parseFloat(data.discount) : (lastSaleData?.discountAmount !== undefined ? parseFloat(lastSaleData.discountAmount) : 0),
-        surchargePercent: lastSaleData?.surchargePercent,
-        surchargeAmount: lastSaleData?.surchargeAmount,
-        customer: customers?.find((c: any) => c.id === lastSaleData?.customerId)
+        surchargePercent: data.surchargePercent || lastSaleData?.surchargePercent,
+        surchargeAmount: data.surchargeAmount || lastSaleData?.surchargeAmount,
+        customer: customers?.find((c: any) => c.id === (data.customerId || lastSaleData?.customerId))
       });
-      setShowReceiptDialog(true);
+
+      // Mostrar el diálogo de recibo solo para ventas
+      if (data.documentType === "factura" || data.documentType === "remito") {
+        setShowReceiptDialog(true);
+      }
       
       // Limpiar estado
-      setCart([]);
-      setSelectedCustomerId(null);
-      setCheckoutDialogOpen(false);
+      setTimeout(() => {
+        setCart([]);
+        setSelectedCustomerId(null);
+        setCheckoutDialogOpen(false);
+      }, 500);
       
+      // Mostrar mensaje según el tipo de documento
+      let successMessage = "Venta completada";
+      let successDescription = "La venta se ha procesado correctamente y el stock ha sido actualizado";
+      
+      if (data.documentType === "presupuesto") {
+        successMessage = "Presupuesto guardado";
+        successDescription = "El presupuesto ha sido guardado exitosamente";
+      } else if (data.documentType === "pedido") {
+        successMessage = "Pedido guardado";
+        successDescription = "El pedido ha sido guardado exitosamente";
+      }
+
       toast({
-        title: "Venta completada",
-        description: "La venta se ha procesado correctamente y el stock ha sido actualizado"
+        title: successMessage,
+        description: successDescription
       });
     },
     onError: (error) => {
@@ -166,13 +254,12 @@ const POSPage = () => {
           description: "Por favor, inicie sesión nuevamente para continuar",
           variant: "destructive",
         });
-        // Redirigir a la página de login
         window.location.href = "/login";
         return;
       }
       
       toast({
-        title: "Error al procesar la venta",
+        title: "Error al procesar el documento",
         description: (error as Error).message,
         variant: "destructive",
       });
@@ -188,42 +275,72 @@ const POSPage = () => {
     : products;
   
   // Handle adding product to cart
-  const addToCart = (product: any) => {
-    // Determinar qué precio usar
-    const price = priceType === "wholesale" && product.wholesalePrice 
+  const addToCart = (product: any, quantity: number = 1, unit: string = product.baseUnit) => {
+    // Determinar el precio base según el tipo de precio seleccionado
+    const basePrice = priceType === "wholesale" && product.wholesalePrice 
       ? parseFloat(product.wholesalePrice) 
       : parseFloat(product.price);
-    
-    setCart(prevCart => {
-      const existingItem = prevCart.find(item => 
-        item.productId === product.id && item.isConversion === false
-      );
-      
-      if (existingItem) {
-        return prevCart.map(item => 
-          item.productId === product.id && item.isConversion === false
-            ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * item.price }
-            : item
-        );
-      } else {
-        return [...prevCart, {
+    // Convertir el precio a la moneda de venta si es necesario
+    let price = convertPrice(
+      basePrice,
+      product.currency || "ARS",
+      saleCurrency
+    );
+
+    // Obtener nombre e imagen de forma robusta
+    const productName = product.name || product.title || product.nombre || "Producto sin nombre";
+    const productImageUrl = product.imageUrl || product.image || product.img || null;
+
+    const existingItem = cart.find(item => item.productId === product.id && item.unit === unit);
+    if (existingItem) {
+      const newQuantity = existingItem.quantity + quantity;
+      if (newQuantity > existingItem.stockAvailable) {
+        toast({
+          title: "Stock insuficiente",
+          description: `No hay suficiente stock disponible (${existingItem.stockAvailable} ${unit})`,
+          variant: "destructive",
+        });
+        return;
+      }
+      setCart(cart.map(item =>
+        item.id === existingItem.id
+          ? {
+              ...item,
+              quantity: newQuantity,
+              total: newQuantity * price
+            }
+          : item
+      ));
+    } else {
+      if (quantity > parseFloat(product.stock)) {
+        toast({
+          title: "Stock insuficiente",
+          description: `No hay suficiente stock disponible (${product.stock} ${unit})`,
+          variant: "destructive",
+        });
+        return;
+      }
+      setCart([
+        ...cart,
+        {
           id: Date.now(),
           productId: product.id,
-          name: product.name,
+          name: productName,
           price: price,
-          quantity: 1,
-          unit: product.baseUnit,
-          total: price,
+          quantity: quantity,
+          unit: unit,
+          total: quantity * price,
           stockAvailable: parseFloat(product.stock),
           isBulk: product.isBulk,
           isRefrigerated: product.isRefrigerated,
           conversionRates: product.conversionRates,
-          imageUrl: product.imageUrl || null,
+          imageUrl: productImageUrl,
           isConversion: false,
-          conversionFactor: 1  // Factor 1 para producto principal
-        }];
-      }
-    });
+          conversionFactor: 1,
+          currency: saleCurrency
+        }
+      ]);
+    }
   };
   
   // Handle adding a product conversion to cart
@@ -236,9 +353,14 @@ const POSPage = () => {
     const basePrice = priceType === "wholesale" && product.wholesalePrice 
       ? parseFloat(product.wholesalePrice) 
       : parseFloat(product.price);
-      
+    // Convertir el precio base a la moneda de venta
+    const convertedBasePrice = convertPrice(
+      basePrice,
+      product.currency || "ARS",
+      saleCurrency
+    );
     // Calculamos el precio basado en el factor de conversión
-    const conversionPrice = basePrice * conversion.factor;
+    const conversionPrice = convertedBasePrice * conversion.factor;
     
     setCart(prevCart => {
       // Buscar si ya existe este producto con esta conversión específica
@@ -273,7 +395,8 @@ const POSPage = () => {
           isConversion: true,
           conversionUnit: conversion.unit,
           conversionFactor: conversion.factor,
-          conversionBarcode: conversion.barcode
+          conversionBarcode: conversion.barcode,
+          currency: saleCurrency,
         }];
       }
     });
@@ -369,93 +492,199 @@ const POSPage = () => {
   
   // Process checkout
   const handleCheckout = () => {
+    console.log("handleCheckout called", {
+      cartLength: cart.length,
+      selectedCustomerId,
+      paymentMethod,
+      checkoutDialogOpen
+    });
     if (cart.length === 0) {
       toast({
         title: "Carrito vacío",
-        description: "Agregue productos al carrito para continuar",
+        description: "Agregue productos al carrito antes de finalizar la venta",
         variant: "destructive",
       });
-      return;
-    }
-    
-    setCheckoutDialogOpen(true);
-  };
-  
-  // Finalize sale
-  const finalizeSale = async () => {
-    if (isLoadingUser) {
-      toast({
-        title: "Verificando sesión",
-        description: "Por favor espere mientras verificamos su sesión",
-      });
-      return;
-    }
-
-    if (!user) {
-      toast({
-        title: "Error de autenticación",
-        description: "Debe estar autenticado para realizar una venta",
-        variant: "destructive"
-      });
-      window.location.href = '/login';
       return;
     }
 
     if (!paymentMethod) {
       toast({
-        title: "Error",
-        description: "Debe seleccionar un método de pago",
+        title: "Método de pago no seleccionado",
+        description: "Seleccione un método de pago antes de finalizar la venta",
         variant: "destructive",
       });
       return;
     }
 
-    const saleData = {
-      userId: user.id,
-      customerId: selectedCustomerId,
-      subtotal: cartSubtotal,
-      total: cartTotal,
-      discount: discountAmount,
-      surcharge: surchargeAmount,
-      discountPercent,
-      surchargePercent,
-      paymentMethods: [
-        {
+    setCheckoutDialogOpen(true);
+  };
+  
+  // Finalize sale
+  const finalizeSale = async () => {
+    try {
+      // Validar tipo de comprobante
+      if (!documentType) {
+        toast({
+          title: "Error",
+          description: "Debe seleccionar un tipo de comprobante",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Construir el array de métodos de pago según el método seleccionado
+      let paymentMethods = [];
+      if (paymentMethod === 'mixed') {
+        // Para pago mixto, agregar todos los métodos con monto > 0
+        paymentMethods = Object.entries(mixedPayment)
+          .filter(([method, amount]) => amount > 0)
+          .map(([method, amount]) => ({
+            method,
+            amount,
+            currency: saleCurrency
+          }));
+      } else {
+        // Para métodos simples, agregar uno solo
+        paymentMethods = [{
           method: paymentMethod,
           amount: cartTotal,
-          accountId: paymentDetails?.bankAccountId || null
-        }
-      ],
-      paymentDetails,
-      documentType,
-      notes: observations,
-      status: "completed",
-      printOptions: {
-        printTicket,
-        sendEmail
-      },
-      items: cart.map(item => ({
-        productId: item.productId,
-        quantity: item.quantity,
-        unit: item.unit,
-        price: item.price,
-        total: item.total,
-        isConversion: item.isConversion || false,
-        conversionFactor: item.conversionFactor || 1,
-        conversionUnit: item.conversionUnit || item.unit,
-        conversionBarcode: item.conversionBarcode || null
-      }))
-    };
+          currency: saleCurrency
+        }];
+      }
 
-    setLastSaleData(saleData);
-    try {
+      // Determinar el estado según el tipo de comprobante
+      let status = "completed";
+      if (documentType === "presupuesto") {
+        status = "presupuesto";
+      } else if (documentType === "pedido") {
+        status = "pedido";
+      }
+
+      const saleData = {
+        customerId: selectedCustomerId,
+        userId: user?.id,
+        total: cartTotal,
+        subtotal: cartSubtotal,
+        discount: discountAmount,
+        surcharge: surchargeAmount,
+        discountPercent,
+        surchargePercent,
+        paymentMethods,
+        documentType,
+        status,
+        currency: saleCurrency,
+        items: cart.map(item => ({
+          productId: item.productId,
+          name: item.name,
+          quantity: item.quantity,
+          unit: item.unit,
+          price: item.price,
+          discount: 0,
+          total: item.total,
+          isConversion: item.isConversion,
+          conversionFactor: item.conversionFactor,
+          conversionUnit: item.conversionUnit,
+          conversionBarcode: item.conversionBarcode,
+          currency: saleCurrency
+        }))
+      };
+
+      // En finalizeSale, antes de llamar a la mutación:
+      setLastCart(cart);
       await processSaleMutation.mutateAsync(saleData);
+
+      // Mostrar mensaje según el tipo de comprobante
+      let successMessage = "Venta completada";
+      if (documentType === "presupuesto") {
+        successMessage = "Presupuesto guardado exitosamente";
+      } else if (documentType === "pedido") {
+        successMessage = "Pedido guardado exitosamente";
+      }
+
+      toast({
+        title: successMessage,
+        description: documentType === "presupuesto" || documentType === "pedido" 
+          ? "El documento ha sido guardado y puede ser consultado en su sección correspondiente"
+          : "La venta se ha procesado correctamente y el stock ha sido actualizado"
+      });
+
+      // Mostrar opciones de impresión solo para facturas y remitos
+      if (documentType === "factura" || documentType === "remito") {
+        setShowThermalTicket(true);
+      }
     } catch (error) {
-      console.error("Error al finalizar la venta:", error);
+      toast({
+        title: "Error al finalizar la venta",
+        description: (error as Error).message,
+        variant: "destructive",
+      });
     }
   };
   
-  const reactQueryClient = useQueryClient();
+  // Actualizar precios del carrito cuando cambia priceType o saleCurrency
+  useEffect(() => {
+    if (!products || products.length === 0 || cart.length === 0) return;
+    setCart(prevCart => prevCart.map(item => {
+      // Buscar el producto original
+      const product = products.find((p: any) => p.id === item.productId);
+      if (!product) return item; // Si no se encuentra, dejar igual
+      // Si es conversión
+      if (item.isConversion && item.conversionUnit) {
+        // Buscar la conversión correspondiente
+        const conversions = typeof product.conversionRates === 'string'
+          ? JSON.parse(product.conversionRates)
+          : product.conversionRates;
+        const conversion = Array.isArray(conversions)
+          ? conversions.find((conv: any) => conv.unit === item.conversionUnit)
+          : null;
+        if (!conversion) return item;
+        const basePrice = priceType === "wholesale" && product.wholesalePrice
+          ? parseFloat(product.wholesalePrice)
+          : parseFloat(product.price);
+        const convertedBasePrice = convertPrice(
+          basePrice,
+          product.currency || "ARS",
+          saleCurrency
+        );
+        const conversionPrice = convertedBasePrice * conversion.factor;
+        return {
+          ...item,
+          price: conversionPrice,
+          total: conversionPrice * item.quantity,
+          currency: saleCurrency
+        };
+      } else {
+        // Producto normal
+        const basePrice = priceType === "wholesale" && product.wholesalePrice
+          ? parseFloat(product.wholesalePrice)
+          : parseFloat(product.price);
+        const price = convertPrice(
+          basePrice,
+          product.currency || "ARS",
+          saleCurrency
+        );
+        return {
+          ...item,
+          price,
+          total: price * item.quantity,
+          currency: saleCurrency
+        };
+      }
+    }));
+  }, [priceType, saleCurrency, products]);
+  
+  // Agregar logs para depuración antes del Dialog de recibo
+  console.log('completedSale:', completedSale);
+  console.log('showReceiptDialog:', showReceiptDialog);
+  
+  const handleDocumentTypeChange = (value: string) => {
+    const newValue = value as "factura" | "remito" | "pedido" | "presupuesto";
+    setDocumentType(newValue);
+    // Si es presupuesto o pedido, no permitir finalizar la venta
+    if (newValue === "presupuesto" || newValue === "pedido") {
+      setCheckoutDialogOpen(false);
+    }
+  };
   
   return (
     <div className="flex h-screen overflow-hidden">
@@ -469,6 +698,23 @@ const POSPage = () => {
           <div className="w-full lg:w-7/12 flex flex-col h-full overflow-hidden">
             <Card className="flex-1 flex flex-col h-full overflow-hidden">
               <CardHeader className="px-6 py-4 flex-shrink-0">
+                {/* Selector de tipo de comprobante */}
+                <div className="mb-4">
+                  <Select 
+                    value={documentType} 
+                    onValueChange={handleDocumentTypeChange}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Seleccionar tipo de comprobante" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="factura">Factura</SelectItem>
+                      <SelectItem value="remito">Remito</SelectItem>
+                      <SelectItem value="pedido">Pedido</SelectItem>
+                      <SelectItem value="presupuesto">Presupuesto</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4">
                   {/* Barcode scanner */}
                   <form onSubmit={handleBarcodeSubmit} className="flex-1 flex gap-2">
@@ -495,7 +741,7 @@ const POSPage = () => {
                   {/* Tipo de precio */}
                   <Select
                     value={priceType}
-                    onValueChange={setPriceType}
+                    onValueChange={(value: "retail" | "wholesale") => setPriceType(value)}
                   >
                     <SelectTrigger className="w-[150px]">
                       <SelectValue placeholder="Tipo de precio" />
@@ -503,6 +749,19 @@ const POSPage = () => {
                     <SelectContent>
                       <SelectItem value="retail">Minorista</SelectItem>
                       <SelectItem value="wholesale">Mayorista</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={saleCurrency}
+                    onValueChange={(value: "ARS" | "USD") => setSaleCurrency(value)}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Moneda de venta" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ARS">Pesos Argentinos (ARS)</SelectItem>
+                      <SelectItem value="USD">Dólares (USD)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -531,72 +790,111 @@ const POSPage = () => {
                     
                     {filteredProducts && filteredProducts.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-6">
-                        {filteredProducts.map((product: any) => (
-                          <Card key={product.id} className="cursor-pointer hover:bg-accent/50 transition-colors">
-                            <CardContent className="p-4">
-                              <div className="flex flex-col text-sm">
-                                <div className="mt-1 flex justify-between items-center">
-                                  <div className="flex flex-col">
-                                    {/* Precio que aplica según la selección actual */}
-                                    <div className="font-bold text-base">
-                                      {formatCurrency(
-                                        priceType === "wholesale" && product.wholesalePrice 
-                                          ? parseFloat(product.wholesalePrice) 
-                                          : parseFloat(product.price),
-                                        product.currency || "ARS"
+                        {filteredProducts.map((product: any) => {
+                          const productName = product.name || product.title || product.nombre || "Producto sin nombre";
+                          const productImageUrl = product.imageUrl || product.image || product.img || null;
+
+                          // Calcular el precio mostrado en la tarjeta según la moneda seleccionada
+                          const displayPrice = convertPrice(
+                            priceType === "wholesale" && product.wholesalePrice 
+                              ? parseFloat(product.wholesalePrice) 
+                              : parseFloat(product.price),
+                            product.currency || "ARS",
+                            saleCurrency
+                          );
+
+                          return (
+                            <Card key={product.id} className="cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => addToCart(product)}>
+                              <CardContent className="p-4">
+                                <div className="flex flex-col text-sm">
+                                  <div className="mt-1 flex flex-col gap-2">
+                                    {/* Imagen del producto */}
+                                    <div className="h-32 w-full rounded overflow-hidden bg-gray-100 flex-shrink-0">
+                                      {productImageUrl ? (
+                                        <img
+                                          src={productImageUrl}
+                                          alt={productName}
+                                          className="h-full w-full object-cover"
+                                        />
+                                      ) : (
+                                        <div className="flex h-full w-full items-center justify-center bg-gray-100 text-gray-400">
+                                          <Package className="h-8 w-8" />
+                                        </div>
                                       )}
                                     </div>
-                                    
-                                    {/* Mostrar el otro precio si existe */}
-                                    {product.wholesalePrice && (
-                                      <div className="text-xs text-muted-foreground">
-                                        {priceType === "wholesale" 
-                                          ? `Min: ${formatCurrency(parseFloat(product.price), product.currency || "ARS")}` 
-                                          : `May: ${formatCurrency(parseFloat(product.wholesalePrice), product.currency || "ARS")}`
-                                        }
+                                    <div className="flex flex-col gap-1">
+                                      {/* Nombre del producto */}
+                                      <div className="font-bold text-base">{productName}</div>
+                                      {/* Precio que aplica según la selección actual */}
+                                      <div className="font-bold text-base">
+                                        {formatCurrency(
+                                          displayPrice,
+                                          saleCurrency
+                                        )}
                                       </div>
-                                    )}
-                                  </div>
-                                  
-                                  <div className="text-xs">
-                                    <Badge variant={parseFloat(product.stock) > 0 ? "default" : "destructive"} className="text-xs">
-                                      {parseFloat(product.stock).toFixed(2)} {product.baseUnit}
-                                    </Badge>
+                                      
+                                      {/* Mostrar el otro precio si existe */}
+                                      {product.wholesalePrice && (
+                                        <div className="text-xs text-muted-foreground">
+                                          {priceType === "wholesale" 
+                                            ? `Min: ${formatCurrency(convertPrice(parseFloat(product.price), product.currency || "ARS", saleCurrency), saleCurrency)}` 
+                                            : `May: ${formatCurrency(convertPrice(parseFloat(product.wholesalePrice), product.currency || "ARS", saleCurrency), saleCurrency)}`
+                                          }
+                                        </div>
+                                      )}
+                                      
+                                      {/* Stock */}
+                                      <div className="text-xs">
+                                        <Badge variant={parseFloat(product.stock) > 0 ? "default" : "destructive"} className="text-xs">
+                                          {parseFloat(product.stock).toFixed(2)} {product.baseUnit}
+                                        </Badge>
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                              
-                              {/* Si tiene presentaciones alternativas */}
-                              {product.conversionRates && product.conversionRates.length > 0 && (
-                                <div className="mt-2 pt-2 border-t">
-                                  <div className="text-xs font-medium mb-1 text-muted-foreground">Presentaciones:</div>
-                                  <div className="space-y-1">
-                                    {product.conversionRates.map((conversion: any, index: number) => (
-                                      <div 
-                                        key={`${product.id}-${index}`}
-                                        className="text-xs py-1 px-2 rounded bg-secondary/20 hover:bg-secondary/40 cursor-pointer flex justify-between items-center"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          addConversionToCart(product, conversion);
-                                        }}
-                                      >
-                                        <span>{conversion.unit}</span>
-                                        <span className="font-medium">
-                                          {formatCurrency(
-                                            priceType === "wholesale" && product.wholesalePrice 
-                                              ? parseFloat(product.wholesalePrice) * conversion.factor
-                                              : parseFloat(product.price) * conversion.factor,
-                                            product.currency || "ARS"
-                                          )}
-                                        </span>
-                                      </div>
-                                    ))}
+                                
+                                {/* Si tiene presentaciones alternativas */}
+                                {product.conversionRates && product.conversionRates.length > 0 && (
+                                  <div className="mt-2 pt-2 border-t">
+                                    <div className="text-xs font-medium mb-1 text-muted-foreground">Presentaciones:</div>
+                                    <div className="space-y-1">
+                                      {product.conversionRates.map((conversion: any, index: number) => {
+                                        // Calcular el precio de la conversión en la moneda seleccionada
+                                        const basePrice = priceType === "wholesale" && product.wholesalePrice 
+                                          ? parseFloat(product.wholesalePrice) 
+                                          : parseFloat(product.price);
+                                        const convertedBasePrice = convertPrice(
+                                          basePrice,
+                                          product.currency || "ARS",
+                                          saleCurrency
+                                        );
+                                        const conversionPrice = convertedBasePrice * conversion.factor;
+                                        return (
+                                          <div 
+                                            key={`${product.id}-${index}`}
+                                            className="text-xs py-1 px-2 rounded bg-secondary/20 hover:bg-secondary/40 cursor-pointer flex justify-between items-center"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              addConversionToCart(product, conversion);
+                                            }}
+                                          >
+                                            <span>{conversion.unit}</span>
+                                            <span className="font-medium">
+                                              {formatCurrency(
+                                                conversionPrice,
+                                                saleCurrency
+                                              )}
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
-                            </CardContent>
-                          </Card>
-                        ))}
+                                )}
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
                       </div>
                     ) : (
                       <div className="flex flex-col items-center justify-center h-full p-6 text-center">
@@ -742,7 +1040,10 @@ const POSPage = () => {
                       onClick={handleCheckout}
                       disabled={cart.length === 0}
                     >
-                      Finalizar Venta
+                      {documentType === "presupuesto" ? "Guardar Presupuesto" :
+                       documentType === "pedido" ? "Guardar Pedido" :
+                       documentType === "factura" ? "Finalizar Venta con Factura" :
+                       "Finalizar Venta con Remito"}
                     </Button>
                   </div>
                 </div>
@@ -756,18 +1057,24 @@ const POSPage = () => {
       <Dialog open={checkoutDialogOpen} onOpenChange={setCheckoutDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-xl">Finalizar Venta</DialogTitle>
+            <DialogTitle className="text-xl">
+              {documentType === "presupuesto" ? "Guardar Presupuesto" :
+               documentType === "pedido" ? "Guardar Pedido" :
+               documentType === "factura" ? "Finalizar Venta con Factura" :
+               "Finalizar Venta con Remito"}
+            </DialogTitle>
             <DialogHeader className="text-muted-foreground text-sm mt-1">
-              Complete los datos para finalizar la venta y generar el comprobante
+              {documentType === "presupuesto" ? "Complete los datos para guardar el presupuesto" :
+               documentType === "pedido" ? "Complete los datos para guardar el pedido" :
+               documentType === "factura" ? "Complete los datos para finalizar la venta y generar la factura" :
+               "Complete los datos para finalizar la venta y generar el remito"}
             </DialogHeader>
           </DialogHeader>
-          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
             {/* Columna izquierda: Datos de venta */}
             <div className="space-y-5">
               <div className="space-y-3">
                 <h3 className="text-base font-medium">Datos de la venta</h3>
-                
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Cliente</label>
                   <Select value={selectedCustomerId?.toString() || "0"} onValueChange={(value) => setSelectedCustomerId(value === "0" ? null : parseInt(value))}>
@@ -784,26 +1091,27 @@ const POSPage = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Tipo de comprobante</label>
-                  <Select value={documentType} onValueChange={setDocumentType}>
+                  <Select 
+                    value={documentType} 
+                    onValueChange={handleDocumentTypeChange}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="factura">Factura</SelectItem>
                       <SelectItem value="remito">Remito</SelectItem>
-                      <SelectItem value="factura_a">Factura A</SelectItem>
-                      <SelectItem value="factura_b">Factura B</SelectItem>
-                      <SelectItem value="factura_c">Factura C</SelectItem>
+                      <SelectItem value="pedido">Pedido</SelectItem>
+                      <SelectItem value="presupuesto">Presupuesto</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Método de pago</label>
                   <Select value={paymentMethod} onValueChange={(value) => {
-                    setPaymentMethod(value);
+                    setPaymentMethod(value as PaymentMethod);
                     if (value === 'cash') {
                       setDiscountPercent(5);
                     } else {
@@ -825,20 +1133,17 @@ const POSPage = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                
                 {/* Payment details based on selected method */}
                 {paymentMethod === 'credit_card' && (
                   <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">Pago con tarjeta de crédito</p>
                   </div>
                 )}
-                
                 {paymentMethod === 'debit_card' && (
                   <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">Pago con tarjeta de débito</p>
                   </div>
                 )}
-                
                 {paymentMethod === 'transfer' && (
                   <div className="space-y-3">
                     <div className="space-y-1">
@@ -854,7 +1159,7 @@ const POSPage = () => {
                           <SelectValue placeholder="Seleccionar cuenta" />
                         </SelectTrigger>
                         <SelectContent>
-                          {bankAccounts.map((account: any) => (
+                          {bankAccounts?.map((account: BankAccount) => (
                             <SelectItem key={account.id} value={account.id.toString()}>
                               {account.alias} - {account.bankName} ({account.accountNumber})
                             </SelectItem>
@@ -864,7 +1169,6 @@ const POSPage = () => {
                     </div>
                   </div>
                 )}
-                
                 {paymentMethod === 'check' && (
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-2">
@@ -889,7 +1193,6 @@ const POSPage = () => {
                     </div>
                   </div>
                 )}
-                
                 {paymentMethod === 'qr' && (
                   <div className="space-y-3">
                     <div className="space-y-1">
@@ -903,7 +1206,6 @@ const POSPage = () => {
                     </div>
                   </div>
                 )}
-                
                 {paymentMethod === 'mixed' && (
                   <div className="space-y-3 border rounded-md p-3">
                     <h4 className="text-sm font-medium">Detalles del pago mixto</h4>
@@ -993,7 +1295,6 @@ const POSPage = () => {
                         />
                       </div>
                     </div>
-                    
                     <div className="mt-2 text-right text-sm">
                       <span className="text-muted-foreground">Total de pagos: </span>
                       <span className={`font-medium ${
@@ -1006,7 +1307,6 @@ const POSPage = () => {
                     </div>
                   </div>
                 )}
-                
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Observaciones</label>
                   <Input 
@@ -1015,10 +1315,8 @@ const POSPage = () => {
                     onChange={(e) => setObservations(e.target.value)}
                   />
                 </div>
-                
                 <div className="space-y-4 mt-4">
                   <h4 className="text-sm font-medium">Ajustes al precio</h4>
-                  
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Descuento (%)</label>
@@ -1031,7 +1329,6 @@ const POSPage = () => {
                         onChange={(e) => setDiscountPercent(parseFloat(e.target.value) || 0)}
                       />
                     </div>
-                    
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Recargo (%)</label>
                       <Input 
@@ -1046,7 +1343,6 @@ const POSPage = () => {
                   </div>
                 </div>
               </div>
-
               <div className="border-t pt-4">
                 <div className="flex justify-between text-lg font-semibold">
                   <span>Total a pagar</span>
@@ -1074,14 +1370,12 @@ const POSPage = () => {
                 )}
               </div>
             </div>
-            
             {/* Columna derecha: Resumen de la venta */}
             <div className="space-y-4">
               <div className="border rounded-md">
                 <div className="border-b px-4 py-3">
                   <h3 className="font-medium">Resumen de productos</h3>
                 </div>
-                
                 <div className="px-4 py-2 max-h-[300px] overflow-y-auto">
                   {cart.map((item) => (
                     <div key={item.id} className="py-2 border-b last:border-0">
@@ -1117,7 +1411,6 @@ const POSPage = () => {
                     </div>
                   ))}
                 </div>
-                
                 <div className="border-t px-4 py-3">
                   <div className="flex justify-between">
                     <span className="font-medium">Subtotal</span>
@@ -1135,7 +1428,6 @@ const POSPage = () => {
                   </div>
                 </div>
               </div>
-              
               <div className="border rounded-md p-4">
                 <h3 className="font-medium mb-3">Opciones de impresión</h3>
                 <div className="space-y-2">
@@ -1171,7 +1463,6 @@ const POSPage = () => {
               </div>
             </div>
           </div>
-          
           <DialogFooter className="flex justify-between mt-6">
             <Button variant="outline" onClick={() => setCheckoutDialogOpen(false)}>
               Cancelar
@@ -1181,7 +1472,6 @@ const POSPage = () => {
                 variant="secondary"
                 disabled={processSaleMutation.isPending}
                 onClick={() => {
-                  // Lógica para guardar como borrador
                   toast({
                     title: "Venta guardada como borrador",
                     description: "Podrá completarla más tarde"
@@ -1192,7 +1482,7 @@ const POSPage = () => {
                 Guardar borrador
               </Button>
               <Button
-                onClick={finalizeSale}
+                onClick={() => setConfirmDialogOpen(true)}
                 disabled={processSaleMutation.isPending}
               >
                 {processSaleMutation.isPending ? (
@@ -1200,143 +1490,150 @@ const POSPage = () => {
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Procesando...
                   </>
-                ) : (
-                  "Finalizar Venta"
-                )}
+                ) : documentType === "presupuesto" ? "Guardar Presupuesto" :
+                   documentType === "pedido" ? "Guardar Pedido" :
+                   documentType === "factura" ? "Finalizar Venta con Factura" :
+                   "Finalizar Venta con Remito"
+                }
               </Button>
             </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      
-      {/* Receipt Dialog */}
+
+      {/* Modal de confirmación de venta */}
+      <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>¿Desea confirmar la venta?</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-4">
+            <p className="text-center text-lg">Esta acción finalizará la venta y generará el comprobante.</p>
+          </div>
+          <DialogFooter className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setConfirmDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={async () => {
+                setConfirmDialogOpen(false);
+                await finalizeSale();
+              }}
+              disabled={processSaleMutation.isPending}
+            >
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de recibo */}
       <Dialog open={showReceiptDialog} onOpenChange={setShowReceiptDialog}>
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-xl">Comprobante de Venta</DialogTitle>
-            <DialogHeader className="text-muted-foreground text-sm mt-1">
-              Venta realizada exitosamente. Puede imprimir o exportar el comprobante.
-            </DialogHeader>
+            <DialogTitle className="text-xl">
+              {completedSale?.documentType === "factura" ? "Factura" :
+               completedSale?.documentType === "remito" ? "Remito" :
+               "Comprobante"}
+            </DialogTitle>
+            <DialogDescription>
+              {completedSale?.documentType === "factura" ? "Factura generada exitosamente" :
+               completedSale?.documentType === "remito" ? "Remito generado exitosamente" :
+               "Documento generado exitosamente"}
+            </DialogDescription>
           </DialogHeader>
-          
-          {completedSale && (
+          {completedSale ? (
             <div className="py-4">
               <div className="mb-5 border rounded-lg p-4">
                 <div ref={receiptRef} className="w-full">
-                  {completedSale.documentType.startsWith('factura') ? (
-                    <InvoiceContent 
-                      invoice={completedSale} 
-                      items={completedSale.items}
-                      customer={completedSale.customer}
-                    />
-                  ) : (
-                    <div className="receipt-preview p-6 bg-white rounded-lg border border-dashed">
-                      <div className="text-center mb-4">
-                        <h3 className="font-mono font-bold text-lg">PUNTO PASTELERO</h3>
-                        <p className="font-mono text-sm">Avenida Siempre Viva 123, Springfield</p>
-                        <p className="font-mono text-sm">(555) 123-4567</p>
-                        <p className="font-mono text-sm">CUIT: 30-12345678-9</p>
-                      </div>
-                      <div className="border-t border-dashed my-4"></div>
-                      <div className="font-mono text-sm">
-                        <p><b>Fecha:</b> {new Date(completedSale.timestamp).toLocaleString()}</p>
-                        <p><b>Ticket #:</b> {completedSale.id || 'N/A'}</p>
-                        <p><b>Comprobante:</b> {completedSale.documentType}</p>
-                        <p><b>Cliente:</b> {completedSale.customer?.name || 'Consumidor Final'}</p>
-                        <p><b>Vendedor:</b> {completedSale.userId || 'N/A'}</p>
-                      </div>
-                      <div className="border-t border-dashed my-4"></div>
-                      <div className="font-mono text-sm">
-                        <p className="font-bold">PRODUCTOS</p>
-                        {completedSale.items.map((item: any, index: number) => (
-                          <div key={index} className="my-2">
-                            <div className="font-bold">{item.name}</div>
-                            <div>{item.quantity} x ${parseFloat(item.price).toFixed(2)} = ${parseFloat(item.total).toFixed(2)}</div>
-                            {item.isConversion && (
-                              <div className="text-xs">Presentación: {item.unit} (Factor: {item.conversionFactor})</div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                      <div className="border-t border-dashed my-4"></div>
-                      <div className="font-mono text-sm text-right">
-                        <p className="font-bold">TOTAL: ${parseFloat(completedSale.total).toFixed(2)}</p>
-                        {(completedSale.discountPercent > 0 || completedSale.surchargePercent > 0) && (
-                          <>
-                            <p className="text-xs mt-2">Subtotal: ${parseFloat(completedSale.subtotal).toFixed(2)}</p>
-                            {completedSale.discountPercent > 0 && (
-                              <p className="text-xs">Descuento ({completedSale.discountPercent}%): -${parseFloat((completedSale.discountAmount ?? 0).toString()).toFixed(2)}</p>
-                            )}
-                            {completedSale.surchargePercent > 0 && (
-                              <p className="text-xs">Recargo ({completedSale.surchargePercent}%): +${parseFloat(completedSale.surchargeAmount).toFixed(2)}</p>
-                            )}
-                          </>
-                        )}
-                      </div>
-                      <div className="font-mono text-xs text-center mt-4">
-                        <p>Gracias por su compra!</p>
-                        <p>Punto Pastelero</p>
-                      </div>
-                    </div>
-                  )}
+                  <InvoiceContent 
+                    invoice={completedSale}
+                    items={completedSale.items}
+                    customer={completedSale.customer}
+                  />
                 </div>
               </div>
-              
-              <DialogFooter className="flex flex-col sm:flex-row gap-3 justify-end">
-                <Button 
-                  variant="outline"
-                  onClick={() => setShowReceiptDialog(false)}
-                >
-                  Cerrar
-                </Button>
-                
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    // Generar un PDF con el comprobante (factura o remito)
-                    PDFService.generateInvoicePDF(
-                      completedSale,
-                      completedSale.items,
-                      completedSale.customer
-                    );
-                  }}
-                >
-                  Exportar a PDF
-                </Button>
-                
-                <ThermalTicket
-                  sale={completedSale}
-                  items={completedSale.items}
-                  customer={completedSale.customer}
-                  businessInfo={{
-                    name: 'PUNTO PASTELERO',
-                    address: 'Avenida Siempre Viva 123, Springfield',
-                    phone: '(555) 123-4567',
-                    taxId: '30-12345678-9'
-                  }}
-                />
-                
-                {completedSale.documentType.startsWith('factura') && (
+              {completedSale.items ? (
+                <DialogFooter className="flex flex-col sm:flex-row gap-3 justify-end">
+                  <ThermalTicket
+                    sale={completedSale}
+                    saleItems={completedSale.items}
+                    customerName={completedSale.customer?.name}
+                  />
                   <Button
                     onClick={() => {
-                      // Enviar por email
-                      toast({
-                        title: "Enviando por email",
-                        description: "El comprobante se enviará al correo del cliente"
-                      });
+                      let text = `Comprobante de venta%0A`;
+                      if (completedSale.items && completedSale.items.length > 0) {
+                        completedSale.items.forEach((item: any) => {
+                          text += `${item.name}: ${item.quantity} x $${parseFloat(item.price).toFixed(2)} = $${parseFloat(item.total).toFixed(2)}%0A`;
+                        });
+                      }
+                      text += `Total: $${completedSale.total}`;
+                      const url = `https://wa.me/?text=${text}`;
+                      window.open(url, "_blank");
                     }}
+                    variant="secondary"
                   >
-                    Enviar por Email
+                    Enviar por WhatsApp
                   </Button>
-                )}
-              </DialogFooter>
+                  <Button
+                    onClick={async () => {
+                      if (!receiptRef.current) return;
+                      const dataUrl = await toPng(receiptRef.current, { quality: 0.95 });
+                      const pdf = new jsPDF({
+                        orientation: "portrait",
+                        unit: "mm",
+                        format: "a4",
+                      });
+                      const imgProps = pdf.getImageProperties(dataUrl);
+                      const pdfWidth = pdf.internal.pageSize.getWidth();
+                      const pdfHeight = pdf.internal.pageSize.getHeight();
+                      const imgWidth = imgProps.width;
+                      const imgHeight = imgProps.height;
+                      const scale = pdfWidth / imgWidth;
+                      const scaledHeight = imgHeight * scale;
+                      const finalScale = scaledHeight > pdfHeight ? (pdfHeight / scaledHeight) * scale : scale;
+                      const finalWidth = imgWidth * finalScale;
+                      const finalHeight = imgHeight * finalScale;
+                      pdf.addImage(
+                        dataUrl,
+                        "PNG",
+                        (pdfWidth - finalWidth) / 2,
+                        10,
+                        finalWidth,
+                        finalHeight
+                      );
+                      const documentType = completedSale.documentType || "documento";
+                      const documentId = completedSale.id || Date.now();
+                      const fileName = `${documentType.replace("_", "")}_${documentId}.pdf`;
+                      pdf.save(fileName);
+                    }}
+                    variant="outline"
+                  >
+                    Exportar PDF
+                  </Button>
+                </DialogFooter>
+              ) : (
+                <div className="p-6 text-center">Cargando comprobante...</div>
+              )}
             </div>
+          ) : (
+            <div className="p-6 text-center">Cargando comprobante...</div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Modal de ticket térmico - Solo para ventas */}
+      {completedSale && completedSale.items && (completedSale.documentType === "factura" || completedSale.documentType === "remito") && (
+        <ThermalTicket
+          sale={completedSale}
+          saleItems={completedSale.items}
+          customerName={completedSale.customer?.name}
+        />
+      )}
     </div>
   );
-}
+};
 
 export { POSPage };
 export default POSPage;
