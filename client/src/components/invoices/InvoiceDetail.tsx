@@ -23,11 +23,18 @@ export const InvoiceContent = forwardRef<HTMLDivElement, InvoiceDetailProps>(
 
     const getDocumentTypeName = (type: string) => {
       switch (type) {
-        case 'remito': return 'Remito';
-        case 'factura_a': return 'Factura A';
-        case 'factura_b': return 'Factura B';
-        case 'factura_c': return 'Factura C';
-        default: return type;
+        case 'remito':
+          return 'Remito';
+        case 'remito_x':
+          return 'Remito X';
+        case 'factura_a':
+          return 'Factura A';
+        case 'factura_b':
+          return 'Factura B';
+        case 'factura_c':
+          return 'Factura C';
+        default:
+          return type;
       }
     };
 
