@@ -31,8 +31,13 @@ export async function comparePasswords(supplied: string, stored: string) {
 }
 
 export function setupAuth(app: Express) {
+  const { SESSION_SECRET } = process.env;
+  if (!SESSION_SECRET) {
+    throw new Error("SESSION_SECRET environment variable is required");
+  }
+
   const sessionSettings: session.SessionOptions = {
-    secret: process.env.SESSION_SECRET || "punto-pastelero-secret",
+    secret: SESSION_SECRET,
     resave: true,
     saveUninitialized: true,
     store: storage.sessionStore,
