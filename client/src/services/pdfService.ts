@@ -46,9 +46,14 @@ export const PDFService = {
       // Tipo de documento y número
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(12);
-      const docType = sale.documentType.startsWith('factura') 
-          ? sale.documentType.replace('_', ' ').toUpperCase() 
-          : 'REMITO';
+      let docType = '';
+      if (sale.documentType.startsWith('factura')) {
+        docType = sale.documentType.replace('_', ' ').toUpperCase();
+      } else if (sale.documentType === 'remito_x') {
+        docType = 'REMITO X';
+      } else {
+        docType = 'REMITO';
+      }
       pdf.text(docType, pageWidth - margin - pdf.getTextWidth(docType), 25);
       
       pdf.setFont('helvetica', 'normal');

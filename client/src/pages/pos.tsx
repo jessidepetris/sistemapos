@@ -73,7 +73,7 @@ const POSPage = () => {
   });
   const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
   const [barcodeInput, setBarcodeInput] = useState("");
-  const [documentType, setDocumentType] = useState<"factura" | "remito" | "pedido" | "presupuesto">("remito");
+  const [documentType, setDocumentType] = useState<"factura_c" | "remito_x" | "pedido" | "presupuesto">("remito_x");
   const [observations, setObservations] = useState("");
   const [printTicket, setPrintTicket] = useState(true);
   const [sendEmail, setSendEmail] = useState(false);
@@ -98,7 +98,7 @@ const POSPage = () => {
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [saleId, setSaleId] = useState<number | null>(null);
   const [showInvoice, setShowInvoice] = useState(false);
-  const [invoiceType, setInvoiceType] = useState<"remito" | "factura_c">("remito");
+  const [invoiceType, setInvoiceType] = useState<"remito_x" | "factura_c">("remito_x");
   const [showThermalTicket, setShowThermalTicket] = useState(false);
   const [showInvoicePDF, setShowInvoicePDF] = useState(false);
   const [printOptions, setPrintOptions] = useState({
@@ -219,7 +219,7 @@ const POSPage = () => {
       });
 
       // Mostrar el diálogo de recibo solo para ventas
-      if (data.documentType === "factura" || data.documentType === "remito") {
+      if (data.documentType === "factura_c" || data.documentType === "remito_x") {
         setShowReceiptDialog(true);
       }
       
@@ -609,7 +609,7 @@ const POSPage = () => {
       });
 
       // Mostrar opciones de impresión solo para facturas y remitos
-      if (documentType === "factura" || documentType === "remito") {
+      if (documentType === "factura_c" || documentType === "remito_x") {
         setShowThermalTicket(true);
       }
     } catch (error) {
@@ -678,7 +678,7 @@ const POSPage = () => {
   console.log('showReceiptDialog:', showReceiptDialog);
   
   const handleDocumentTypeChange = (value: string) => {
-    const newValue = value as "factura" | "remito" | "pedido" | "presupuesto";
+    const newValue = value as "factura_c" | "remito_x" | "pedido" | "presupuesto";
     setDocumentType(newValue);
     // Si es presupuesto o pedido, no permitir finalizar la venta
     if (newValue === "presupuesto" || newValue === "pedido") {
@@ -708,9 +708,9 @@ const POSPage = () => {
                       <SelectValue placeholder="Seleccionar tipo de comprobante" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="factura">Factura</SelectItem>
-                      <SelectItem value="remito">Remito</SelectItem>
-                      <SelectItem value="pedido">Pedido</SelectItem>
+                      <SelectItem value="factura_c">Factura C</SelectItem>
+                      <SelectItem value="remito_x">Remito X</SelectItem>
+                      <SelectItem value="pedido">Nota de Pedido</SelectItem>
                       <SelectItem value="presupuesto">Presupuesto</SelectItem>
                     </SelectContent>
                   </Select>
@@ -1042,8 +1042,8 @@ const POSPage = () => {
                     >
                       {documentType === "presupuesto" ? "Guardar Presupuesto" :
                        documentType === "pedido" ? "Guardar Pedido" :
-                       documentType === "factura" ? "Finalizar Venta con Factura" :
-                       "Finalizar Venta con Remito"}
+                       documentType === "factura_c" ? "Finalizar Venta con Factura C" :
+                       "Finalizar Venta con Remito X"}
                     </Button>
                   </div>
                 </div>
@@ -1060,14 +1060,14 @@ const POSPage = () => {
             <DialogTitle className="text-xl">
               {documentType === "presupuesto" ? "Guardar Presupuesto" :
                documentType === "pedido" ? "Guardar Pedido" :
-               documentType === "factura" ? "Finalizar Venta con Factura" :
-               "Finalizar Venta con Remito"}
+               documentType === "factura_c" ? "Finalizar Venta con Factura C" :
+               "Finalizar Venta con Remito X"}
             </DialogTitle>
             <DialogHeader className="text-muted-foreground text-sm mt-1">
               {documentType === "presupuesto" ? "Complete los datos para guardar el presupuesto" :
                documentType === "pedido" ? "Complete los datos para guardar el pedido" :
-               documentType === "factura" ? "Complete los datos para finalizar la venta y generar la factura" :
-               "Complete los datos para finalizar la venta y generar el remito"}
+               documentType === "factura_c" ? "Complete los datos para finalizar la venta y generar la factura C" :
+               "Complete los datos para finalizar la venta y generar el remito X"}
             </DialogHeader>
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
@@ -1101,9 +1101,9 @@ const POSPage = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="factura">Factura</SelectItem>
-                      <SelectItem value="remito">Remito</SelectItem>
-                      <SelectItem value="pedido">Pedido</SelectItem>
+                      <SelectItem value="factura_c">Factura C</SelectItem>
+                      <SelectItem value="remito_x">Remito X</SelectItem>
+                      <SelectItem value="pedido">Nota de Pedido</SelectItem>
                       <SelectItem value="presupuesto">Presupuesto</SelectItem>
                     </SelectContent>
                   </Select>
@@ -1492,8 +1492,8 @@ const POSPage = () => {
                   </>
                 ) : documentType === "presupuesto" ? "Guardar Presupuesto" :
                    documentType === "pedido" ? "Guardar Pedido" :
-                   documentType === "factura" ? "Finalizar Venta con Factura" :
-                   "Finalizar Venta con Remito"
+                   documentType === "factura_c" ? "Finalizar Venta con Factura C" :
+                   "Finalizar Venta con Remito X"
                 }
               </Button>
             </div>
@@ -1532,13 +1532,13 @@ const POSPage = () => {
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl">
-              {completedSale?.documentType === "factura" ? "Factura" :
-               completedSale?.documentType === "remito" ? "Remito" :
+              {completedSale?.documentType === "factura_c" ? "Factura C" :
+               completedSale?.documentType === "remito_x" ? "Remito X" :
                "Comprobante"}
             </DialogTitle>
             <DialogDescription>
-              {completedSale?.documentType === "factura" ? "Factura generada exitosamente" :
-               completedSale?.documentType === "remito" ? "Remito generado exitosamente" :
+              {completedSale?.documentType === "factura_c" ? "Factura C generada exitosamente" :
+               completedSale?.documentType === "remito_x" ? "Remito X generado exitosamente" :
                "Documento generado exitosamente"}
             </DialogDescription>
           </DialogHeader>
@@ -1624,7 +1624,7 @@ const POSPage = () => {
       </Dialog>
 
       {/* Modal de ticket térmico - Solo para ventas */}
-      {completedSale && completedSale.items && (completedSale.documentType === "factura" || completedSale.documentType === "remito") && (
+      {completedSale && completedSale.items && (completedSale.documentType === "factura_c" || completedSale.documentType === "remito_x") && (
         <ThermalTicket
           sale={completedSale}
           saleItems={completedSale.items}
