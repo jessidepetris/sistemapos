@@ -489,6 +489,8 @@ export class MemStorage implements IStorage {
       active: insertProduct.active ?? true,
       description: insertProduct.description || null,
       baseUnit: insertProduct.baseUnit || "unidad",
+      purchaseUnit: insertProduct.purchaseUnit || null,
+      purchaseQty: insertProduct.purchaseQty || null,
       barcodes: insertProduct.barcodes || null,
       price: insertProduct.price || "0",
       cost: insertProduct.cost || null,
