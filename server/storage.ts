@@ -65,7 +65,7 @@ export interface IStorage {
   // Account Transactions
   getAccountTransaction(id: number): Promise<AccountTransaction | undefined>;
   getAccountTransactions(accountId: number): Promise<AccountTransaction[]>;
-  createAccountTransaction(transaction: any): Promise<AccountTransaction>;
+  createAccountTransaction(transaction: InsertAccountTransaction): Promise<AccountTransaction>;
   
   // Sales
   getSale(id: number): Promise<Sale | undefined>;
@@ -618,7 +618,7 @@ export class MemStorage implements IStorage {
       });
   }
   
-  async createAccountTransaction(insertTransaction: any): Promise<AccountTransaction> {
+  async createAccountTransaction(insertTransaction: InsertAccountTransaction): Promise<AccountTransaction> {
     const id = this.accountTransactionIdCounter++;
     const transaction: AccountTransaction = { 
       ...insertTransaction, 
