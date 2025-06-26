@@ -1565,6 +1565,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ======= ENDPOINTS DE LOGÍSTICA ======= //
 
+  // Endpoint de estadísticas generales para logística
+  app.get("/api/logistics/stats", async (_req, res) => {
+    try {
+      const deliveries = await storage.getAllDeliveries();
+      const vehicles = await storage.getAllVehicles();
+      const routes = await storage.getAllDeliveryRoutes();
+      const assignments = await storage.getAllRouteAssignments();
+
+      const stats = {
+        pendingDeliveries: deliveries.filter(d => d.status === "pending").length,
+        inTransitDeliveries: deliveries.filter(d => d.status === "assigned" || d.status === "in_transit").length,
+        completedDeliveries: deliveries.filter(d => d.status === "delivered").length,
+        totalVehicles: vehicles.length,
+        activeVehicles: vehicles.filter(v => v.active).length,
+        totalRoutes: routes.length,
+        pendingAssignments: assignments.filter(a => a.status === "pending").length,
+      };
+
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener estadísticas", error: (error as Error).message });
+    }
+  });
+
   // Vehículos
   app.get("/api/vehicles", async (req, res) => {
     try {

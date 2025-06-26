@@ -141,6 +141,7 @@ export interface IStorage {
   
   // Route Assignments
   getRouteAssignment(id: number): Promise<RouteAssignment | undefined>;
+  getAllRouteAssignments(): Promise<RouteAssignment[]>;
   getRouteAssignmentsByDate(date: Date): Promise<RouteAssignment[]>;
   getRouteAssignmentsByDriver(driverId: number): Promise<RouteAssignment[]>;
   createRouteAssignment(assignment: InsertRouteAssignment): Promise<RouteAssignment>;
@@ -1368,6 +1369,10 @@ export class MemStorage implements IStorage {
   // Route Assignments
   async getRouteAssignment(id: number): Promise<RouteAssignment | undefined> {
     return this.routeAssignments.get(id);
+  }
+
+  async getAllRouteAssignments(): Promise<RouteAssignment[]> {
+    return Array.from(this.routeAssignments.values());
   }
   
   async getRouteAssignmentsByDate(date: Date): Promise<RouteAssignment[]> {
