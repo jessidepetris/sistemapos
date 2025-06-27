@@ -61,6 +61,10 @@ const productFormSchema = insertProductSchema.extend({
   category: z.string().optional(),
   imageUrl: z.string().optional(),
   supplierCode: z.string().optional(),
+
+  // Unidad de compra y cantidad que contiene
+  purchaseUnit: z.string().optional(),
+  purchaseQty: z.coerce.number().min(0).optional(),
   
   // Campos para cálculo automático del precio
   iva: z.coerce.number().min(0).default(21),
@@ -222,6 +226,8 @@ export default function ProductsPage() {
       category: "",
       imageUrl: "",
       supplierCode: "",
+      purchaseUnit: "",
+      purchaseQty: 0,
       conversionRates: [],
       conversionUnit: "",
       conversionFactor: 0,
@@ -235,6 +241,16 @@ export default function ProductsPage() {
   
   // Handle changes to isBulk to show/hide conversion rates fields
   const watchIsBulk = form.watch("isBulk");
+
+  // Recalcular precio de venta cuando cambian costo, IVA, flete o ganancia
+  useEffect(() => {
+    const subscription = form.watch((_values, { name }) => {
+      if (["cost", "iva", "shipping", "profit"].includes(name ?? "")) {
+        calculateSellingPrice();
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
   
   // Add a new conversion rate
   const addConversionRate = () => {
@@ -522,6 +538,8 @@ export default function ProductsPage() {
       stockAlert: product.stockAlert ? parseFloat(product.stockAlert) : 0,
       supplierId: product.supplierId,
       supplierCode: product.supplierCode || "",
+      purchaseUnit: product.purchaseUnit || "",
+      purchaseQty: product.purchaseQty ? parseFloat(product.purchaseQty) : 0,
       category: product.category || "",
       imageUrl: product.imageUrl || "",
       isRefrigerated: product.isRefrigerated,
@@ -570,6 +588,8 @@ export default function ProductsPage() {
       category: "",
       imageUrl: "",
       supplierCode: "",
+      purchaseUnit: "",
+      purchaseQty: 0,
       conversionRates: [],
       conversionUnit: "",
       conversionFactor: 0,
@@ -1028,6 +1048,39 @@ export default function ProductsPage() {
                           </FormItem>
                         )}
                       />
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="purchaseUnit"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Unidad de Compra</FormLabel>
+                              <FormControl>
+                                <Input placeholder="ej. caja" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="purchaseQty"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Cantidad por Unidad</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" {...field} />
+                              </FormControl>
+                              <FormDescription>
+                                Número de {form.watch("baseUnit")}
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
                       
                       <div className="flex flex-col space-y-4 mt-4">
                         <FormField
