@@ -122,7 +122,7 @@ export function BarcodesTab({ form, barcodesList, setBarcodesList }: BarcodesTab
               }
             />
           </div>
-         
+
           <div className="mt-4">
             <h4 className="text-sm font-medium mb-3">Códigos de Barras Registrados:</h4>
             {barcodesList.length === 0 ? (

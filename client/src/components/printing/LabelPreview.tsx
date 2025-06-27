@@ -61,6 +61,7 @@ export function LabelPreview({
     >
       <div>{description}</div>
       <svg ref={svgRef} style={{ marginTop: '2mm' }} />
+      <div style={{ fontFamily: 'monospace', marginTop: '1mm' }}>{barcode}</div>
     </div>
   );
 }

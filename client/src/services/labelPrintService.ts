@@ -70,6 +70,7 @@ export const LabelPrintService = {
             <div id="label-container">
               <div>${description}</div>
               <svg id="barcode"></svg>
+              <div style="font-family: monospace; margin-top: 2mm">${barcode}</div>
             </div>
             <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
             <script>
@@ -92,6 +93,7 @@ export const LabelPrintService = {
           .align('center')
           .text(description)
           .barcode('CODE128', barcode)
+          .text(barcode)
           .cut();
         const blob = new Blob([escpos.getBuffer()], { type: 'application/octet-stream' });
         localStorage.setItem('lastEscposLabel', URL.createObjectURL(blob));
