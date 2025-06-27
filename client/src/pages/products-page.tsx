@@ -77,6 +77,9 @@ const productFormSchema = insertProductSchema.extend({
   profit: z.coerce.number().min(0).default(55),
   wholesaleProfit: z.coerce.number().min(0).default(35),
   supplierDiscount: z.coerce.number().min(0).max(100).optional().default(0),
+
+  // Cantidad de unidades por bulto
+  unitsPerPack: z.coerce.number().min(1).default(1),
   
   // For bulk products, we need to manage conversion rates
   // This will be transformed before submission
@@ -309,6 +312,7 @@ export default function ProductsPage() {
       isComposite: false,
       active: true,    // Activo por defecto
       webVisible: false, // No visible en web por defecto
+      unitsPerPack: 1,
       category: "",
       categoryIds: [],
       imageUrl: "",
@@ -501,6 +505,7 @@ export default function ProductsPage() {
       profit: product.profit || 55,
       wholesaleProfit: product.wholesaleProfit || 35,
       supplierDiscount: product.supplierDiscount || 0,
+      unitsPerPack: product.unitsPerPack ? parseFloat(product.unitsPerPack) : 1,
       supplierId: product.supplierId,
       supplierCode: product.supplierCode || "",
       category: product.category || "",
@@ -555,6 +560,7 @@ export default function ProductsPage() {
       active: true,    // Activo por defecto
       webVisible: false, // No visible en web por defecto
       isDiscontinued: false, // No discontinuado por defecto
+      unitsPerPack: 1,
       category: "",
       categoryIds: [],
       imageUrl: "",
