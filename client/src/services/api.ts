@@ -1,4 +1,5 @@
-#export async function createSale(saleData: any) {
+/*
+export async function createSale(saleData: any) {
   try {
     // Verificar si la sesión está activa antes de hacer la petición
     const response = await fetch(`${this.baseUrl}/api/sales`, {
@@ -30,4 +31,7 @@
     console.error('Error al crear la venta:', error);
     throw error;
   }
-} 
+}
+*/
+
+export {};
