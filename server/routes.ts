@@ -2919,7 +2919,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let cart = existingCarts.find(c => c.status === 'active');
       
       if (!cart) {
-        return res.status(404).json({ message: "No se encontró un carrito activo" });
+        // Si no hay un carrito activo, simplemente responder éxito para que la
+        // operación sea idempotente
+        return res.json({ success: true });
       }
       
       // Obtener los items del carrito

@@ -174,7 +174,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const clearCartMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("DELETE", "/api/web/cart");
-      if (!res.ok) {
+      // Si el servidor indica que no hay carrito activo, tratamos la respuesta
+      // como éxito para mantener un comportamiento idempotente
+      if (!res.ok && res.status !== 404) {
         const error = await res.json();
         throw new Error(error.message || "Error al vaciar el carrito");
       }
