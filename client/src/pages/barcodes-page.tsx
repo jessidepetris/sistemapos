@@ -47,6 +47,7 @@ export default function BarcodesPage() {
                 <SelectItem value="circle">Circular</SelectItem>
               </SelectContent>
             </Select>
+
             <LabelPreview
               description="Vista Previa"
               barcode={products?.[0]?.barcodes?.[0] || '0000000000000'}

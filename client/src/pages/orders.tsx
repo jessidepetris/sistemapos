@@ -69,6 +69,7 @@ interface Order {
   deliveryMethod: string;
   route?: Route;
   shippingInfo?: string;
+  source?: string;
 }
 
 interface OrderItem {
@@ -779,6 +780,7 @@ export default function OrdersPage() {
                           <TableHead>Fecha</TableHead>
                           <TableHead>Entrega</TableHead>
                           <TableHead>Método</TableHead>
+                          <TableHead>Origen</TableHead>
                           <TableHead>Total</TableHead>
                           <TableHead>Estado</TableHead>
                           <TableHead className="text-right">Acciones</TableHead>
@@ -787,7 +789,7 @@ export default function OrdersPage() {
                       <TableBody>
                         {isLoading ? (
                           <TableRow>
-                            <TableCell colSpan={8} className="text-center py-10">
+                            <TableCell colSpan={9} className="text-center py-10">
                               Cargando pedidos...
                             </TableCell>
                           </TableRow>
@@ -823,6 +825,11 @@ export default function OrdersPage() {
                                     Sin asignar
                                   </Badge>
                                 )}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className={order.source === 'web' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}>
+                                  {order.source === 'web' ? 'Web' : 'Manual'}
+                                </Badge>
                               </TableCell>
                               <TableCell>${parseFloat(order.total).toFixed(2)}</TableCell>
                               <TableCell>

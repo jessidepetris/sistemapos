@@ -83,11 +83,17 @@ export const products = pgTable("products", {
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
   wholesalePrice: numeric("wholesale_price", { precision: 10, scale: 2 }),
   cost: numeric("cost", { precision: 10, scale: 2 }),
+  // Costo del bulto en la misma moneda que el costo unitario
+  packCost: numeric("pack_cost", { precision: 10, scale: 2 }),
   costCurrency: text("cost_currency").notNull().default("ARS"), // Moneda del costo
   stock: numeric("stock", { precision: 10, scale: 2 }).notNull().default("0"),
   reservedStock: numeric("reserved_stock", { precision: 10, scale: 2 }).notNull().default("0"),
   stockAlert: numeric("stock_alert", { precision: 10, scale: 2 }),
   supplierId: integer("supplier_id").references(() => suppliers.id),
+  // Unidad en la que se compra el producto (ej. caja)
+  purchaseUnit: text("purchase_unit"),
+  // Cantidad de unidades base contenidas en la unidad de compra
+  purchaseQty: numeric("purchase_qty", { precision: 10, scale: 2 }),
   // Código de proveedor para facilitar la actualización de precios
   supplierCode: text("supplier_code"),
   isRefrigerated: boolean("is_refrigerated").default(false),
@@ -129,10 +135,13 @@ export const insertProductSchema = createInsertSchema(products).pick({
   price: true,
   wholesalePrice: true,
   cost: true,
+  packCost: true,
   costCurrency: true,
   stock: true,
   stockAlert: true,
   supplierId: true,
+  purchaseUnit: true,
+  purchaseQty: true,
   supplierCode: true,
   isRefrigerated: true,
   isBulk: true,

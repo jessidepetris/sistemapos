@@ -290,6 +290,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/products", async (req, res) => {
     try {
       const productData = { ...req.body };
+
+      // Calcular costo unitario si se proporciona costo por bulto
+      const unitsForCalc = parseFloat(productData.unitsPerPack?.toString() || "1");
+      if (!productData.cost && productData.packCost && unitsForCalc > 0) {
+        productData.cost = (parseFloat(productData.packCost) / unitsForCalc).toString();
+      }
       
       // Agregar la fecha de última actualización
       productData.lastUpdated = new Date().toISOString();
@@ -305,6 +311,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       let productData = { ...req.body };
+
+      // Calcular costo unitario si se proporciona costo por bulto
+      const unitsForCalc = parseFloat(productData.unitsPerPack?.toString() || "1");
+      if (!productData.cost && productData.packCost && unitsForCalc > 0) {
+        productData.cost = (parseFloat(productData.packCost) / unitsForCalc).toString();
+      }
       
       console.log(`[PUT /api/products/${id}] Recibida solicitud de actualización con datos:`, JSON.stringify(productData, null, 2));
       
@@ -4310,29 +4322,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Actualizar el costo de cada producto y recalcular precios
       const updatedProducts = [];
       for (const product of products) {
-        if (product.cost) {
-          const currentCost = parseFloat(product.cost.toString());
-          const newCost = currentCost * (1 + percentage / 100);
-          
-          // Redondear a 2 decimales
-          const roundedCost = Math.round(newCost * 100) / 100;
-          
+        const unitsPerPack = parseFloat(product.unitsPerPack?.toString() || "1");
+
+        // Determinar el costo actual y el costo de bulto, si existe
+        const currentPackCost = product.packCost ? parseFloat(product.packCost.toString()) : null;
+        const currentCost = parseFloat(product.cost?.toString() || "0");
+
+        if (currentPackCost !== null) {
+          // Si existe costo por bulto, aplicar aumento sobre ese valor
+          const newPackCost = currentPackCost * (1 + percentage / 100);
+          const unitCost = unitsPerPack > 0 ? newPackCost / unitsPerPack : newPackCost;
+          const roundedUnitCost = Math.round(unitCost * 100) / 100;
+
           // Obtener los valores actuales del producto
           const ivaRate = parseFloat(product.iva?.toString() || "21");
           const shippingRate = parseFloat(product.shipping?.toString() || "0");
           const profitRate = parseFloat(product.profit?.toString() || "55");
           const wholesaleProfitRate = parseFloat(product.wholesaleProfit?.toString() || "35");
-          
-          // Calcular nuevo precio minorista
-          const costWithIva = roundedCost * (1 + (ivaRate / 100));
-          const costWithShipping = costWithIva * (1 + (shippingRate / 100));
-          const newPrice = Math.round(costWithShipping * (1 + (profitRate / 100)) * 100) / 100;
-          
-          // Calcular nuevo precio mayorista
-          const newWholesalePrice = Math.round(costWithShipping * (1 + (wholesaleProfitRate / 100)) * 100) / 100;
-          
-          // Actualizar el producto con el nuevo costo y precios
-          const updatedProduct = await storage.updateProduct(product.id, { 
+
+          const costWithIva = roundedUnitCost * (1 + ivaRate / 100);
+          const costWithShipping = costWithIva * (1 + shippingRate / 100);
+          const newPrice = Math.round(costWithShipping * (1 + profitRate / 100) * 100) / 100;
+          const newWholesalePrice = Math.round(costWithShipping * (1 + wholesaleProfitRate / 100) * 100) / 100;
+
+          const updatedProduct = await storage.updateProduct(product.id, {
+            cost: roundedUnitCost.toString(),
+            packCost: newPackCost.toString(),
+            price: newPrice.toString(),
+            wholesalePrice: newWholesalePrice.toString(),
+            lastUpdated: new Date()
+          });
+          updatedProducts.push(updatedProduct);
+        } else if (currentCost) {
+          // Si no hay costo por bulto, aumentar el costo unitario directamente
+          const newCost = currentCost * (1 + percentage / 100);
+          const roundedCost = Math.round(newCost * 100) / 100;
+
+          const ivaRate = parseFloat(product.iva?.toString() || "21");
+          const shippingRate = parseFloat(product.shipping?.toString() || "0");
+          const profitRate = parseFloat(product.profit?.toString() || "55");
+          const wholesaleProfitRate = parseFloat(product.wholesaleProfit?.toString() || "35");
+
+          const costWithIva = roundedCost * (1 + ivaRate / 100);
+          const costWithShipping = costWithIva * (1 + shippingRate / 100);
+          const newPrice = Math.round(costWithShipping * (1 + profitRate / 100) * 100) / 100;
+          const newWholesalePrice = Math.round(costWithShipping * (1 + wholesaleProfitRate / 100) * 100) / 100;
+
+          const updatedProduct = await storage.updateProduct(product.id, {
             cost: roundedCost.toString(),
             price: newPrice.toString(),
             wholesalePrice: newWholesalePrice.toString(),
@@ -4393,7 +4429,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Procesar cada actualización de producto
       for (const update of productUpdates) {
-        const { supplierCode, newCost } = update;
+        const { supplierCode, packCost } = update;
         
         if (!supplierCode) {
           results.errors.push({
@@ -4404,16 +4440,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           continue;
         }
         
-        if (typeof newCost !== 'number' || isNaN(newCost)) {
+        if (typeof packCost !== 'number' || isNaN(packCost)) {
           results.errors.push({
             supplierCode,
             message: 'Costo inválido',
-            details: `El costo proporcionado (${newCost}) no es un número válido`
+            details: `El costo proporcionado (${packCost}) no es un número válido`
           });
           continue;
         }
-        
-        if (newCost < 0) {
+
+        if (packCost < 0) {
           results.errors.push({
             supplierCode,
             message: 'Costo inválido',
@@ -4440,15 +4476,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const profitRate = parseFloat(product.profit?.toString() || "55");
           const wholesaleProfitRate = parseFloat(product.wholesaleProfit?.toString() || "35");
 
-          // Si el producto se compra por bulto, calcular el costo unitario
-          const unitsPerPack = parseFloat(product.unitsPerPack?.toString() || "1");
-          const unitCost = unitsPerPack > 0 ? newCost / unitsPerPack : newCost;
+// Si el producto se compra por bulto, calcular el costo unitario
+const unitsPerPack = parseFloat(product.unitsPerPack?.toString() || "1");
+const unitCost = unitsPerPack > 0 ? packCost / unitsPerPack : packCost;
 
-          // Preparar datos de actualización
-          const updateData: any = {
-            cost: unitCost.toString(),
-            lastUpdated: new Date()
-          };
+// Preparar datos de actualización
+const updateData: any = {
+  cost: unitCost.toString(),
+  packCost: packCost.toString(),
+  lastUpdated: new Date()
+};
 
           // Solo actualizar precios si no se debe mantener los actuales
           if (!keepCurrentPrices) {
