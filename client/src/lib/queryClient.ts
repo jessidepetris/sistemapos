@@ -1,6 +1,9 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+// Base URL used by the helper methods below. By default we rely on a
+// relative path so the API requests go to the same origin as the
+// frontend, which is the case in development.
+const API_URL = import.meta.env.VITE_API_URL || "";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
