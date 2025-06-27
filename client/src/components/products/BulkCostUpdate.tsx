@@ -211,15 +211,15 @@ export function BulkCostUpdate() {
           const productUpdates = results.data.map((row: any) => {
             // Si tiene encabezados, usar nombres de columnas, si no, usar índices
             const supplierCode = hasHeaders ? row.supplierCode || row.codigo : row[0];
-            const newCost = hasHeaders 
-              ? parseFloat(row.cost || row.costo || row.precio) 
+            const packCost = hasHeaders
+              ? parseFloat(row.packCost || row.costo || row.precio)
               : parseFloat(row[1]);
             
             return {
               supplierCode,
-              newCost: isNaN(newCost) ? null : newCost
+              packCost: isNaN(packCost) ? null : packCost
             };
-          }).filter((item: any) => item.supplierCode && item.newCost !== null);
+          }).filter((item: any) => item.supplierCode && item.packCost !== null);
           
           if (productUpdates.length === 0) {
             toast({
