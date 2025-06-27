@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { MoreHorizontal, FileText } from "lucide-react";
 import {
@@ -18,33 +18,32 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
-
-interface Budget {
-  id: string;
-  number: string;
-  customer: {
-    name: string;
-  };
-  total: number;
-  status: "pending" | "approved" | "rejected";
-  createdAt: string;
-}
-
-const budgets: Budget[] = [
-  {
-    id: "1",
-    number: "P-0001",
-    customer: {
-      name: "Cliente Ejemplo",
-    },
-    total: 15000,
-    status: "pending",
-    createdAt: "2024-04-30T12:00:00Z",
-  },
-];
+import { quotationService } from "@/services/quotationService";
+import { Quotation } from "@/types/quotation";
 
 export function BudgetsTable() {
-  const [selectedBudget, setSelectedBudget] = useState<Budget | null>(null);
+  const [budgets, setBudgets] = useState<Quotation[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await quotationService.getQuotations();
+        if (Array.isArray(data)) {
+          setBudgets(data);
+        } else {
+          console.error("Unexpected data format while fetching quotations", data);
+          setBudgets([]);
+        }
+      } catch (err) {
+        console.error("Error loading quotations", err);
+        setBudgets([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("es-AR", {
@@ -54,12 +53,16 @@ export function BudgetsTable() {
     });
   };
 
+  if (loading) {
+    return <div className="p-4">Cargando...</div>;
+  }
+
   return (
     <div className="rounded-md border">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Número</TableHead>
+            <TableHead>ID</TableHead>
             <TableHead>Cliente</TableHead>
             <TableHead>Total</TableHead>
             <TableHead>Estado</TableHead>
@@ -70,9 +73,9 @@ export function BudgetsTable() {
         <TableBody>
           {budgets.map((budget) => (
             <TableRow key={budget.id}>
-              <TableCell className="font-medium">{budget.number}</TableCell>
-              <TableCell>{budget.customer.name}</TableCell>
-              <TableCell>{formatCurrency(budget.total)}</TableCell>
+              <TableCell className="font-medium">{budget.id}</TableCell>
+              <TableCell>{budget.clientId}</TableCell>
+              <TableCell>{formatCurrency(parseFloat(budget.totalAmount), "ARS")}</TableCell>
               <TableCell>
                 <Badge
                   variant={
@@ -90,7 +93,7 @@ export function BudgetsTable() {
                     : "Rechazado"}
                 </Badge>
               </TableCell>
-              <TableCell>{formatDate(budget.createdAt)}</TableCell>
+              <TableCell>{formatDate(budget.dateCreated)}</TableCell>
               <TableCell>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

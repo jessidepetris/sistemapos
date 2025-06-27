@@ -168,11 +168,18 @@ export function InvoicePDF({ invoiceRef, documentId, documentType }: InvoicePDFP
 
   const getDocumentName = (type: string) => {
     switch (type) {
-      case 'remito': return 'Remito';
-      case 'factura_a': return 'Factura_A';
-      case 'factura_b': return 'Factura_B';
-      case 'factura_c': return 'Factura_C';
-      default: return 'Documento';
+      case 'remito':
+        return 'Remito';
+      case 'remito_x':
+        return 'Remito_X';
+      case 'factura_a':
+        return 'Factura_A';
+      case 'factura_b':
+        return 'Factura_B';
+      case 'factura_c':
+        return 'Factura_C';
+      default:
+        return 'Documento';
     }
   };
 

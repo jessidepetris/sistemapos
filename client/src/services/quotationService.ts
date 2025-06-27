@@ -1,7 +1,10 @@
 import { QuotationWithItems, QuotationFormData } from "../types/quotation";
 import { apiRequest } from "@/lib/queryClient";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
+// Base URL for API requests. When VITE_API_URL is not provided we
+// fallback to "/api" so requests are made relative to the current
+// origin (the backend runs on the same server during development).
+const API_URL = import.meta.env.VITE_API_URL || "/api";
 
 export const quotationService = {
   async createQuotation(data: QuotationFormData): Promise<QuotationWithItems> {

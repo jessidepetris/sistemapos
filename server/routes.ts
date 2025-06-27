@@ -1565,6 +1565,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ======= ENDPOINTS DE LOGÍSTICA ======= //
 
+  // Endpoint de estadísticas generales para logística
+  app.get("/api/logistics/stats", async (_req, res) => {
+    try {
+      const deliveries = await storage.getAllDeliveries();
+      const vehicles = await storage.getAllVehicles();
+      const routes = await storage.getAllDeliveryRoutes();
+      const assignments = await storage.getAllRouteAssignments();
+
+      const stats = {
+        pendingDeliveries: deliveries.filter(d => d.status === "pending").length,
+        inTransitDeliveries: deliveries.filter(d => d.status === "assigned" || d.status === "in_transit").length,
+        completedDeliveries: deliveries.filter(d => d.status === "delivered").length,
+        totalVehicles: vehicles.length,
+        activeVehicles: vehicles.filter(v => v.active).length,
+        totalRoutes: routes.length,
+        pendingAssignments: assignments.filter(a => a.status === "pending").length,
+      };
+
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener estadísticas", error: (error as Error).message });
+    }
+  });
+
   // Vehículos
   app.get("/api/vehicles", async (req, res) => {
     try {
@@ -4415,20 +4439,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const shippingRate = parseFloat(product.shipping?.toString() || "0");
           const profitRate = parseFloat(product.profit?.toString() || "55");
           const wholesaleProfitRate = parseFloat(product.wholesaleProfit?.toString() || "35");
-          
+
+          // Si el producto se compra por bulto, calcular el costo unitario
+          const unitsPerPack = parseFloat(product.unitsPerPack?.toString() || "1");
+          const unitCost = unitsPerPack > 0 ? newCost / unitsPerPack : newCost;
+
           // Preparar datos de actualización
-          const updateData: any = { 
-            cost: newCost.toString(),
+          const updateData: any = {
+            cost: unitCost.toString(),
             lastUpdated: new Date()
           };
-          
+
           // Solo actualizar precios si no se debe mantener los actuales
           if (!keepCurrentPrices) {
-            // Calcular nuevo precio minorista
-            const costWithIva = newCost * (1 + (ivaRate / 100));
+            // Calcular nuevo precio minorista partiendo del costo unitario
+            const costWithIva = unitCost * (1 + (ivaRate / 100));
             const costWithShipping = costWithIva * (1 + (shippingRate / 100));
             const newPrice = Math.round(costWithShipping * (1 + (profitRate / 100)) * 100) / 100;
-            
+
             // Calcular nuevo precio mayorista
             const newWholesalePrice = Math.round(costWithShipping * (1 + (wholesaleProfitRate / 100)) * 100) / 100;
             
@@ -4567,7 +4595,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }).returning();
 
       // Agregar los items del presupuesto
-      const quotationItems = items.map((item: any) => ({
+      const quotationItemsData = items.map((item: any) => ({
         quotationId: quotation.id,
         productId: item.productId,
         quantity: item.quantity.toString(),
@@ -4575,7 +4603,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subtotal: item.subtotal.toString(),
       }));
 
-      await db.insert(quotationItems).values(quotationItems);
+      await db.insert(quotationItems).values(quotationItemsData);
 
       return res.status(201).json({ success: true, quotation });
     } catch (error) {

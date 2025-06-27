@@ -10,6 +10,8 @@ const bankAccountSchema = z.object({
   isActive: z.boolean().default(true)
 });
 
+export type BankAccountData = z.infer<typeof bankAccountSchema>;
+
 export async function getBankAccounts() {
   try {
     console.log("Obteniendo todas las cuentas bancarias...");
@@ -22,7 +24,7 @@ export async function getBankAccounts() {
   }
 }
 
-export async function createBankAccount(data: any) {
+export async function createBankAccount(data: BankAccountData) {
   try {
     console.log("Intentando crear nueva cuenta bancaria con datos:", data);
     
@@ -43,7 +45,7 @@ export async function createBankAccount(data: any) {
   }
 }
 
-export async function updateBankAccount(id: number, data: any) {
+export async function updateBankAccount(id: number, data: BankAccountData) {
   try {
     console.log(`Intentando actualizar cuenta bancaria con ID ${id} con datos:`, data);
     

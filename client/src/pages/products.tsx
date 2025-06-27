@@ -1270,13 +1270,30 @@ export default function ProductsPage() {
                           <FormItem>
                             <FormLabel>Código de Proveedor</FormLabel>
                             <FormControl>
-                              <Input 
-                                placeholder="Código usado por el proveedor" 
-                                {...field} 
+                              <Input
+                                placeholder="Código usado por el proveedor"
+                                {...field}
                               />
                             </FormControl>
                             <FormDescription>
                               Útil para actualización masiva de precios
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="unitsPerPack"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Unidades por Bulto</FormLabel>
+                            <FormControl>
+                              <Input type="number" step="1" min="1" {...field} />
+                            </FormControl>
+                            <FormDescription>
+                              Cantidad de unidades que trae el bulto
                             </FormDescription>
                             <FormMessage />
                           </FormItem>

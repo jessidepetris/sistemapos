@@ -141,12 +141,12 @@ export function BudgetFormDialog({ open, onOpenChange }: BudgetFormDialogProps) 
     try {
       const budgetData = {
         customerId: selectedCustomerId,
-        items: cart.map(item => ({
+        items: cart.map((item) => ({
           productId: item.productId,
           quantity: item.quantity,
           unit: item.unit,
           price: item.price,
-          total: item.total
+          total: item.total,
         })),
         subtotal: cartSubtotal,
         discount: discountAmount,
@@ -155,11 +155,22 @@ export function BudgetFormDialog({ open, onOpenChange }: BudgetFormDialogProps) 
         paymentMethod,
         observations,
         validityDays,
-        status: "pending"
+        status: "pending",
       };
 
-      // TODO: Implement budget creation API call
-      // await apiRequest("POST", "/api/budgets", budgetData);
+      await apiRequest("POST", "/api/quotations", {
+        clientId: budgetData.customerId,
+        dateValidUntil: new Date(
+          Date.now() + budgetData.validityDays * 24 * 60 * 60 * 1000
+        ).toISOString(),
+        notes: budgetData.observations,
+        items: budgetData.items.map((i) => ({
+          productId: i.productId,
+          quantity: i.quantity,
+          unitPrice: i.price,
+          subtotal: i.total,
+        })),
+      });
 
       toast({
         title: "Presupuesto creado",

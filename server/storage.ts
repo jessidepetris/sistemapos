@@ -65,7 +65,7 @@ export interface IStorage {
   // Account Transactions
   getAccountTransaction(id: number): Promise<AccountTransaction | undefined>;
   getAccountTransactions(accountId: number): Promise<AccountTransaction[]>;
-  createAccountTransaction(transaction: any): Promise<AccountTransaction>;
+  createAccountTransaction(transaction: InsertAccountTransaction): Promise<AccountTransaction>;
   
   // Sales
   getSale(id: number): Promise<Sale | undefined>;
@@ -141,6 +141,7 @@ export interface IStorage {
   
   // Route Assignments
   getRouteAssignment(id: number): Promise<RouteAssignment | undefined>;
+  getAllRouteAssignments(): Promise<RouteAssignment[]>;
   getRouteAssignmentsByDate(date: Date): Promise<RouteAssignment[]>;
   getRouteAssignmentsByDriver(driverId: number): Promise<RouteAssignment[]>;
   createRouteAssignment(assignment: InsertRouteAssignment): Promise<RouteAssignment>;
@@ -502,6 +503,7 @@ export class MemStorage implements IStorage {
       components: insertProduct.components || null,
       conversionRates: insertProduct.conversionRates || null,
       isBulk: insertProduct.isBulk ?? false,
+      unitsPerPack: insertProduct.unitsPerPack || "1",
       supplierId: insertProduct.supplierId || null,
       supplierCode: insertProduct.supplierCode || null,
       category: insertProduct.category || null,
@@ -620,7 +622,7 @@ export class MemStorage implements IStorage {
       });
   }
   
-  async createAccountTransaction(insertTransaction: any): Promise<AccountTransaction> {
+  async createAccountTransaction(insertTransaction: InsertAccountTransaction): Promise<AccountTransaction> {
     const id = this.accountTransactionIdCounter++;
     const transaction: AccountTransaction = { 
       ...insertTransaction, 
@@ -1370,6 +1372,10 @@ export class MemStorage implements IStorage {
   // Route Assignments
   async getRouteAssignment(id: number): Promise<RouteAssignment | undefined> {
     return this.routeAssignments.get(id);
+  }
+
+  async getAllRouteAssignments(): Promise<RouteAssignment[]> {
+    return Array.from(this.routeAssignments.values());
   }
   
   async getRouteAssignmentsByDate(date: Date): Promise<RouteAssignment[]> {

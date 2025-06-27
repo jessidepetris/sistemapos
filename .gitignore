@@ -4,3 +4,13 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+# Ignore SQLite databases
+*.db
+
+# Ignore cookie dumps
+cookies.txt
+
+# Ignore TypeScript build info
+*.tsbuildinfo
+
+.env
