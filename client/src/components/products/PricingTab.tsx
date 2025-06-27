@@ -185,38 +185,38 @@ export function PricingTab({ form, recalculatePrice, recalculateWholesalePrice }
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="unitsPerPack"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Unidades por Bulto</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      step="1"
-                      min="1"
-                      {...field}
-                      onChange={(e) => {
-                        field.onChange(parseFloat(e.target.value));
-                        // Recalcular costo unitario al cambiar unidades por bulto
-                        const pack = form.getValues("packCost") || 0;
-                        const units = parseFloat(e.target.value) || 1;
-                        if (units > 0) {
-                          form.setValue("cost", Math.round((pack / units) * 100) / 100);
-                        }
-                        recalculatePrice();
-                        recalculateWholesalePrice();
-                      }}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Cantidad de unidades que trae el bulto
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+<FormField
+  control={form.control}
+  name="unitsPerPack"
+  render={({ field }) => (
+    <FormItem>
+      <FormLabel>Unidades por Bulto</FormLabel>
+      <FormControl>
+        <Input
+          type="number"
+          step="1"
+          min="1"
+          {...field}
+          onChange={(e) => {
+            field.onChange(parseFloat(e.target.value));
+            // Recalcular costo unitario al cambiar unidades por bulto
+            const pack = form.getValues("packCost") || 0;
+            const units = parseFloat(e.target.value) || 1;
+            if (units > 0) {
+              form.setValue("cost", Math.round((pack / units) * 100) / 100);
+            }
+            recalculatePrice();
+            recalculateWholesalePrice();
+          }}
+        />
+      </FormControl>
+      <FormDescription>
+        Cantidad de unidades que trae el bulto
+      </FormDescription>
+      <FormMessage />
+    </FormItem>
+  )}
+/>
             
             <FormField
               control={form.control}

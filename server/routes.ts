@@ -4476,16 +4476,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const profitRate = parseFloat(product.profit?.toString() || "55");
           const wholesaleProfitRate = parseFloat(product.wholesaleProfit?.toString() || "35");
 
-          // Si el producto se compra por bulto, calcular el costo unitario
-          const unitsPerPack = parseFloat(product.unitsPerPack?.toString() || "1");
-          const unitCost = unitsPerPack > 0 ? packCost / unitsPerPack : packCost;
+// Si el producto se compra por bulto, calcular el costo unitario
+const unitsPerPack = parseFloat(product.unitsPerPack?.toString() || "1");
+const unitCost = unitsPerPack > 0 ? packCost / unitsPerPack : packCost;
 
-          // Preparar datos de actualización
-          const updateData: any = {
-            cost: unitCost.toString(),
-            packCost: packCost.toString(),
-            lastUpdated: new Date()
-          };
+// Preparar datos de actualización
+const updateData: any = {
+  cost: unitCost.toString(),
+  packCost: packCost.toString(),
+  lastUpdated: new Date()
+};
 
           // Solo actualizar precios si no se debe mantener los actuales
           if (!keepCurrentPrices) {
@@ -4632,7 +4632,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }).returning();
 
       // Agregar los items del presupuesto
-      const quotationItems = items.map((item: any) => ({
+      const quotationItemsData = items.map((item: any) => ({
         quotationId: quotation.id,
         productId: item.productId,
         quantity: item.quantity.toString(),
@@ -4640,7 +4640,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subtotal: item.subtotal.toString(),
       }));
 
-      await db.insert(quotationItems).values(quotationItems);
+      await db.insert(quotationItems).values(quotationItemsData);
 
       return res.status(201).json({ success: true, quotation });
     } catch (error) {

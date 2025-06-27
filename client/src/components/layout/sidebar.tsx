@@ -8,6 +8,7 @@ import {
   Home,
   LogOut,
   Package,
+  Tag,
   Settings,
   ShoppingCart,
   Truck,
@@ -132,6 +133,9 @@ export default function Sidebar() {
           <div className="px-4 py-2 text-xs font-semibold text-slate-500 mt-2">INVENTARIO</div>
           <SidebarLink href="/products" icon={<Package className="h-4 w-4" />} currentPath={location} onClick={closeSidebar}>
             Productos
+          </SidebarLink>
+          <SidebarLink href="/barcodes" icon={<Tag className="h-4 w-4" />} currentPath={location} onClick={closeSidebar}>
+            Etiquetas
           </SidebarLink>
           <SidebarLink href="/suppliers" icon={<Truck className="h-4 w-4" />} currentPath={location} onClick={closeSidebar}>
             Proveedores
