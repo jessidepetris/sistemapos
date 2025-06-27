@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Trash } from "lucide-react";
+import { ProductLabel } from "../printing/ProductLabel";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 type BarcodesTabProps = {
@@ -98,18 +99,27 @@ export function BarcodesTab({ form, barcodesList, setBarcodesList }: BarcodesTab
             ) : (
               <div className="space-y-2">
                 {barcodesList.map((barcode, index) => (
-                  <div 
-                    key={index} 
+                  <div
+                    key={index}
                     className="flex items-center justify-between p-3 border rounded-md"
                   >
                     <span className="font-mono">{barcode}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeBarcode(index)}
-                    >
-                      <Trash size={16} className="text-destructive" />
-                    </Button>
+                    <div className="flex gap-2">
+                      <ProductLabel
+                        description={form.watch('name') || ''}
+                        barcode={barcode}
+                        variant="ghost"
+                        size="icon"
+                        label=""
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeBarcode(index)}
+                      >
+                        <Trash size={16} className="text-destructive" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
