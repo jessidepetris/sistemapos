@@ -31,7 +31,6 @@ export function ProductLabel({
 }: ProductLabelProps) {
   const handlePrint = () =>
     LabelPrintService.printLabel({ description, barcode, businessInfo, width, height, borderRadius });
-
   return (
     <PrintButton onClick={handlePrint} variant={variant} size={size} icon={icon} label={label} />
   );

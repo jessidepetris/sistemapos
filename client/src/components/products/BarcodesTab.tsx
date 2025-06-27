@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Trash } from "lucide-react";
 import { ProductLabel } from "../printing/ProductLabel";
+import { LabelPreview } from "../printing/LabelPreview";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -107,8 +108,21 @@ export function BarcodesTab({ form, barcodesList, setBarcodesList }: BarcodesTab
                 <SelectItem value="circle">Circular</SelectItem>
               </SelectContent>
             </Select>
+            <LabelPreview
+              description={form.watch('name') || ''}
+              barcode={newBarcode || barcodesList[0] || '0000000000000'}
+              width={labelWidth}
+              height={labelHeight}
+              borderRadius={
+                labelShape === 'rounded'
+                  ? '3mm'
+                  : labelShape === 'circle'
+                  ? '50%'
+                  : '0'
+              }
+            />
           </div>
-
+         
           <div className="mt-4">
             <h4 className="text-sm font-medium mb-3">Códigos de Barras Registrados:</h4>
             {barcodesList.length === 0 ? (
@@ -118,7 +132,11 @@ export function BarcodesTab({ form, barcodesList, setBarcodesList }: BarcodesTab
             ) : (
               <div className="space-y-2">
                 {barcodesList.map((barcode, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 border rounded-md">
+
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-3 border rounded-md"
+                  >
                     <span className="font-mono">{barcode}</span>
                     <div className="flex gap-2">
                       <ProductLabel

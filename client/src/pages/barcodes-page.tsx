@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ProductLabel } from '@/components/printing/ProductLabel';
+import { LabelPreview } from '@/components/printing/LabelPreview';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -46,6 +47,20 @@ export default function BarcodesPage() {
                 <SelectItem value="circle">Circular</SelectItem>
               </SelectContent>
             </Select>
+
+            <LabelPreview
+              description="Vista Previa"
+              barcode={products?.[0]?.barcodes?.[0] || '0000000000000'}
+              width={labelWidth}
+              height={labelHeight}
+              borderRadius={
+                labelShape === 'rounded'
+                  ? '3mm'
+                  : labelShape === 'circle'
+                  ? '50%'
+                  : '0'
+              }
+            />
           </div>
 
           {isLoading ? (
