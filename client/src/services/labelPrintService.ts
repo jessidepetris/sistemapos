@@ -6,6 +6,12 @@ export interface PrintLabelOptions {
   businessInfo?: {
     name: string;
   };
+  /** Width of the label in millimeters */
+  width?: number;
+  /** Height of the label in millimeters */
+  height?: number;
+  /** CSS border-radius value to control label shape */
+  borderRadius?: string;
 }
 
 export const LabelPrintService = {
@@ -14,7 +20,10 @@ export const LabelPrintService = {
     barcode,
     businessInfo = {
       name: 'PUNTO PASTELERO',
-    }
+    },
+    width = 40,
+    height = 30,
+    borderRadius = '0'
   }: PrintLabelOptions): Promise<boolean> {
     try {
       const printWindow = window.open('', '_blank');
@@ -31,7 +40,7 @@ export const LabelPrintService = {
             <title>Etiqueta - ${businessInfo.name}</title>
             <style>
               @page {
-                size: 40mm 30mm;
+                size: ${width}mm ${height}mm;
                 margin: 0;
               }
               body {
@@ -40,6 +49,17 @@ export const LabelPrintService = {
                 margin: 0;
                 padding: 4px;
                 text-align: center;
+                width: ${width}mm;
+                height: ${height}mm;
+              }
+              #label-container {
+                border-radius: ${borderRadius};
+                width: ${width}mm;
+                height: ${height}mm;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
               }
               #barcode {
                 margin-top: 2mm;
@@ -47,8 +67,10 @@ export const LabelPrintService = {
             </style>
           </head>
           <body>
-            <div>${description}</div>
-            <svg id="barcode"></svg>
+            <div id="label-container">
+              <div>${description}</div>
+              <svg id="barcode"></svg>
+            </div>
             <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
             <script>
               JsBarcode('#barcode', '${barcode}', { displayValue: false });

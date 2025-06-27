@@ -30,6 +30,7 @@ import SettingsPage from "@/pages/settings";
 import LogisticsPage from "@/pages/logistics-page";
 import PurchasesPage from "@/pages/purchases-page";
 import BankAccountsPage from "@/pages/bank-accounts";
+import BarcodesPage from "@/pages/barcodes-page";
 
 // Web Catalog Pages
 import WebHomePage from "@/pages/web/home-page";
@@ -64,6 +65,7 @@ function AppRoutes() {
       <ProtectedRoute path="/suppliers" component={SuppliersPage} />
       <ProtectedRoute path="/customers" component={CustomersPage} />
       <ProtectedRoute path="/accounts" component={AccountsPage} />
+      <ProtectedRoute path="/barcodes" component={BarcodesPage} />
       <ProtectedRoute path="/bank-accounts" component={BankAccountsPage} />
       <ProtectedRoute path="/invoices" component={InvoicesPage} />
       <ProtectedRoute path="/orders" component={OrdersPage} />
