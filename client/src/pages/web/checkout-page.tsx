@@ -117,7 +117,10 @@ const CheckoutPage = () => {
 
   // Calcular el total de la orden
   const calculateTotal = () => {
-    return cartItems.reduce((sum, item) => sum + parseFloat(item.total), 0).toFixed(2);
+    return cartItems
+      .reduce((sum, item) =>
+        sum + parseFloat(item.price) * parseFloat(item.quantity), 0)
+      .toFixed(2);
   };
 
   return (
@@ -280,17 +283,23 @@ const CheckoutPage = () => {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  {cartItems.map((item) => (
-                    <div key={item.id} className="flex justify-between items-start py-2 border-b">
-                      <div>
-                        <p className="font-medium">{item.productName}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {item.quantity} {item.unit} x ${parseFloat(item.price).toFixed(2)}
-                        </p>
+                  {cartItems.map((item) => {
+                    const price = parseFloat(item.price);
+                    const quantity = parseFloat(item.quantity);
+                    const itemTotal = price * quantity;
+
+                    return (
+                      <div key={item.id} className="flex justify-between items-start py-2 border-b">
+                        <div>
+                          <p className="font-medium">{item.productName}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {item.quantity} {item.unit} x ${price.toFixed(2)}
+                          </p>
+                        </div>
+                        <p className="font-medium">${itemTotal.toFixed(2)}</p>
                       </div>
-                      <p className="font-medium">${parseFloat(item.total).toFixed(2)}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
               <CardFooter className="flex justify-between border-t pt-4">
