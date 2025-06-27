@@ -151,6 +151,28 @@ export function PricingTab({ form, recalculatePrice, recalculateWholesalePrice }
                 </FormItem>
               )}
             />
+
+            <FormField
+              control={form.control}
+              name="unitsPerPack"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Unidades por Bulto</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="1"
+                      min="1"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Cantidad de unidades que trae el bulto
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             
             <FormField
               control={form.control}

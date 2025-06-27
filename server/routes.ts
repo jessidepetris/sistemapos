@@ -4439,20 +4439,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const shippingRate = parseFloat(product.shipping?.toString() || "0");
           const profitRate = parseFloat(product.profit?.toString() || "55");
           const wholesaleProfitRate = parseFloat(product.wholesaleProfit?.toString() || "35");
-          
+
+          // Si el producto se compra por bulto, calcular el costo unitario
+          const unitsPerPack = parseFloat(product.unitsPerPack?.toString() || "1");
+          const unitCost = unitsPerPack > 0 ? newCost / unitsPerPack : newCost;
+
           // Preparar datos de actualización
-          const updateData: any = { 
-            cost: newCost.toString(),
+          const updateData: any = {
+            cost: unitCost.toString(),
             lastUpdated: new Date()
           };
-          
+
           // Solo actualizar precios si no se debe mantener los actuales
           if (!keepCurrentPrices) {
-            // Calcular nuevo precio minorista
-            const costWithIva = newCost * (1 + (ivaRate / 100));
+            // Calcular nuevo precio minorista partiendo del costo unitario
+            const costWithIva = unitCost * (1 + (ivaRate / 100));
             const costWithShipping = costWithIva * (1 + (shippingRate / 100));
             const newPrice = Math.round(costWithShipping * (1 + (profitRate / 100)) * 100) / 100;
-            
+
             // Calcular nuevo precio mayorista
             const newWholesalePrice = Math.round(costWithShipping * (1 + (wholesaleProfitRate / 100)) * 100) / 100;
             
