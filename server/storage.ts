@@ -501,6 +501,7 @@ export class MemStorage implements IStorage {
       components: insertProduct.components || null,
       conversionRates: insertProduct.conversionRates || null,
       isBulk: insertProduct.isBulk ?? false,
+      unitsPerPack: insertProduct.unitsPerPack || "1",
       supplierId: insertProduct.supplierId || null,
       supplierCode: insertProduct.supplierCode || null,
       category: insertProduct.category || null,

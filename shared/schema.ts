@@ -92,6 +92,8 @@ export const products = pgTable("products", {
   supplierCode: text("supplier_code"),
   isRefrigerated: boolean("is_refrigerated").default(false),
   isBulk: boolean("is_bulk").default(false),
+  // Cantidad de unidades por bulto para cálculos de costo
+  unitsPerPack: numeric("units_per_pack", { precision: 10, scale: 2 }).default("1"),
   // Indicar si es un producto compuesto (combo)
   isComposite: boolean("is_composite").default(false),
   // Indicar si el producto está activo (disponible para vender)
@@ -146,6 +148,7 @@ export const insertProductSchema = createInsertSchema(products).pick({
   shipping: true,
   profit: true,
   wholesaleProfit: true,
+  unitsPerPack: true,
   components: true,
   currency: true,
 });
