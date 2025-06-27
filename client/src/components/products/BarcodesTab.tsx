@@ -29,7 +29,6 @@ export function BarcodesTab({ form, barcodesList, setBarcodesList }: BarcodesTab
   const [labelHeight, setLabelHeight] = useState(30);
   const [labelShape, setLabelShape] = useState<'rectangle' | 'rounded' | 'circle'>('rectangle');
 
-  // Agregar un código de barras
   const addBarcode = () => {
     if (!newBarcode) {
       toast({
@@ -39,8 +38,7 @@ export function BarcodesTab({ form, barcodesList, setBarcodesList }: BarcodesTab
       });
       return;
     }
-    
-    // Verificar que no exista ya
+
     if (barcodesList.includes(newBarcode)) {
       toast({
         title: "Código duplicado",
@@ -49,19 +47,13 @@ export function BarcodesTab({ form, barcodesList, setBarcodesList }: BarcodesTab
       });
       return;
     }
-    
-    // Agregar a la lista
+
     const newBarcodesList = [...barcodesList, newBarcode];
     setBarcodesList(newBarcodesList);
-    
-    // Actualizar el valor en el formulario como string separado por comas
     form.setValue("barcodes", newBarcodesList.join(", "));
-    
-    // Limpiar el campo
     setNewBarcode("");
   };
-  
-  // Remover un código de barras
+
   const removeBarcode = (indexToRemove: number) => {
     const newBarcodesList = barcodesList.filter((_, index) => index !== indexToRemove);
     setBarcodesList(newBarcodesList);
@@ -85,10 +77,7 @@ export function BarcodesTab({ form, barcodesList, setBarcodesList }: BarcodesTab
               onChange={(e) => setNewBarcode(e.target.value)}
               className="flex-1"
             />
-            <Button
-              type="button"
-              onClick={addBarcode}
-            >
+            <Button type="button" onClick={addBarcode}>
               <Plus className="mr-2 h-4 w-4" />
               Agregar
             </Button>
@@ -119,7 +108,7 @@ export function BarcodesTab({ form, barcodesList, setBarcodesList }: BarcodesTab
               </SelectContent>
             </Select>
           </div>
-          
+
           <div className="mt-4">
             <h4 className="text-sm font-medium mb-3">Códigos de Barras Registrados:</h4>
             {barcodesList.length === 0 ? (
@@ -129,10 +118,7 @@ export function BarcodesTab({ form, barcodesList, setBarcodesList }: BarcodesTab
             ) : (
               <div className="space-y-2">
                 {barcodesList.map((barcode, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between p-3 border rounded-md"
-                  >
+                  <div key={index} className="flex items-center justify-between p-3 border rounded-md">
                     <span className="font-mono">{barcode}</span>
                     <div className="flex gap-2">
                       <ProductLabel
@@ -169,3 +155,4 @@ export function BarcodesTab({ form, barcodesList, setBarcodesList }: BarcodesTab
     </div>
   );
 }
+
