@@ -4591,7 +4591,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }).returning();
 
       // Agregar los items del presupuesto
-      const quotationItems = items.map((item: any) => ({
+      const quotationItemsData = items.map((item: any) => ({
         quotationId: quotation.id,
         productId: item.productId,
         quantity: item.quantity.toString(),
@@ -4599,7 +4599,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subtotal: item.subtotal.toString(),
       }));
 
-      await db.insert(quotationItems).values(quotationItems);
+      await db.insert(quotationItems).values(quotationItemsData);
 
       return res.status(201).json({ success: true, quotation });
     } catch (error) {
