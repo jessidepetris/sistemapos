@@ -53,6 +53,7 @@ const productFormSchema = insertProductSchema.extend({
   // Form validation for numeric fields
   price: z.coerce.number().min(0, "El precio debe ser mayor o igual a 0"),
   cost: z.coerce.number().min(0, "El costo debe ser mayor o igual a 0").optional(),
+  packCost: z.coerce.number().min(0, "El costo por bulto debe ser mayor o igual a 0").optional(),
   stock: z.coerce.number().min(0, "El stock debe ser mayor o igual a 0"),
   stockAlert: z.coerce.number().min(0, "La alerta de stock debe ser mayor o igual a 0").optional(),
   
@@ -60,6 +61,10 @@ const productFormSchema = insertProductSchema.extend({
   category: z.string().optional(),
   imageUrl: z.string().optional(),
   supplierCode: z.string().optional(),
+
+  // Unidad de compra y cantidad que contiene
+  purchaseUnit: z.string().optional(),
+  purchaseQty: z.coerce.number().min(0).optional(),
   
   // Campos para cálculo automático del precio
   iva: z.coerce.number().min(0).default(21),
@@ -148,6 +153,8 @@ export default function ProductsPage() {
   // Función para calcular el precio de venta basado en costo, IVA, flete y ganancia
   const calculateSellingPrice = () => {
     let cost = form.getValues("cost") || 0;
+    const packCost = form.getValues("packCost") || 0;
+    const unitsPerPack = form.getValues("unitsPerPack") || 1;
     const isComposite = form.getValues("isComposite");
     const currency = form.getValues("currency") || "ARS";
     
@@ -161,6 +168,15 @@ export default function ProductsPage() {
       }
     }
     
+    // Si se especificó un costo por bulto, calcular el costo unitario
+    if (packCost > 0 && unitsPerPack > 0) {
+      const unitCost = Math.round((packCost / unitsPerPack) * 100) / 100;
+      if (unitCost !== cost) {
+        cost = unitCost;
+        form.setValue("cost", unitCost);
+      }
+    }
+
     // Aplicar descuento del proveedor al costo si existe
     const supplierDiscount = form.getValues("supplierDiscount") || 0;
     if (supplierDiscount > 0) {
@@ -197,6 +213,7 @@ export default function ProductsPage() {
       barcodes: "",
       price: 0,
       cost: 0,
+      packCost: 0,
       stock: 0,
       stockAlert: 0,
       iva: 21,        // 21% por defecto
@@ -209,6 +226,8 @@ export default function ProductsPage() {
       category: "",
       imageUrl: "",
       supplierCode: "",
+      purchaseUnit: "",
+      purchaseQty: 0,
       conversionRates: [],
       conversionUnit: "",
       conversionFactor: 0,
@@ -222,6 +241,16 @@ export default function ProductsPage() {
   
   // Handle changes to isBulk to show/hide conversion rates fields
   const watchIsBulk = form.watch("isBulk");
+
+  // Recalcular precio de venta cuando cambian costo, IVA, flete o ganancia
+  useEffect(() => {
+    const subscription = form.watch((_values, { name }) => {
+      if (["cost", "iva", "shipping", "profit"].includes(name ?? "")) {
+        calculateSellingPrice();
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
   
   // Add a new conversion rate
   const addConversionRate = () => {
@@ -509,6 +538,8 @@ export default function ProductsPage() {
       stockAlert: product.stockAlert ? parseFloat(product.stockAlert) : 0,
       supplierId: product.supplierId,
       supplierCode: product.supplierCode || "",
+      purchaseUnit: product.purchaseUnit || "",
+      purchaseQty: product.purchaseQty ? parseFloat(product.purchaseQty) : 0,
       category: product.category || "",
       imageUrl: product.imageUrl || "",
       isRefrigerated: product.isRefrigerated,
@@ -557,6 +588,8 @@ export default function ProductsPage() {
       category: "",
       imageUrl: "",
       supplierCode: "",
+      purchaseUnit: "",
+      purchaseQty: 0,
       conversionRates: [],
       conversionUnit: "",
       conversionFactor: 0,
@@ -800,6 +833,33 @@ export default function ProductsPage() {
                       <div className="space-y-4">
                         <FormField
                           control={form.control}
+                          name="packCost"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Costo por Bulto</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  {...field}
+                                  onChange={(e) => {
+                                    field.onChange(e);
+                                    const units = form.getValues("unitsPerPack") || 1;
+                                    const packVal = parseFloat(e.target.value) || 0;
+                                    if (units > 0) {
+                                      form.setValue("cost", Math.round((packVal / units) * 100) / 100);
+                                    }
+                                    calculateSellingPrice();
+                                  }}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
                           name="cost"
                           render={({ field }) => (
                             <FormItem>
@@ -988,6 +1048,39 @@ export default function ProductsPage() {
                           </FormItem>
                         )}
                       />
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="purchaseUnit"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Unidad de Compra</FormLabel>
+                              <FormControl>
+                                <Input placeholder="ej. caja" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="purchaseQty"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Cantidad por Unidad</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" {...field} />
+                              </FormControl>
+                              <FormDescription>
+                                Número de {form.watch("baseUnit")}
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
                       
                       <div className="flex flex-col space-y-4 mt-4">
                         <FormField
@@ -1217,13 +1310,44 @@ export default function ProductsPage() {
                           <FormItem>
                             <FormLabel>Código de Proveedor</FormLabel>
                             <FormControl>
-                              <Input 
-                                placeholder="Código usado por el proveedor" 
-                                {...field} 
+                              <Input
+                                placeholder="Código usado por el proveedor"
+                                {...field}
                               />
                             </FormControl>
                             <FormDescription>
                               Útil para actualización masiva de precios
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="unitsPerPack"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Unidades por Bulto</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="1"
+                                min="1"
+                                {...field}
+                                onChange={(e) => {
+                                  field.onChange(e);
+                                  const units = parseFloat(e.target.value) || 1;
+                                  const packVal = parseFloat(form.getValues("packCost")) || 0;
+                                  if (units > 0) {
+                                    form.setValue("cost", Math.round((packVal / units) * 100) / 100);
+                                  }
+                                  calculateSellingPrice();
+                                }}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Cantidad de unidades que trae el bulto
                             </FormDescription>
                             <FormMessage />
                           </FormItem>

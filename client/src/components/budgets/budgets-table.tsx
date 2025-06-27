@@ -29,7 +29,15 @@ export function BudgetsTable() {
     const load = async () => {
       try {
         const data = await quotationService.getQuotations();
-        setBudgets(data);
+        if (Array.isArray(data)) {
+          setBudgets(data);
+        } else {
+          console.error("Unexpected data format while fetching quotations", data);
+          setBudgets([]);
+        }
+      } catch (err) {
+        console.error("Error loading quotations", err);
+        setBudgets([]);
       } finally {
         setLoading(false);
       }
