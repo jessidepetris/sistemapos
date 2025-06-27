@@ -61,6 +61,7 @@ const productFormSchema = insertProductSchema.extend({
   price: z.coerce.number().min(0, "El precio debe ser mayor o igual a 0"),
   wholesalePrice: z.coerce.number().min(0, "El precio mayorista debe ser mayor o igual a 0"),
   cost: z.coerce.number().min(0, "El costo debe ser mayor o igual a 0").optional(),
+  packCost: z.coerce.number().min(0, "El costo por bulto debe ser mayor o igual a 0").optional(),
   stock: z.coerce.number().min(0, "El stock debe ser mayor o igual a 0"),
   stockAlert: z.coerce.number().min(0, "La alerta de stock debe ser mayor o igual a 0").optional(),
   
@@ -77,6 +78,9 @@ const productFormSchema = insertProductSchema.extend({
   profit: z.coerce.number().min(0).default(55),
   wholesaleProfit: z.coerce.number().min(0).default(35),
   supplierDiscount: z.coerce.number().min(0).max(100).optional().default(0),
+
+  // Cantidad de unidades por bulto
+  unitsPerPack: z.coerce.number().min(1).default(1),
   
   // For bulk products, we need to manage conversion rates
   // This will be transformed before submission
@@ -298,6 +302,7 @@ export default function ProductsPage() {
       price: 0,
       wholesalePrice: 0,
       cost: 0,
+      packCost: 0,
       stock: 0,
       stockAlert: 0,
       iva: "21",        // 21% por defecto
@@ -309,6 +314,7 @@ export default function ProductsPage() {
       isComposite: false,
       active: true,    // Activo por defecto
       webVisible: false, // No visible en web por defecto
+      unitsPerPack: 1,
       category: "",
       categoryIds: [],
       imageUrl: "",
@@ -494,6 +500,7 @@ export default function ProductsPage() {
       price: parseFloat(product.price),
       wholesalePrice: product.wholesalePrice ? parseFloat(product.wholesalePrice) : 0,
       cost: product.cost ? parseFloat(product.cost) : 0,
+      packCost: product.packCost ? parseFloat(product.packCost) : 0,
       stock: parseFloat(product.stock),
       stockAlert: product.stockAlert ? parseFloat(product.stockAlert) : 0,
       iva: product.iva ? product.iva.toString() : "21",
@@ -501,6 +508,7 @@ export default function ProductsPage() {
       profit: product.profit || 55,
       wholesaleProfit: product.wholesaleProfit || 35,
       supplierDiscount: product.supplierDiscount || 0,
+      unitsPerPack: product.unitsPerPack ? parseFloat(product.unitsPerPack) : 1,
       supplierId: product.supplierId,
       supplierCode: product.supplierCode || "",
       category: product.category || "",
@@ -555,6 +563,8 @@ export default function ProductsPage() {
       active: true,    // Activo por defecto
       webVisible: false, // No visible en web por defecto
       isDiscontinued: false, // No discontinuado por defecto
+      packCost: 0,
+      unitsPerPack: 1,
       category: "",
       categoryIds: [],
       imageUrl: "",

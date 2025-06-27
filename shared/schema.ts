@@ -83,6 +83,8 @@ export const products = pgTable("products", {
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
   wholesalePrice: numeric("wholesale_price", { precision: 10, scale: 2 }),
   cost: numeric("cost", { precision: 10, scale: 2 }),
+  // Costo del bulto en la misma moneda que el costo unitario
+  packCost: numeric("pack_cost", { precision: 10, scale: 2 }),
   costCurrency: text("cost_currency").notNull().default("ARS"), // Moneda del costo
   stock: numeric("stock", { precision: 10, scale: 2 }).notNull().default("0"),
   reservedStock: numeric("reserved_stock", { precision: 10, scale: 2 }).notNull().default("0"),
@@ -92,6 +94,8 @@ export const products = pgTable("products", {
   supplierCode: text("supplier_code"),
   isRefrigerated: boolean("is_refrigerated").default(false),
   isBulk: boolean("is_bulk").default(false),
+  // Cantidad de unidades por bulto para cálculos de costo
+  unitsPerPack: numeric("units_per_pack", { precision: 10, scale: 2 }).default("1"),
   // Indicar si es un producto compuesto (combo)
   isComposite: boolean("is_composite").default(false),
   // Indicar si el producto está activo (disponible para vender)
@@ -127,6 +131,7 @@ export const insertProductSchema = createInsertSchema(products).pick({
   price: true,
   wholesalePrice: true,
   cost: true,
+  packCost: true,
   costCurrency: true,
   stock: true,
   stockAlert: true,
@@ -146,6 +151,7 @@ export const insertProductSchema = createInsertSchema(products).pick({
   shipping: true,
   profit: true,
   wholesaleProfit: true,
+  unitsPerPack: true,
   components: true,
   currency: true,
 });
