@@ -72,6 +72,7 @@ const CheckoutPage = () => {
     try {
       // Crear el objeto de la orden
       const orderData = {
+        cartId: cart?.id,
         customerData: {
           name: data.name,
           email: data.email,
@@ -86,11 +87,18 @@ const CheckoutPage = () => {
 
       // Enviar la orden al servidor
       const response = await apiRequest("POST", "/api/web/orders", orderData);
-      
+
       if (!response.ok) {
-        throw new Error("Error al procesar el pedido");
+        let message = "Error al procesar el pedido";
+        try {
+          const data = await response.json();
+          message = data.message || message;
+        } catch (_) {
+          // ignore json parse errors
+        }
+        throw new Error(message);
       }
-      
+
       const result = await response.json();
       
       // Limpiar el carrito después de la orden exitosa
