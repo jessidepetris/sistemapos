@@ -265,6 +265,23 @@ export function GeneralTab({ form, suppliers, onTabChange }: GeneralTabProps) {
                 </FormItem>
               )}
             />
+
+            <FormField
+              control={form.control}
+              name="unitsPerPack"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Unidades por Bulto</FormLabel>
+                  <FormControl>
+                    <Input type="number" min="1" step="1" {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    Cantidad de unidades que trae el bulto
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
