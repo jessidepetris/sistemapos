@@ -6,7 +6,16 @@ import { z } from "zod";
 import passport from "passport";
 import { Router } from "express";
 import { getBankAccounts, createBankAccount, updateBankAccount, deleteBankAccount } from "./api/bank-accounts";
-import { InsertSale, InsertSaleItem } from "../shared/schema";
+import {
+  InsertSale,
+  InsertSaleItem,
+  quotations,
+  quotationItems,
+  invoices,
+  invoiceItems,
+} from "../shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Sets up /api/register, /api/login, /api/logout, /api/user
