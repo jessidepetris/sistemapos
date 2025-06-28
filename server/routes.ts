@@ -11,8 +11,8 @@ import {
   InsertSaleItem,
   quotations,
   quotationItems,
-  invoices,
-  invoiceItems,
+  sales,
+  saleItems,
 } from "../shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
@@ -4826,7 +4826,7 @@ const updateData: any = {
         const items = await db.select().from(quotationItems).where(eq(quotationItems.quotationId, quotation.id));
         
         // Crear la factura
-        const [invoice] = await db.insert(invoices).values({
+        const [invoice] = await db.insert(sales).values({
           clientId: quotation.clientId,
           date: new Date(),
           totalAmount: quotation.totalAmount,
@@ -4836,15 +4836,16 @@ const updateData: any = {
         }).returning();
 
         // Agregar los items a la factura
-        const invoiceItems = items.map((item) => ({
-          invoiceId: invoice.id,
+
+        const invoiceItemsData = items.map((item) => ({
+          saleId: invoice.id,
           productId: item.productId,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           subtotal: item.subtotal,
         }));
 
-        await db.insert(invoiceItems).values(invoiceItems);
+        await db.insert(saleItems).values(invoiceItemsData);
       }
 
       // Actualizar el estado del presupuesto
