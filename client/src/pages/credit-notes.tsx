@@ -24,7 +24,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { insertNoteSchema } from "@shared/schema";
-import { Calendar, Eye, FileEdit, Plus, Search, Printer, ExternalLink } from "lucide-react";
+import { Calendar, Eye, FileEdit, Plus, Search, Printer, ExternalLink, Edit, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -38,17 +38,25 @@ const noteFormSchema = insertNoteSchema.extend({
   reason: z.string().min(1, "La razón es requerida"),
 });
 
+const editFormSchema = z.object({
+  reason: z.string().min(1, "La razón es requerida"),
+  notes: z.string().optional(),
+});
+
 type NoteFormValues = z.infer<typeof noteFormSchema>;
+type EditNoteFormValues = z.infer<typeof editFormSchema>;
 
 export default function CreditNotesPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [dateRange, setDateRange] = useState({ startDate: null, endDate: null });
   const [selectedNote, setSelectedNote] = useState<any | null>(null);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [noteType, setNoteType] = useState<"credit" | "debit">("credit");
+  const [editingNote, setEditingNote] = useState<any | null>(null);
   
   // Get notes
   const { data: notes, isLoading } = useQuery({
@@ -81,6 +89,14 @@ export default function CreditNotesPage() {
       customerId: undefined,
       type: "credit",
       amount: 0,
+      reason: "",
+      notes: "",
+    },
+  });
+
+  const editForm = useForm<EditNoteFormValues>({
+    resolver: zodResolver(editFormSchema),
+    defaultValues: {
       reason: "",
       notes: "",
     },
@@ -118,6 +134,46 @@ export default function CreditNotesPage() {
     onError: (error) => {
       toast({
         title: "Error al crear la nota",
+        description: (error as Error).message,
+        variant: "destructive",
+      });
+    }
+  });
+
+  const updateNoteMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      const res = await apiRequest("PUT", `/api/notes/${id}`, data);
+      return await res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Nota actualizada" });
+      setIsEditDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/notes"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error al actualizar la nota",
+        description: (error as Error).message,
+        variant: "destructive",
+      });
+    }
+  });
+
+  const deleteNoteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/notes/${id}`);
+      if (!res.ok) {
+        throw new Error("Error al eliminar la nota");
+      }
+    },
+    onSuccess: () => {
+      toast({ title: "Nota eliminada" });
+      queryClient.invalidateQueries({ queryKey: ["/api/notes"] });
+      setIsDetailDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error al eliminar la nota",
         description: (error as Error).message,
         variant: "destructive",
       });
@@ -169,6 +225,21 @@ export default function CreditNotesPage() {
     });
     setIsDialogOpen(true);
   };
+
+  const handleEditNote = (note: any) => {
+    setEditingNote(note);
+    editForm.reset({
+      reason: note.reason,
+      notes: note.notes || "",
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleDeleteNote = (note: any) => {
+    if (confirm(`¿Eliminar nota #${note.id}?`)) {
+      deleteNoteMutation.mutate(note.id);
+    }
+  };
   
   // Form submission handler
   const onSubmit = (data: NoteFormValues) => {
@@ -208,6 +279,11 @@ export default function CreditNotesPage() {
       ...data,
       userId: user.id,
     });
+  };
+
+  const onEditSubmit = (data: EditNoteFormValues) => {
+    if (!editingNote) return;
+    updateNoteMutation.mutate({ id: editingNote.id, data });
   };
   
   return (
@@ -322,14 +398,29 @@ export default function CreditNotesPage() {
                               <TableCell className="max-w-xs truncate">{note.reason}</TableCell>
                               <TableCell>${parseFloat(note.amount).toFixed(2)}</TableCell>
                               <TableCell className="text-right">
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  onClick={() => handleViewNote(note)}
-                                >
-                                  <Eye className="h-4 w-4 mr-1" />
-                                  Ver
-                                </Button>
+                                <div className="flex gap-2 justify-end">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleViewNote(note)}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleEditNote(note)}
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleDeleteNote(note)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           ))
@@ -405,14 +496,17 @@ export default function CreditNotesPage() {
                                 <TableCell className="max-w-xs truncate">{note.reason}</TableCell>
                                 <TableCell>${parseFloat(note.amount).toFixed(2)}</TableCell>
                                 <TableCell className="text-right">
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    onClick={() => handleViewNote(note)}
-                                  >
-                                    <Eye className="h-4 w-4 mr-1" />
-                                    Ver
-                                  </Button>
+                                  <div className="flex gap-2 justify-end">
+                                    <Button variant="ghost" size="icon" onClick={() => handleViewNote(note)}>
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" onClick={() => handleEditNote(note)}>
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" onClick={() => handleDeleteNote(note)}>
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
                                 </TableCell>
                               </TableRow>
                             ))
@@ -482,14 +576,17 @@ export default function CreditNotesPage() {
                                 <TableCell className="max-w-xs truncate">{note.reason}</TableCell>
                                 <TableCell>${parseFloat(note.amount).toFixed(2)}</TableCell>
                                 <TableCell className="text-right">
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    onClick={() => handleViewNote(note)}
-                                  >
-                                    <Eye className="h-4 w-4 mr-1" />
-                                    Ver
-                                  </Button>
+                                  <div className="flex gap-2 justify-end">
+                                    <Button variant="ghost" size="icon" onClick={() => handleViewNote(note)}>
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" onClick={() => handleEditNote(note)}>
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" onClick={() => handleDeleteNote(note)}>
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
                                 </TableCell>
                               </TableRow>
                             ))
@@ -683,7 +780,20 @@ export default function CreditNotesPage() {
             >
               Cerrar
             </Button>
-            
+
+            {selectedNote && (
+              <>
+                <Button variant="ghost" onClick={() => handleEditNote(selectedNote!)}>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Editar
+                </Button>
+                <Button variant="destructive" onClick={() => handleDeleteNote(selectedNote!)}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Eliminar
+                </Button>
+              </>
+            )}
+
             <Button>
               <Printer className="mr-2 h-4 w-4" />
               Imprimir
@@ -894,6 +1004,52 @@ export default function CreditNotesPage() {
                     ? "Creando..." 
                     : `Crear Nota de ${noteType === "credit" ? "Crédito" : "Débito"}`
                   }
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Note Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Nota #{editingNote?.id}</DialogTitle>
+          </DialogHeader>
+
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-6">
+              <FormField
+                control={editForm.control}
+                name="reason"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Motivo</FormLabel>
+                    <Input {...field} />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={editForm.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Notas</FormLabel>
+                    <Textarea className="resize-none" {...field} />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={updateNoteMutation.isPending}>
+                  {updateNoteMutation.isPending ? "Guardando..." : "Guardar"}
                 </Button>
               </DialogFooter>
             </form>
