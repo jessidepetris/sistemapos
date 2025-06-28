@@ -451,6 +451,13 @@ export class MemStorage implements IStorage {
       currentBalance: "0",
     };
     this.customers.set(id, customer);
+    // Crear automáticamente una cuenta corriente para el cliente
+    await this.createAccount({
+      customerId: id,
+      balance: "0",
+      creditLimit: null,
+      currency: "ARS",
+    });
     return customer;
   }
   
