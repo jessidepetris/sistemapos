@@ -1567,6 +1567,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/notes/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const note = await storage.getNote(id);
+      if (!note) {
+        return res.status(404).json({ message: "Nota no encontrada" });
+      }
+
+      let customer = null;
+      if (note.customerId) {
+        customer = await storage.getCustomer(note.customerId);
+      }
+
+      const user = await storage.getUser(note.userId);
+
+      let relatedSale = null;
+      if (note.relatedSaleId) {
+        relatedSale = await storage.getSale(note.relatedSaleId);
+        if (relatedSale && relatedSale.customerId) {
+          const saleCustomer = await storage.getCustomer(relatedSale.customerId);
+          if (saleCustomer) {
+            relatedSale.customer = saleCustomer;
+          }
+        }
+      }
+
+      let accountTransaction = null;
+      if (note.customerId && customer?.hasAccount) {
+        const account = await storage.getAccountByCustomerId(note.customerId);
+        if (account) {
+          const transactions = await storage.getAccountTransactions(account.id);
+          accountTransaction = transactions.find(t => t.relatedNoteId === note.id);
+        }
+      }
+
+      res.json({
+        ...note,
+        customer,
+        user: user ? { ...user, password: undefined } : null,
+        relatedSale,
+        accountTransaction
+      });
+    } catch (error) {
+      console.error("Error al obtener nota:", error);
+      res.status(500).json({ message: "Error al obtener nota", error: (error as Error).message });
+    }
+  });
+
+  app.put("/api/notes/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: "No autorizado" });
+      }
+
+      const id = parseInt(req.params.id);
+      const { reason, notes } = req.body;
+      const updatedNote = await storage.updateNote(id, { reason, notes });
+      res.json(updatedNote);
+    } catch (error) {
+      console.error("Error al actualizar nota:", error);
+      res.status(400).json({ message: "Error al actualizar nota", error: (error as Error).message });
+    }
+  });
+
+  app.delete("/api/notes/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: "No autorizado" });
+      }
+
+      const id = parseInt(req.params.id);
+      const note = await storage.getNote(id);
+      if (!note) {
+        return res.status(404).json({ message: "Nota no encontrada" });
+      }
+
+      await storage.deleteNote(id);
+
+      if (note.customerId) {
+        const customer = await storage.getCustomer(note.customerId);
+        if (customer && customer.hasAccount) {
+          const account = await storage.getAccountByCustomerId(note.customerId);
+          if (account) {
+            const transactions = await storage.getAccountTransactions(account.id);
+            const accountTransaction = transactions.find(t => t.relatedNoteId === note.id);
+            if (accountTransaction) {
+              await storage.deleteAccountTransaction(accountTransaction.id);
+
+              let newBalance = parseFloat(account.balance.toString());
+              if (note.type === "credit") {
+                newBalance -= parseFloat(note.amount);
+              } else {
+                newBalance += parseFloat(note.amount);
+              }
+
+              await storage.updateAccount(account.id, {
+                balance: newBalance.toString(),
+                lastUpdated: new Date().toISOString()
+              });
+            }
+          }
+        }
+      }
+
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error al eliminar nota:", error);
+      res.status(400).json({ message: "Error al eliminar nota", error: (error as Error).message });
+    }
+  });
+
   // Users endpoints
   app.get("/api/users", async (req, res) => {
     try {
