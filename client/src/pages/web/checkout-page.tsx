@@ -81,8 +81,6 @@ const CheckoutPage = () => {
           notes: data.notes || "",
         },
         paymentMethod: data.paymentMethod,
-        items: cartItems,
-        total: calculateTotal(),
       };
 
       // Enviar la orden al servidor
