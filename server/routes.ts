@@ -6,7 +6,16 @@ import { z } from "zod";
 import passport from "passport";
 import { Router } from "express";
 import { getBankAccounts, createBankAccount, updateBankAccount, deleteBankAccount } from "./api/bank-accounts";
-import { InsertSale, InsertSaleItem } from "../shared/schema";
+import {
+  InsertSale,
+  InsertSaleItem,
+  quotations,
+  quotationItems,
+  invoices,
+  invoiceItems,
+} from "../shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Sets up /api/register, /api/login, /api/logout, /api/user
@@ -4591,7 +4600,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }).returning();
 
       // Agregar los items del presupuesto
-      const quotationItems = items.map((item: any) => ({
+      const quotationItemsData = items.map((item: any) => ({
         quotationId: quotation.id,
         productId: item.productId,
         quantity: item.quantity.toString(),
@@ -4599,7 +4608,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subtotal: item.subtotal.toString(),
       }));
 
-      await db.insert(quotationItems).values(quotationItems);
+      await db.insert(quotationItems).values(quotationItemsData);
 
       return res.status(201).json({ success: true, quotation });
     } catch (error) {
