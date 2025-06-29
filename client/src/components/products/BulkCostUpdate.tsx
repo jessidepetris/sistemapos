@@ -33,6 +33,11 @@ export function BulkCostUpdate() {
   const [fileSupplier, setFileSupplier] = useState<string>("");
   const [filePreview, setFilePreview] = useState<Array<any>>([]);
   const [hasHeaders, setHasHeaders] = useState(true);
+  const [scrapeSupplier, setScrapeSupplier] = useState<string>("");
+  const [scrapeUrl, setScrapeUrl] = useState("");
+  const [scrapeProductSelector, setScrapeProductSelector] = useState("");
+  const [scrapeCodeSelector, setScrapeCodeSelector] = useState("");
+  const [scrapePriceSelector, setScrapePriceSelector] = useState("");
 
   // Obtener categorías para el filtro
   const { data: categories = [] } = useQuery<Category[]>({
@@ -332,6 +337,54 @@ export function BulkCostUpdate() {
     document.body.removeChild(link);
   };
 
+  const handleUpdateByScrape = async () => {
+    if (!scrapeUrl || !scrapeProductSelector || !scrapeCodeSelector || !scrapePriceSelector) {
+      toast({
+        title: "Error",
+        description: "Complete todos los campos para el scraping",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const data = {
+        supplierId: scrapeSupplier && scrapeSupplier !== "all" ? parseInt(scrapeSupplier) : undefined,
+        url: scrapeUrl,
+        productSelector: scrapeProductSelector,
+        codeSelector: scrapeCodeSelector,
+        priceSelector: scrapePriceSelector,
+        keepCurrentPrices: false,
+      };
+      const res = await apiRequest("POST", "/api/products/update-cost-by-scrape", data);
+      const result = await res.json();
+
+      if (result.error) {
+        throw new Error(result.message || result.error);
+      }
+
+      toast({ title: "Actualización completada", description: result.message });
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/products"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/products", "list"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/products", "details"] }),
+        queryClient.refetchQueries({ queryKey: ["/api/products"] }),
+      ]);
+
+      setScrapeUrl("");
+      setScrapeProductSelector("");
+      setScrapeCodeSelector("");
+      setScrapePriceSelector("");
+      setScrapeSupplier("all");
+    } catch (error) {
+      toast({ title: "Error", description: (error as Error).message, variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -342,9 +395,10 @@ export function BulkCostUpdate() {
       </CardHeader>
       <CardContent>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="percentage">Por Porcentaje</TabsTrigger>
             <TabsTrigger value="file">Por Archivo</TabsTrigger>
+            <TabsTrigger value="scrape">Desde Web</TabsTrigger>
           </TabsList>
           
           <TabsContent value="percentage" className="space-y-4 mt-4">
@@ -526,6 +580,52 @@ export function BulkCostUpdate() {
                 disabled={isLoading || !file}
                 className="w-full"
               >
+                {isLoading ? "Actualizando..." : "Actualizar Costos"}
+              </Button>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="scrape" className="space-y-4 mt-4">
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="scrapeSupplier">Proveedor (opcional)</Label>
+                <Select value={scrapeSupplier} onValueChange={setScrapeSupplier}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos los proveedores" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los proveedores</SelectItem>
+                    {suppliers?.map((supplier: any) => (
+                      <SelectItem key={supplier.id} value={supplier.id.toString()}>
+                        {supplier.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="scrapeUrl">URL de la página</Label>
+                <Input id="scrapeUrl" value={scrapeUrl} onChange={(e) => setScrapeUrl(e.target.value)} />
+              </div>
+
+              <div>
+                <Label htmlFor="scrapeProductSelector">Selector de producto</Label>
+                <Input id="scrapeProductSelector" value={scrapeProductSelector} onChange={(e) => setScrapeProductSelector(e.target.value)} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="scrapeCodeSelector">Selector de código</Label>
+                  <Input id="scrapeCodeSelector" value={scrapeCodeSelector} onChange={(e) => setScrapeCodeSelector(e.target.value)} />
+                </div>
+                <div>
+                  <Label htmlFor="scrapePriceSelector">Selector de precio</Label>
+                  <Input id="scrapePriceSelector" value={scrapePriceSelector} onChange={(e) => setScrapePriceSelector(e.target.value)} />
+                </div>
+              </div>
+
+              <Button onClick={handleUpdateByScrape} disabled={isLoading} className="w-full">
                 {isLoading ? "Actualizando..." : "Actualizar Costos"}
               </Button>
             </div>
