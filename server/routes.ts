@@ -6,6 +6,7 @@ import { z } from "zod";
 import passport from "passport";
 import { Router } from "express";
 import { getBankAccounts, createBankAccount, updateBankAccount, deleteBankAccount } from "./api/bank-accounts";
+import { checkAfipStatus, createAfipInvoice } from "./api/afip";
 import {
   InsertSale,
   InsertSaleItem,
@@ -4685,6 +4686,25 @@ const updateData: any = {
       res.json({ success: true });
     } catch (error) {
       res.status(400).json({ message: "Error al eliminar cuenta bancaria", error: (error as Error).message });
+    }
+  });
+
+  // AFIP integration endpoints
+  app.get("/api/afip/status", async (_req, res) => {
+    try {
+      const status = await checkAfipStatus();
+      res.json(status);
+    } catch (error) {
+      res.status(500).json({ message: "Error consultando AFIP", error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/afip/invoices", async (req, res) => {
+    try {
+      const result = await createAfipInvoice(req.body);
+      res.status(201).json(result);
+    } catch (error) {
+      res.status(400).json({ message: "Error enviando factura a AFIP", error: (error as Error).message });
     }
   });
 

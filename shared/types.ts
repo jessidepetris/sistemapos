@@ -151,3 +151,18 @@ export interface InsertBudget {
   validityDays: number;
   status?: string;
 } 
+
+export interface AfipInvoiceItem {
+  description: string;
+  quantity: number;
+  price: number;
+}
+
+export interface AfipInvoice {
+  invoiceType: 'A' | 'B' | 'C' | 'X';
+  customerName: string;
+  customerTaxId: string;
+  items: AfipInvoiceItem[];
+  total: number;
+}
+
