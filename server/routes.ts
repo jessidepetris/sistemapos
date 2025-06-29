@@ -3439,37 +3439,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { startDate, endDate } = req.query;
       const start = startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // Último mes por defecto
       const end = endDate ? new Date(endDate as string) : new Date();
-      
+
       const sales = await storage.getAllSales() || [];
       const customers = await storage.getAllCustomers() || [];
-      
+
       // Filtrar ventas por fecha
       const filteredSales = sales.filter(sale => {
         const saleDate = new Date(sale.timestamp as string);
         return saleDate >= start && saleDate <= end;
       });
-      
-      // Enriquecer datos de ventas
+
+      // Enriquecer datos de ventas y mantener la fecha como objeto para ordenarla
       const detailedSales = await Promise.all(filteredSales.map(async (sale) => {
         const customer = customers.find(c => c.id === sale.customerId);
         const saleItems = await storage.getSaleItemsBySaleId(sale.id);
-        
+
+        const dateObj = new Date(sale.timestamp as string);
+
         return {
           id: sale.id,
-          date: new Date(sale.timestamp as string).toLocaleDateString(),
+          dateObj,
           customer: customer ? customer.name : "Cliente no registrado",
           total: parseFloat(sale.total).toFixed(2),
           items: saleItems.length,
           status: sale.status || "completed",
         };
       }));
-      
+
       // Ordenar por fecha (más recientes primero)
-      detailedSales.sort((a, b) => {
-        return new Date(b.date).getTime() - new Date(a.date).getTime();
-      });
-      
-      res.json(detailedSales);
+      detailedSales.sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
+
+      // Formatear fecha para la respuesta final
+      const response = detailedSales.map(sale => ({
+        id: sale.id,
+        date: sale.dateObj.toLocaleDateString(),
+        customer: sale.customer,
+        total: sale.total,
+        items: sale.items,
+        status: sale.status,
+      }));
+
+      res.json(response);
     } catch (error) {
       console.error("Error al generar reporte detallado de ventas:", error);
       res.status(500).json({ error: "Error al generar reporte" });
