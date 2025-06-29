@@ -289,10 +289,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Products endpoints
   app.get("/api/products", async (req, res) => {
     try {
-      const products = await storage.getAllProducts();
+      let products = await storage.getAllProducts();
+
+      // Optional search by name or description
+      const search = (req.query.search as string | undefined)?.toLowerCase();
+      if (search) {
+        products = products.filter((p) =>
+          p.name.toLowerCase().includes(search) ||
+          (p.description?.toLowerCase().includes(search))
+        );
+      }
+
+      // Optional sorting by name or price
+      const sort = req.query.sort as string | undefined;
+      if (sort === "name") {
+        products = products.sort((a, b) => a.name.localeCompare(b.name));
+      } else if (sort === "price") {
+        products = products.sort(
+          (a, b) => parseFloat(a.price || "0") - parseFloat(b.price || "0"),
+        );
+      }
+
       res.json(products);
     } catch (error) {
-      res.status(500).json({ message: "Error al obtener productos", error: (error as Error).message });
+      res
+        .status(500)
+        .json({ message: "Error al obtener productos", error: (error as Error).message });
     }
   });
 
