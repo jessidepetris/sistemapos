@@ -1,11 +1,11 @@
 import { users, User, InsertUser, Supplier, InsertSupplier, Customer, InsertCustomer, 
-  Product, InsertProduct, Account, InsertAccount, Sale, InsertSale, SaleItem, InsertSaleItem, 
-  Order, InsertOrder, OrderItem, InsertOrderItem, Note, InsertNote, AccountTransaction, InsertAccountTransaction, 
-  Vehicle, InsertVehicle, DeliveryZone, InsertDeliveryZone, DeliveryRoute, InsertDeliveryRoute, 
-  Delivery, InsertDelivery, DeliveryEvent, InsertDeliveryEvent, RouteAssignment, InsertRouteAssignment, 
+  Product, InsertProduct, Account, InsertAccount, Sale, InsertSale, SaleItem, InsertSaleItem,
+  Order, InsertOrder, OrderItem, InsertOrderItem, Note, InsertNote, AccountTransaction, InsertAccountTransaction,
+  Vehicle, InsertVehicle, DeliveryZone, InsertDeliveryZone, DeliveryRoute, InsertDeliveryRoute,
+  Delivery, InsertDelivery, DeliveryEvent, InsertDeliveryEvent, RouteAssignment, InsertRouteAssignment,
   Cart, InsertCart, CartItem, InsertCartItem, WebUser, InsertWebUser,
   ProductCategory, InsertProductCategory, ProductCategoryRelation, InsertProductCategoryRelation,
-  BankAccount, InsertBankAccount } from "@shared/schema";
+  BankAccount, InsertBankAccount, ProductionOrder, InsertProductionOrder } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { Purchase, PurchaseItem, InsertPurchase, UpdatePurchase, InsertPurchaseItem } from "../shared/types";
@@ -181,6 +181,13 @@ export interface IStorage {
   getBudget(id: number): Promise<import("../shared/types").Budget | undefined>;
   getAllBudgets(): Promise<import("../shared/types").Budget[]>;
   createBudget(insertBudget: import("../shared/types").InsertBudget): Promise<import("../shared/types").Budget>;
+
+  // Production Orders
+  getProductionOrder(id: number): Promise<ProductionOrder | undefined>;
+  getAllProductionOrders(): Promise<ProductionOrder[]>;
+  createProductionOrder(order: InsertProductionOrder): Promise<ProductionOrder>;
+  updateProductionOrder(id: number, order: Partial<ProductionOrder>): Promise<ProductionOrder>;
+  deleteProductionOrder(id: number): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -255,10 +262,14 @@ export class MemStorage implements IStorage {
   
   // Payments
   private payments: any[] = [];
-  
+
   // Budgets
   private budgets: Map<number, import("../shared/types").Budget> = new Map();
   private budgetIdCounter: number = 1;
+
+  // Production orders
+  private productionOrders: Map<number, ProductionOrder> = new Map();
+  private productionOrderIdCounter: number = 1;
   
   sessionStore: session.Store;
 
@@ -324,9 +335,12 @@ export class MemStorage implements IStorage {
     // Inicializar contadores de categorías
     this.productCategoryIdCounter = 1;
     this.productCategoryRelationIdCounter = 1;
-    
+
     this.budgets = new Map();
     this.budgetIdCounter = 1;
+
+    this.productionOrders = new Map();
+    this.productionOrderIdCounter = 1;
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000 // prune expired entries every 24h
@@ -1979,6 +1993,47 @@ export class MemStorage implements IStorage {
     };
     this.budgets.set(id, budget);
     return budget;
+  }
+
+  // Production Orders
+  async getProductionOrder(id: number): Promise<ProductionOrder | undefined> {
+    return this.productionOrders.get(id);
+  }
+
+  async getAllProductionOrders(): Promise<ProductionOrder[]> {
+    return Array.from(this.productionOrders.values());
+  }
+
+  async createProductionOrder(order: InsertProductionOrder): Promise<ProductionOrder> {
+    const id = this.productionOrderIdCounter++;
+    const newOrder: ProductionOrder = {
+      id,
+      status: order.status || 'planned',
+      startDate: order.startDate || null,
+      endDate: order.endDate || null,
+      notes: order.notes || null,
+      ...order,
+    };
+    this.productionOrders.set(id, newOrder);
+    return newOrder;
+  }
+
+  async updateProductionOrder(id: number, orderData: Partial<ProductionOrder>): Promise<ProductionOrder> {
+    const order = this.productionOrders.get(id);
+    if (!order) {
+      throw new Error(`Orden de producción con ID ${id} no encontrada`);
+    }
+    const updated = { ...order, ...orderData } as ProductionOrder;
+    this.productionOrders.set(id, updated);
+    return updated;
+  }
+
+  async deleteProductionOrder(id: number): Promise<void> {
+    const exists = this.productionOrders.has(id);
+    if (!exists) {
+      throw new Error(`Orden de producción con ID ${id} no encontrada`);
+    }
+    this.productionOrders.delete(id);
   }
 }
 

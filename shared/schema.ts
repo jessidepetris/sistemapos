@@ -889,6 +889,31 @@ export const insertBankAccountSchema = createInsertSchema(bankAccounts).pick({
 export type BankAccount = typeof bankAccounts.$inferSelect;
 export type InsertBankAccount = z.infer<typeof insertBankAccountSchema>;
 
+// Production orders table
+export const productionOrders = pgTable("production_orders", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id").notNull().references(() => products.id),
+  quantity: numeric("quantity", { precision: 10, scale: 2 }).notNull(),
+  unit: text("unit").notNull(),
+  status: text("status").notNull().default("planned"), // planned, in_progress, completed, cancelled
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  notes: text("notes"),
+});
+
+export const insertProductionOrderSchema = createInsertSchema(productionOrders).pick({
+  productId: true,
+  quantity: true,
+  unit: true,
+  status: true,
+  startDate: true,
+  endDate: true,
+  notes: true,
+});
+
+export type ProductionOrder = typeof productionOrders.$inferSelect;
+export type InsertProductionOrder = z.infer<typeof insertProductionOrderSchema>;
+
 // Quotations table
 export const quotations = pgTable("quotations", {
   id: serial("id").primaryKey(),
