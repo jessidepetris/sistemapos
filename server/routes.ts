@@ -6,6 +6,7 @@ import { z } from "zod";
 import passport from "passport";
 import { Router } from "express";
 import { getBankAccounts, createBankAccount, updateBankAccount, deleteBankAccount } from "./api/bank-accounts";
+import { scrapePrices } from "./scraper";
 import { checkAfipStatus, createAfipInvoice } from "./api/afip";
 import {
   InsertSale,
@@ -4678,6 +4679,141 @@ const updateData: any = {
       res.status(500).json({ 
         error: 'Error al actualizar costos de productos', 
         message: (error as Error).message 
+      });
+    }
+  });
+
+  // Actualización de costos mediante scraping
+  app.post('/api/products/update-cost-by-scrape', async (req, res) => {
+    try {
+      const {
+        supplierId,
+        url,
+        productSelector,
+        codeSelector,
+        priceSelector,
+        keepCurrentPrices = false,
+      } = req.body;
+
+      if (!url || !productSelector || !codeSelector || !priceSelector) {
+        return res.status(400).json({
+          error: 'Faltan parámetros para realizar el scraping',
+        });
+      }
+
+      const productUpdates = await scrapePrices(
+        url,
+        productSelector,
+        codeSelector,
+        priceSelector,
+      );
+
+      const results = {
+        success: 0,
+        errors: [] as Array<{ supplierCode: string; message: string; details?: string }>,
+        updatedProducts: [] as any[],
+      };
+
+      let allProducts = await storage.getAllProducts();
+
+      if (supplierId) {
+        allProducts = allProducts.filter(p => p.supplierId === supplierId);
+      }
+
+      const productsBySupplierCode = new Map<string, any>();
+      allProducts.forEach(product => {
+        if (product.supplierCode) {
+          productsBySupplierCode.set(product.supplierCode, product);
+        }
+      });
+
+      for (const update of productUpdates) {
+        const { supplierCode, packCost } = update;
+
+        if (!supplierCode) {
+          results.errors.push({
+            supplierCode: 'desconocido',
+            message: 'Código de proveedor no proporcionado',
+            details: 'El código de proveedor es requerido para actualizar el producto',
+          });
+          continue;
+        }
+
+        if (typeof packCost !== 'number' || isNaN(packCost)) {
+          results.errors.push({
+            supplierCode,
+            message: 'Costo inválido',
+            details: `El costo proporcionado (${packCost}) no es un número válido`,
+          });
+          continue;
+        }
+
+        if (packCost < 0) {
+          results.errors.push({
+            supplierCode,
+            message: 'Costo inválido',
+            details: 'El costo no puede ser negativo',
+          });
+          continue;
+        }
+
+        const product = productsBySupplierCode.get(supplierCode);
+
+        if (!product) {
+          results.errors.push({
+            supplierCode,
+            message: 'Producto no encontrado',
+            details: 'No se encontró ningún producto con este código de proveedor',
+          });
+          continue;
+        }
+
+        try {
+          const ivaRate = parseFloat(product.iva?.toString() || '21');
+          const shippingRate = parseFloat(product.shipping?.toString() || '0');
+          const profitRate = parseFloat(product.profit?.toString() || '55');
+          const wholesaleProfitRate = parseFloat(product.wholesaleProfit?.toString() || '35');
+
+          const unitsPerPack = parseFloat(product.unitsPerPack?.toString() || '1');
+          const unitCost = unitsPerPack > 0 ? packCost / unitsPerPack : packCost;
+
+          const updateData: any = {
+            cost: unitCost.toString(),
+            packCost: packCost.toString(),
+            lastUpdated: new Date(),
+          };
+
+          if (!keepCurrentPrices) {
+            const costWithIva = unitCost * (1 + ivaRate / 100);
+            const costWithShipping = costWithIva * (1 + shippingRate / 100);
+            const newPrice = Math.round(costWithShipping * (1 + profitRate / 100) * 100) / 100;
+            const newWholesalePrice = Math.round(costWithShipping * (1 + wholesaleProfitRate / 100) * 100) / 100;
+
+            updateData.price = newPrice.toString();
+            updateData.wholesalePrice = newWholesalePrice.toString();
+          }
+
+          const updatedProduct = await storage.updateProduct(product.id, updateData);
+          results.updatedProducts.push(updatedProduct);
+          results.success++;
+        } catch (error) {
+          results.errors.push({
+            supplierCode,
+            message: 'Error al actualizar producto',
+            details: (error as Error).message,
+          });
+        }
+      }
+
+      res.json({
+        message: `Se actualizaron ${results.success} productos. Hubo ${results.errors.length} errores.`,
+        results,
+      });
+    } catch (error) {
+      console.error('Error al actualizar costos por scraping:', error);
+      res.status(500).json({
+        error: 'Error al actualizar costos mediante scraping',
+        message: (error as Error).message,
       });
     }
   });
