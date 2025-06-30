@@ -99,6 +99,7 @@ import {
   Search,
   Phone
 } from "lucide-react";
+import { GoogleMap } from "@/components/maps/GoogleMap";
 import { apiRequest } from "@/lib/queryClient";
 
 // Definición del esquema de Entrega
@@ -1291,6 +1292,15 @@ export default function DeliveriesTab() {
                 <TabsContent value="tracking">
                   <div className="space-y-4">
                     <h3 className="text-sm font-medium">Historial de Eventos</h3>
+                    {selectedDelivery.events && selectedDelivery.events.length > 0 && (
+                      <GoogleMap
+                        center={selectedDelivery.events[selectedDelivery.events.length - 1].location || { lat: 0, lng: 0 }}
+                        markers={selectedDelivery.events
+                          .filter((e) => e.location)
+                          .map((e) => ({ position: e.location, title: e.description }))}
+                        style={{ height: "250px" }}
+                      />
+                    )}
                     
                     {selectedDelivery.events && selectedDelivery.events.length > 0 ? (
                       <div className="space-y-4">
