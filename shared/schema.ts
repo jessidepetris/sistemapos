@@ -488,7 +488,7 @@ export const insertDeliveryRouteSchema = createInsertSchema(deliveryRoutes).pick
 // Tabla de entregas
 export const deliveries = pgTable("deliveries", {
   id: serial("id").primaryKey(),
-  orderId: integer("order_id").notNull().references(() => orders.id),
+  orderId: integer("order_id").references(() => orders.id),
   saleId: integer("sale_id").references(() => sales.id),
   customerId: integer("customer_id").references(() => customers.id),
   userId: integer("user_id").notNull().references(() => users.id), // Usuario que creó la entrega
