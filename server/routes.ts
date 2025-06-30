@@ -3065,35 +3065,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/web/cart", async (req, res) => {
     try {
       // Obtener sessionId desde cookie
-      let sessionId = req.cookies?.cart_session_id;
-      
+      const sessionId = req.cookies?.cart_session_id;
+
       if (!sessionId) {
         return res.status(400).json({ message: "No hay una sesión de carrito activa" });
       }
-      
-      // Buscar un carrito existente para esta sesión
+
+      // Buscar el carrito activo de la sesión
       const existingCarts = await storage.getCartsBySessionId(sessionId);
-      let cart = existingCarts.find(c => c.status === 'active');
-      
+      const cart = existingCarts.find((c) => c.status === "active");
+
+      // Si no hay carrito activo consideramos la operación exitosa
       if (!cart) {
-        return res.status(404).json({ message: "No se encontró un carrito activo" });
+        return res.json({ success: true });
       }
-      
+
       // Obtener los items del carrito
       const cartItems = await storage.getCartItemsByCartId(cart.id);
-      
+
       // Eliminar todos los items
       for (const item of cartItems) {
         await storage.deleteCartItem(item.id);
       }
-      
+
       // Actualizar el carrito
       await storage.updateCart(cart.id, {
         totalAmount: "0",
         totalItems: 0,
-        updatedAt: new Date()
+        updatedAt: new Date(),
       });
-      
+
       res.json({ success: true });
     } catch (error) {
       res.status(400).json({ message: "Error al vaciar el carrito", error: (error as Error).message });
@@ -4894,6 +4895,9 @@ const updateData: any = {
       res.json({ success: true });
     } catch (error) {
       res.status(400).json({ message: "Error al eliminar orden de producción", error: (error as Error).message });
+    }
+  });
+
   // AFIP integration endpoints
   app.get("/api/afip/status", async (_req, res) => {
     try {
