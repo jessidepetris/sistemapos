@@ -640,7 +640,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('Usuario encontrado:', user.username);
       
       // Extraer los campos del body, aceptando ambos nombres para compatibilidad
-      const { items, paymentMethods, discountPercent = 0, surchargePercent = 0 } = req.body;
+      const {
+        items,
+        paymentMethods,
+        discountPercent = 0,
+        surchargePercent = 0,
+        customerId = null,
+      } = req.body;
       // Permitir ambos nombres, pero usar los correctos para guardar
       const documentType = req.body.documentType || req.body.docType || "remito";
       const invoiceNumber = req.body.invoiceNumber || req.body.docNumber || null;
@@ -684,6 +690,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Crear la venta con los nombres correctos de campos
       const sale = await storage.createSale({
+        customerId,
         userId: userId,
         subtotal: subtotal.toFixed(2),
         discount: discount.toFixed(2),
@@ -4894,6 +4901,9 @@ const updateData: any = {
       res.json({ success: true });
     } catch (error) {
       res.status(400).json({ message: "Error al eliminar orden de producción", error: (error as Error).message });
+    }
+  });
+
   // AFIP integration endpoints
   app.get("/api/afip/status", async (_req, res) => {
     try {
