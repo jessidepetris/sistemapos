@@ -26,7 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus, Search, CreditCard, ArrowDownCircle, ArrowUpCircle, Eye, MessageCircle, Receipt } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link } from "wouter";
-import { jsPDF } from 'jspdf';
+import { PDFService } from '@/services/pdfService';
 
 // Tipos
 interface Account {
@@ -253,89 +253,8 @@ const AccountsPage = () => {
   };
   
   // Función para generar el comprobante de pago
-  const generateReceipt = (transaction: Transaction, account: Account) => {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    
-    // Configuración de fuentes y estilos
-    doc.setFontSize(20);
-    doc.setFont("helvetica", "bold");
-    
-    // Título centrado
-    doc.text("COMPROBANTE DE PAGO", pageWidth / 2, 20, { align: "center" });
-    
-    // Agregar número de comprobante
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "normal");
-    doc.text(`N° ${transaction.id.toString().padStart(8, '0')}`, pageWidth / 2, 30, { align: "center" });
-    
-    // Línea divisoria
-    doc.setLineWidth(0.5);
-    doc.line(20, 35, pageWidth - 20, 35);
-    
-    // Información del comercio
-    doc.setFontSize(16);
-    doc.setFont("helvetica", "bold");
-    doc.text("Punto Pastelero", 20, 45);
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text("Insumos de Pastelería", 20, 52);
-    doc.text("Tel: (xxx) xxx-xxxx", 20, 57);
-    doc.text("Email: contacto@puntopastelero.com", 20, 62);
-    
-    // Línea divisoria
-    doc.line(20, 67, pageWidth - 20, 67);
-    
-    // Información de la transacción
-    doc.setFontSize(12);
-    const startY = 77;
-    const lineHeight = 7;
-    let currentY = startY;
-    
-    // Función helper para agregar líneas de texto
-    const addLine = (label: string, value: string) => {
-      doc.setFont("helvetica", "bold");
-      doc.text(label, 20, currentY);
-      doc.setFont("helvetica", "normal");
-      doc.text(value, 70, currentY);
-      currentY += lineHeight;
-    };
-    
-    addLine("Fecha:", formatDate(transaction.timestamp));
-    addLine("Cliente:", account.customer?.name || 'Cliente no registrado');
-    addLine("Monto:", `$${parseFloat(transaction.amount).toFixed(2)}`);
-    addLine("Método de pago:", (() => {
-      if (!transaction.paymentMethod) return "No especificado";
-      switch (transaction.paymentMethod) {
-        case "cash": return "Efectivo";
-        case "transfer": return "Transferencia";
-        case "credit_card": return "Tarjeta de Crédito";
-        case "debit_card": return "Tarjeta de Débito";
-        case "check": return "Cheque";
-        case "qr": return "QR";
-        default: return "No especificado";
-      }
-    })());
-    addLine("Descripción:", transaction.description);
-    
-    // Línea divisoria
-    doc.line(20, currentY + 5, pageWidth - 20, currentY + 5);
-    
-    // Saldo
-    currentY += 15;
-    doc.setFont("helvetica", "bold");
-    doc.text("Saldo actual:", 20, currentY);
-    doc.text(`$${parseFloat(transaction.balanceAfter).toFixed(2)}`, pageWidth - 20, currentY, { align: "right" });
-    
-    // Pie de página
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "italic");
-    const bottomY = doc.internal.pageSize.getHeight() - 20;
-    doc.text("Gracias por su pago", pageWidth / 2, bottomY, { align: "center" });
-    
-    // Guardar el PDF
-    const filename = `comprobante-${transaction.id}-${formatDate(transaction.timestamp).replace(/[/: ]/g, '-')}.pdf`;
-    doc.save(filename);
+  const generateReceipt = async (transaction: Transaction, account: Account) => {
+    await PDFService.generateReceiptPDF(transaction, account);
   };
   
   return (
