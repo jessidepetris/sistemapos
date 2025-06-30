@@ -251,6 +251,30 @@ export default function DeliveriesTab() {
     }
   });
 
+  // Obtener pedidos
+  const { data: orders, isLoading: isLoadingOrders } = useQuery<Order[]>({
+    queryKey: ["/api/orders"],
+    queryFn: async () => {
+      const response = await fetch("/api/orders");
+      if (!response.ok) {
+        throw new Error("Error al cargar pedidos");
+      }
+      return response.json();
+    }
+  });
+
+  // Obtener ventas/remitos
+  const { data: sales, isLoading: isLoadingSales } = useQuery<Sale[]>({
+    queryKey: ["/api/sales"],
+    queryFn: async () => {
+      const response = await fetch("/api/sales");
+      if (!response.ok) {
+        throw new Error("Error al cargar ventas");
+      }
+      return response.json();
+    }
+  });
+
   // Form para crear/editar entrega
   const form = useForm<z.infer<typeof deliverySchema>>({
     resolver: zodResolver(deliverySchema),
@@ -329,6 +353,8 @@ export default function DeliveriesTab() {
         requiresSignature: false,
         refrigerated: false,
         scheduledDate: new Date(),
+        orderId: undefined,
+        saleId: undefined,
       });
     },
     onError: (error) => {
@@ -553,7 +579,7 @@ export default function DeliveriesTab() {
   };
 
   // Renderizado condicional
-  if (isLoadingDeliveries || isLoadingCustomers || isLoadingDrivers || isLoadingVehicles || isLoadingRoutes) {
+  if (isLoadingDeliveries || isLoadingCustomers || isLoadingDrivers || isLoadingVehicles || isLoadingRoutes || isLoadingOrders || isLoadingSales) {
     return (
       <div className="flex justify-center items-center py-8">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -733,6 +759,62 @@ export default function DeliveriesTab() {
                                 <SelectItem value="mañana">Mañana (8:00 - 12:00)</SelectItem>
                                 <SelectItem value="tarde">Tarde (13:00 - 17:00)</SelectItem>
                                 <SelectItem value="completo">Día completo (8:00 - 17:00)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="orderId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Pedido (opcional)</FormLabel>
+                            <Select
+                              onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)}
+                              defaultValue={field.value?.toString()}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecciona un pedido" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="none">Sin pedido</SelectItem>
+                                {orders && orders.map(order => (
+                                  <SelectItem key={order.id} value={order.id.toString()}>
+                                    #{order.id} - {order.customer?.name || "Sin cliente"}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="saleId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Remito/Venta (opcional)</FormLabel>
+                            <Select
+                              onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)}
+                              defaultValue={field.value?.toString()}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecciona un remito" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="none">Sin remito</SelectItem>
+                                {sales && sales.map(sale => (
+                                  <SelectItem key={sale.id} value={sale.id.toString()}>
+                                    #{sale.id} - {sale.customer?.name || "Sin cliente"}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                             <FormMessage />
@@ -1239,6 +1321,18 @@ export default function DeliveriesTab() {
                             <p>Ruta: {selectedDelivery.route.name}</p>
                           </div>
                         )}
+                        {selectedDelivery.orderId && (
+                          <div className="flex items-start space-x-3">
+                            <Package className="h-4 w-4 mt-0.5" />
+                            <p>Pedido: #{selectedDelivery.orderId}</p>
+                          </div>
+                        )}
+                        {selectedDelivery.saleId && (
+                          <div className="flex items-start space-x-3">
+                            <Package className="h-4 w-4 mt-0.5" />
+                            <p>Remito: #{selectedDelivery.saleId}</p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1575,6 +1669,62 @@ export default function DeliveriesTab() {
                             <SelectItem value="mañana">Mañana (8:00 - 12:00)</SelectItem>
                             <SelectItem value="tarde">Tarde (13:00 - 17:00)</SelectItem>
                             <SelectItem value="completo">Día completo (8:00 - 17:00)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="orderId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Pedido (opcional)</FormLabel>
+                        <Select
+                          onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)}
+                          defaultValue={field.value?.toString()}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecciona un pedido" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">Sin pedido</SelectItem>
+                            {orders && orders.map(order => (
+                              <SelectItem key={order.id} value={order.id.toString()}>
+                                #{order.id} - {order.customer?.name || "Sin cliente"}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="saleId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Remito/Venta (opcional)</FormLabel>
+                        <Select
+                          onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)}
+                          defaultValue={field.value?.toString()}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecciona un remito" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">Sin remito</SelectItem>
+                            {sales && sales.map(sale => (
+                              <SelectItem key={sale.id} value={sale.id.toString()}>
+                                #{sale.id} - {sale.customer?.name || "Sin cliente"}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <FormMessage />

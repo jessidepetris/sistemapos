@@ -28,7 +28,7 @@ import { apiRequest } from "@/lib/queryClient";
 const quotationFormSchema = z.object({
   clientId: z.number({
     required_error: "Por favor seleccione un cliente",
-  }),
+  }).min(1, "Por favor seleccione un cliente"),
   dateValidUntil: z.date({
     required_error: "Por favor seleccione una fecha de validez",
   }),

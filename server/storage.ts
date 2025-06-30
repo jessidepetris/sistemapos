@@ -1275,7 +1275,7 @@ export class MemStorage implements IStorage {
       customerId: delivery.customerId || null,
       userId: delivery.userId,
       saleId: delivery.saleId || null,
-      orderId: delivery.orderId,
+      orderId: delivery.orderId || null,
       trackingCode,
       scheduledDate: delivery.scheduledDate,
       estimatedDeliveryTime: delivery.estimatedDeliveryTime || null,
