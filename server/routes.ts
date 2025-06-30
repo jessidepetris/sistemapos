@@ -640,7 +640,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('Usuario encontrado:', user.username);
       
       // Extraer los campos del body, aceptando ambos nombres para compatibilidad
-      const { items, paymentMethods, discountPercent = 0, surchargePercent = 0 } = req.body;
+      const {
+        items,
+        paymentMethods,
+        discountPercent = 0,
+        surchargePercent = 0,
+        customerId = null,
+      } = req.body;
       // Permitir ambos nombres, pero usar los correctos para guardar
       const documentType = req.body.documentType || req.body.docType || "remito";
       const invoiceNumber = req.body.invoiceNumber || req.body.docNumber || null;
@@ -684,6 +690,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Crear la venta con los nombres correctos de campos
       const sale = await storage.createSale({
+        customerId,
         userId: userId,
         subtotal: subtotal.toFixed(2),
         discount: discount.toFixed(2),
@@ -4894,6 +4901,197 @@ const updateData: any = {
       res.json({ success: true });
     } catch (error) {
       res.status(400).json({ message: "Error al eliminar orden de producción", error: (error as Error).message });
+    }
+  });
+
+  // AFIP integration endpoints
+  app.get("/api/afip/status", async (_req, res) => {
+    try {
+      const status = await checkAfipStatus();
+      res.json(status);
+    } catch (error) {
+      res.status(500).json({ message: "Error consultando AFIP", error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/afip/invoices", async (req, res) => {
+    try {
+      const result = await createAfipInvoice(req.body);
+      res.status(201).json(result);
+    } catch (error) {
+      res.status(400).json({ message: "Error enviando factura a AFIP", error: (error as Error).message });
+    }
+  });
+
+  // Endpoint para renovar la sesión
+  app.post("/api/refresh-session", async (req, res) => {
+    try {
+      if (!req.session.passport?.user) {
+        return res.status(401).json({ 
+          code: "SESSION_EXPIRED",
+          message: "No hay sesión activa" 
+        });
+      }
+
+      // Verificar si el usuario existe
+      const user = await storage.getUser(req.session.passport.user);
+      if (!user) {
+        return res.status(401).json({ 
+          code: "USER_NOT_FOUND",
+          message: "Usuario no encontrado" 
+        });
+      }
+
+      // Renovar la sesión
+      req.session.touch();
+      
+      return res.status(200).json({ 
+        message: "Sesión renovada exitosamente",
+        user: {
+          id: user.id,
+          username: user.username,
+          fullName: user.fullName,
+          role: user.role
+        }
+      });
+    } catch (error) {
+      console.error("Error al renovar la sesión:", error);
+      return res.status(500).json({ 
+        code: "INTERNAL_ERROR",
+        message: "Error al renovar la sesión" 
+      });
+    }
+  });
+
+  // Quotation endpoints
+  app.post("/api/quotations", async (req, res) => {
+    const { clientId, dateValidUntil, items, notes } = req.body;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    try {
+      // Calcular el total del presupuesto
+      const totalAmount = items.reduce((sum: number, item: any) => sum + item.subtotal, 0);
+
+      // Crear el presupuesto
+      const [quotation] = await db.insert(quotations).values({
+        clientId: Number(clientId),
+        dateValidUntil: new Date(dateValidUntil),
+        status: "pending",
+        totalAmount: totalAmount.toString(),
+        notes,
+        createdBy: userId,
+      }).returning();
+
+      // Agregar los items del presupuesto
+      const quotationItemsData = items.map((item: any) => ({
+        quotationId: quotation.id,
+        productId: item.productId,
+        quantity: item.quantity.toString(),
+        unitPrice: item.unitPrice.toString(),
+        subtotal: item.subtotal.toString(),
+      }));
+
+      await db.insert(quotationItems).values(quotationItemsData);
+
+      return res.status(201).json({ success: true, quotation });
+    } catch (error) {
+      console.error("Error creating quotation:", error);
+      return res.status(500).json({ error: "Failed to create quotation" });
+    }
+  });
+
+  app.get("/api/quotations", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    try {
+      const quotations = await db.select().from(quotations).orderBy(quotations.dateCreated);
+      return res.json(quotations);
+    } catch (error) {
+      console.error("Error fetching quotations:", error);
+      return res.status(500).json({ error: "Failed to fetch quotations" });
+    }
+  });
+
+  app.get("/api/quotations/:id", async (c) => {
+    const userId = c.get("userId");
+    if (!userId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const id = c.req.param("id");
+
+    try {
+      const [quotation] = await db.select().from(quotations).where(eq(quotations.id, parseInt(id)));
+      if (!quotation) {
+        return c.json({ error: "Quotation not found" }, 404);
+      }
+
+      const items = await db.select().from(quotationItems).where(eq(quotationItems.quotationId, quotation.id));
+      return c.json({ ...quotation, items });
+    } catch (error) {
+      console.error("Error fetching quotation:", error);
+      return c.json({ error: "Failed to fetch quotation" }, 500);
+    }
+  });
+
+  app.put("/api/quotations/:id/status", async (c) => {
+    const userId = c.get("userId");
+    if (!userId) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const id = c.req.param("id");
+    const { status } = await c.req.json();
+
+    try {
+      const [quotation] = await db.select().from(quotations).where(eq(quotations.id, parseInt(id)));
+      if (!quotation) {
+        return c.json({ error: "Quotation not found" }, 404);
+      }
+
+      // Si el presupuesto es aprobado, crear una factura
+      if (status === "approved") {
+        const items = await db.select().from(quotationItems).where(eq(quotationItems.quotationId, quotation.id));
+        
+        // Crear la factura
+        const [invoice] = await db.insert(sales).values({
+          clientId: quotation.clientId,
+          date: new Date(),
+          totalAmount: quotation.totalAmount,
+          status: "pending",
+          createdBy: userId,
+          quotationId: quotation.id,
+        }).returning();
+
+        // Agregar los items a la factura
+
+        const invoiceItemsData = items.map((item) => ({
+          saleId: invoice.id,
+          productId: item.productId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          subtotal: item.subtotal,
+        }));
+
+        await db.insert(saleItems).values(invoiceItemsData);
+      }
+
+      // Actualizar el estado del presupuesto
+      await db.update(quotations)
+        .set({ status })
+        .where(eq(quotations.id, parseInt(id)));
+
+      return c.json({ success: true });
+    } catch (error) {
+      console.error("Error updating quotation status:", error);
+      return c.json({ error: "Failed to update quotation status" }, 500);
     }
   });
   // ... existing code ...
