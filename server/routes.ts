@@ -7,6 +7,8 @@ import passport from "passport";
 import { Router } from "express";
 import { getBankAccounts, createBankAccount, updateBankAccount, deleteBankAccount } from "./api/bank-accounts";
 import { getProductionOrders, createProductionOrder, updateProductionOrder, deleteProductionOrder } from "./api/production-orders";
+import { scrapePrices } from "./scraper";
+import { checkAfipStatus, createAfipInvoice } from "./api/afip";
 import {
   InsertSale,
   InsertSaleItem,
@@ -290,10 +292,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Products endpoints
   app.get("/api/products", async (req, res) => {
     try {
-      const products = await storage.getAllProducts();
+      let products = await storage.getAllProducts();
+
+      // Optional search by name or description
+      const search = (req.query.search as string | undefined)?.toLowerCase();
+      if (search) {
+        products = products.filter((p) =>
+          p.name.toLowerCase().includes(search) ||
+          (p.description?.toLowerCase().includes(search))
+        );
+      }
+
+      // Optional sorting by name or price
+      const sort = req.query.sort as string | undefined;
+      if (sort === "name") {
+        products = products.sort((a, b) => a.name.localeCompare(b.name));
+      } else if (sort === "price") {
+        products = products.sort(
+          (a, b) => parseFloat(a.price || "0") - parseFloat(b.price || "0"),
+        );
+      }
+
       res.json(products);
     } catch (error) {
-      res.status(500).json({ message: "Error al obtener productos", error: (error as Error).message });
+      res
+        .status(500)
+        .json({ message: "Error al obtener productos", error: (error as Error).message });
     }
   });
 
@@ -3440,37 +3464,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { startDate, endDate } = req.query;
       const start = startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // Último mes por defecto
       const end = endDate ? new Date(endDate as string) : new Date();
-      
+
       const sales = await storage.getAllSales() || [];
       const customers = await storage.getAllCustomers() || [];
-      
+
       // Filtrar ventas por fecha
       const filteredSales = sales.filter(sale => {
         const saleDate = new Date(sale.timestamp as string);
         return saleDate >= start && saleDate <= end;
       });
-      
-      // Enriquecer datos de ventas
+
+      // Enriquecer datos de ventas y mantener la fecha como objeto para ordenarla
       const detailedSales = await Promise.all(filteredSales.map(async (sale) => {
         const customer = customers.find(c => c.id === sale.customerId);
         const saleItems = await storage.getSaleItemsBySaleId(sale.id);
-        
+
+        const dateObj = new Date(sale.timestamp as string);
+
         return {
           id: sale.id,
-          date: new Date(sale.timestamp as string).toLocaleDateString(),
+          dateObj,
           customer: customer ? customer.name : "Cliente no registrado",
           total: parseFloat(sale.total).toFixed(2),
           items: saleItems.length,
           status: sale.status || "completed",
         };
       }));
-      
+
       // Ordenar por fecha (más recientes primero)
-      detailedSales.sort((a, b) => {
-        return new Date(b.date).getTime() - new Date(a.date).getTime();
-      });
-      
-      res.json(detailedSales);
+      detailedSales.sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
+
+      // Formatear fecha para la respuesta final
+      const response = detailedSales.map(sale => ({
+        id: sale.id,
+        date: sale.dateObj.toLocaleDateString(),
+        customer: sale.customer,
+        total: sale.total,
+        items: sale.items,
+        status: sale.status,
+      }));
+
+      res.json(response);
     } catch (error) {
       console.error("Error al generar reporte detallado de ventas:", error);
       res.status(500).json({ error: "Error al generar reporte" });
@@ -4650,6 +4684,141 @@ const updateData: any = {
     }
   });
 
+  // Actualización de costos mediante scraping
+  app.post('/api/products/update-cost-by-scrape', async (req, res) => {
+    try {
+      const {
+        supplierId,
+        url,
+        productSelector,
+        codeSelector,
+        priceSelector,
+        keepCurrentPrices = false,
+      } = req.body;
+
+      if (!url || !productSelector || !codeSelector || !priceSelector) {
+        return res.status(400).json({
+          error: 'Faltan parámetros para realizar el scraping',
+        });
+      }
+
+      const productUpdates = await scrapePrices(
+        url,
+        productSelector,
+        codeSelector,
+        priceSelector,
+      );
+
+      const results = {
+        success: 0,
+        errors: [] as Array<{ supplierCode: string; message: string; details?: string }>,
+        updatedProducts: [] as any[],
+      };
+
+      let allProducts = await storage.getAllProducts();
+
+      if (supplierId) {
+        allProducts = allProducts.filter(p => p.supplierId === supplierId);
+      }
+
+      const productsBySupplierCode = new Map<string, any>();
+      allProducts.forEach(product => {
+        if (product.supplierCode) {
+          productsBySupplierCode.set(product.supplierCode, product);
+        }
+      });
+
+      for (const update of productUpdates) {
+        const { supplierCode, packCost } = update;
+
+        if (!supplierCode) {
+          results.errors.push({
+            supplierCode: 'desconocido',
+            message: 'Código de proveedor no proporcionado',
+            details: 'El código de proveedor es requerido para actualizar el producto',
+          });
+          continue;
+        }
+
+        if (typeof packCost !== 'number' || isNaN(packCost)) {
+          results.errors.push({
+            supplierCode,
+            message: 'Costo inválido',
+            details: `El costo proporcionado (${packCost}) no es un número válido`,
+          });
+          continue;
+        }
+
+        if (packCost < 0) {
+          results.errors.push({
+            supplierCode,
+            message: 'Costo inválido',
+            details: 'El costo no puede ser negativo',
+          });
+          continue;
+        }
+
+        const product = productsBySupplierCode.get(supplierCode);
+
+        if (!product) {
+          results.errors.push({
+            supplierCode,
+            message: 'Producto no encontrado',
+            details: 'No se encontró ningún producto con este código de proveedor',
+          });
+          continue;
+        }
+
+        try {
+          const ivaRate = parseFloat(product.iva?.toString() || '21');
+          const shippingRate = parseFloat(product.shipping?.toString() || '0');
+          const profitRate = parseFloat(product.profit?.toString() || '55');
+          const wholesaleProfitRate = parseFloat(product.wholesaleProfit?.toString() || '35');
+
+          const unitsPerPack = parseFloat(product.unitsPerPack?.toString() || '1');
+          const unitCost = unitsPerPack > 0 ? packCost / unitsPerPack : packCost;
+
+          const updateData: any = {
+            cost: unitCost.toString(),
+            packCost: packCost.toString(),
+            lastUpdated: new Date(),
+          };
+
+          if (!keepCurrentPrices) {
+            const costWithIva = unitCost * (1 + ivaRate / 100);
+            const costWithShipping = costWithIva * (1 + shippingRate / 100);
+            const newPrice = Math.round(costWithShipping * (1 + profitRate / 100) * 100) / 100;
+            const newWholesalePrice = Math.round(costWithShipping * (1 + wholesaleProfitRate / 100) * 100) / 100;
+
+            updateData.price = newPrice.toString();
+            updateData.wholesalePrice = newWholesalePrice.toString();
+          }
+
+          const updatedProduct = await storage.updateProduct(product.id, updateData);
+          results.updatedProducts.push(updatedProduct);
+          results.success++;
+        } catch (error) {
+          results.errors.push({
+            supplierCode,
+            message: 'Error al actualizar producto',
+            details: (error as Error).message,
+          });
+        }
+      }
+
+      res.json({
+        message: `Se actualizaron ${results.success} productos. Hubo ${results.errors.length} errores.`,
+        results,
+      });
+    } catch (error) {
+      console.error('Error al actualizar costos por scraping:', error);
+      res.status(500).json({
+        error: 'Error al actualizar costos mediante scraping',
+        message: (error as Error).message,
+      });
+    }
+  });
+
   // Bank Accounts endpoints
   app.get("/api/bank-accounts", async (req, res) => {
     try {
@@ -4725,6 +4894,22 @@ const updateData: any = {
       res.json({ success: true });
     } catch (error) {
       res.status(400).json({ message: "Error al eliminar orden de producción", error: (error as Error).message });
+  // AFIP integration endpoints
+  app.get("/api/afip/status", async (_req, res) => {
+    try {
+      const status = await checkAfipStatus();
+      res.json(status);
+    } catch (error) {
+      res.status(500).json({ message: "Error consultando AFIP", error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/afip/invoices", async (req, res) => {
+    try {
+      const result = await createAfipInvoice(req.body);
+      res.status(201).json(result);
+    } catch (error) {
+      res.status(400).json({ message: "Error enviando factura a AFIP", error: (error as Error).message });
     }
   });
 
