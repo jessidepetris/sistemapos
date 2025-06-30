@@ -227,5 +227,110 @@ export const PDFService = {
       console.error('Error al generar PDF:', error);
       return Promise.resolve(false);
     }
+  },
+
+  async generateReceiptPDF(transaction: any, account: any): Promise<boolean> {
+    try {
+      const pdf = new jsPDF();
+      const pageWidth = pdf.internal.pageSize.getWidth();
+
+      const formatDate = (dateString: string) => {
+        const date = new Date(dateString);
+        return (
+          date.toLocaleDateString() +
+          " " +
+          date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        );
+      };
+
+      pdf.setFontSize(20);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("COMPROBANTE DE PAGO", pageWidth / 2, 20, { align: "center" });
+
+      pdf.setFontSize(12);
+      pdf.setFont("helvetica", "normal");
+      pdf.text(`N° ${transaction.id.toString().padStart(8, "0")}`, pageWidth / 2, 30, { align: "center" });
+
+      pdf.setLineWidth(0.5);
+      pdf.line(20, 35, pageWidth - 20, 35);
+
+      pdf.setFontSize(16);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("Punto Pastelero", 20, 45);
+      pdf.setFontSize(10);
+      pdf.setFont("helvetica", "normal");
+      pdf.text("Insumos de Pastelería", 20, 52);
+      pdf.text("Tel: (xxx) xxx-xxxx", 20, 57);
+      pdf.text("Email: contacto@puntopastelero.com", 20, 62);
+
+      pdf.line(20, 67, pageWidth - 20, 67);
+
+      pdf.setFontSize(12);
+      let y = 77;
+      const lineHeight = 7;
+      const addLine = (label: string, value: string) => {
+        pdf.setFont("helvetica", "bold");
+        pdf.text(label, 20, y);
+        pdf.setFont("helvetica", "normal");
+        pdf.text(value, 70, y);
+        y += lineHeight;
+      };
+
+      addLine("Cuenta:", account.id.toString().padStart(8, "0"));
+      addLine("Fecha:", formatDate(transaction.timestamp));
+      addLine("Cliente:", account.customer?.name || "Cliente no registrado");
+      addLine("Monto:", `$${parseFloat(transaction.amount).toFixed(2)}`);
+      addLine(
+        "Método de pago:",
+        (() => {
+          switch (transaction.paymentMethod) {
+            case "cash":
+              return "Efectivo";
+            case "transfer":
+              return "Transferencia";
+            case "credit_card":
+              return "Tarjeta de Crédito";
+            case "debit_card":
+              return "Tarjeta de Débito";
+            case "check":
+              return "Cheque";
+            case "qr":
+              return "QR";
+            default:
+              return "No especificado";
+          }
+        })()
+      );
+      addLine("Descripción:", transaction.description);
+
+      pdf.line(20, y + 5, pageWidth - 20, y + 5);
+      const amount = parseFloat(transaction.amount);
+      const balanceAfter = parseFloat(transaction.balanceAfter);
+      const balanceBefore =
+        transaction.type === "credit"
+          ? balanceAfter - amount
+          : balanceAfter + amount;
+
+      y += 15;
+      pdf.setFont("helvetica", "bold");
+      pdf.text("Saldo anterior:", 20, y);
+      pdf.text(`$${balanceBefore.toFixed(2)}`, pageWidth - 20, y, { align: "right" });
+      y += lineHeight;
+      pdf.text("Saldo actual:", 20, y);
+      pdf.text(`$${balanceAfter.toFixed(2)}`, pageWidth - 20, y, { align: "right" });
+
+      pdf.setFontSize(10);
+      pdf.setFont("helvetica", "italic");
+      const bottomY = pdf.internal.pageSize.getHeight() - 20;
+      pdf.text("Gracias por su pago", pageWidth / 2, bottomY, { align: "center" });
+
+      const filename = `comprobante-${transaction.id}-${formatDate(transaction.timestamp).replace(/[/: ]/g, "-")}.pdf`;
+      pdf.save(filename);
+
+      return true;
+    } catch (error) {
+      console.error("Error al generar PDF:", error);
+      return false;
+    }
   }
 };

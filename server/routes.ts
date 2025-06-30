@@ -7,6 +7,7 @@ import passport from "passport";
 import { Router } from "express";
 import { getBankAccounts, createBankAccount, updateBankAccount, deleteBankAccount } from "./api/bank-accounts";
 import { scrapePrices } from "./scraper";
+import { checkAfipStatus, createAfipInvoice } from "./api/afip";
 import {
   InsertSale,
   InsertSaleItem,
@@ -290,10 +291,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Products endpoints
   app.get("/api/products", async (req, res) => {
     try {
-      const products = await storage.getAllProducts();
+      let products = await storage.getAllProducts();
+
+      // Optional search by name or description
+      const search = (req.query.search as string | undefined)?.toLowerCase();
+      if (search) {
+        products = products.filter((p) =>
+          p.name.toLowerCase().includes(search) ||
+          (p.description?.toLowerCase().includes(search))
+        );
+      }
+
+      // Optional sorting by name or price
+      const sort = req.query.sort as string | undefined;
+      if (sort === "name") {
+        products = products.sort((a, b) => a.name.localeCompare(b.name));
+      } else if (sort === "price") {
+        products = products.sort(
+          (a, b) => parseFloat(a.price || "0") - parseFloat(b.price || "0"),
+        );
+      }
+
       res.json(products);
     } catch (error) {
-      res.status(500).json({ message: "Error al obtener productos", error: (error as Error).message });
+      res
+        .status(500)
+        .json({ message: "Error al obtener productos", error: (error as Error).message });
     }
   });
 
@@ -3440,37 +3463,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { startDate, endDate } = req.query;
       const start = startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // Último mes por defecto
       const end = endDate ? new Date(endDate as string) : new Date();
-      
+
       const sales = await storage.getAllSales() || [];
       const customers = await storage.getAllCustomers() || [];
-      
+
       // Filtrar ventas por fecha
       const filteredSales = sales.filter(sale => {
         const saleDate = new Date(sale.timestamp as string);
         return saleDate >= start && saleDate <= end;
       });
-      
-      // Enriquecer datos de ventas
+
+      // Enriquecer datos de ventas y mantener la fecha como objeto para ordenarla
       const detailedSales = await Promise.all(filteredSales.map(async (sale) => {
         const customer = customers.find(c => c.id === sale.customerId);
         const saleItems = await storage.getSaleItemsBySaleId(sale.id);
-        
+
+        const dateObj = new Date(sale.timestamp as string);
+
         return {
           id: sale.id,
-          date: new Date(sale.timestamp as string).toLocaleDateString(),
+          dateObj,
           customer: customer ? customer.name : "Cliente no registrado",
           total: parseFloat(sale.total).toFixed(2),
           items: saleItems.length,
           status: sale.status || "completed",
         };
       }));
-      
+
       // Ordenar por fecha (más recientes primero)
-      detailedSales.sort((a, b) => {
-        return new Date(b.date).getTime() - new Date(a.date).getTime();
-      });
-      
-      res.json(detailedSales);
+      detailedSales.sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
+
+      // Formatear fecha para la respuesta final
+      const response = detailedSales.map(sale => ({
+        id: sale.id,
+        date: sale.dateObj.toLocaleDateString(),
+        customer: sale.customer,
+        total: sale.total,
+        items: sale.items,
+        status: sale.status,
+      }));
+
+      res.json(response);
     } catch (error) {
       console.error("Error al generar reporte detallado de ventas:", error);
       res.status(500).json({ error: "Error al generar reporte" });
@@ -4821,6 +4854,25 @@ const updateData: any = {
       res.json({ success: true });
     } catch (error) {
       res.status(400).json({ message: "Error al eliminar cuenta bancaria", error: (error as Error).message });
+    }
+  });
+
+  // AFIP integration endpoints
+  app.get("/api/afip/status", async (_req, res) => {
+    try {
+      const status = await checkAfipStatus();
+      res.json(status);
+    } catch (error) {
+      res.status(500).json({ message: "Error consultando AFIP", error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/afip/invoices", async (req, res) => {
+    try {
+      const result = await createAfipInvoice(req.body);
+      res.status(201).json(result);
+    } catch (error) {
+      res.status(400).json({ message: "Error enviando factura a AFIP", error: (error as Error).message });
     }
   });
 
