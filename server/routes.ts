@@ -6,6 +6,7 @@ import { z } from "zod";
 import passport from "passport";
 import { Router } from "express";
 import { getBankAccounts, createBankAccount, updateBankAccount, deleteBankAccount } from "./api/bank-accounts";
+import { getProductionOrders, createProductionOrder, updateProductionOrder, deleteProductionOrder } from "./api/production-orders";
 import { scrapePrices } from "./scraper";
 import { checkAfipStatus, createAfipInvoice } from "./api/afip";
 import {
@@ -4857,6 +4858,42 @@ const updateData: any = {
     }
   });
 
+  // Production Orders endpoints
+  app.get("/api/production-orders", async (req, res) => {
+    try {
+      const orders = await getProductionOrders();
+      res.json(orders);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener órdenes de producción", error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/production-orders", async (req, res) => {
+    try {
+      const order = await createProductionOrder(req.body);
+      res.status(201).json(order);
+    } catch (error) {
+      res.status(400).json({ message: "Error al crear orden de producción", error: (error as Error).message });
+    }
+  });
+
+  app.put("/api/production-orders/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const order = await updateProductionOrder(id, req.body);
+      res.json(order);
+    } catch (error) {
+      res.status(400).json({ message: "Error al actualizar orden de producción", error: (error as Error).message });
+    }
+  });
+
+  app.delete("/api/production-orders/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await deleteProductionOrder(id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ message: "Error al eliminar orden de producción", error: (error as Error).message });
   // AFIP integration endpoints
   app.get("/api/afip/status", async (_req, res) => {
     try {
