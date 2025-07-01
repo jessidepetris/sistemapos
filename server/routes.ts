@@ -5125,41 +5125,50 @@ const updateData: any = {
     }
   });
 
-  app.get("/api/quotations/:id", async (c) => {
-    const userId = c.get("userId");
+  app.get("/api/quotations/:id", async (req, res) => {
+    const userId = req.user?.id;
     if (!userId) {
-      return c.json({ error: "Unauthorized" }, 401);
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const id = c.req.param("id");
+    const { id } = req.params;
 
     try {
-      const [quotation] = await db.select().from(quotations).where(eq(quotations.id, parseInt(id)));
+      const [quotation] = await db
+        .select()
+        .from(quotations)
+        .where(eq(quotations.id, parseInt(id)));
       if (!quotation) {
-        return c.json({ error: "Quotation not found" }, 404);
+        return res.status(404).json({ error: "Quotation not found" });
       }
 
-      const items = await db.select().from(quotationItems).where(eq(quotationItems.quotationId, quotation.id));
-      return c.json({ ...quotation, items });
+      const items = await db
+        .select()
+        .from(quotationItems)
+        .where(eq(quotationItems.quotationId, quotation.id));
+      return res.json({ ...quotation, items });
     } catch (error) {
       console.error("Error fetching quotation:", error);
-      return c.json({ error: "Failed to fetch quotation" }, 500);
+      return res.status(500).json({ error: "Failed to fetch quotation" });
     }
   });
 
-  app.put("/api/quotations/:id/status", async (c) => {
-    const userId = c.get("userId");
+  app.put("/api/quotations/:id/status", async (req, res) => {
+    const userId = req.user?.id;
     if (!userId) {
-      return c.json({ error: "Unauthorized" }, 401);
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const id = c.req.param("id");
-    const { status } = await c.req.json();
+    const { id } = req.params;
+    const { status } = req.body;
 
     try {
-      const [quotation] = await db.select().from(quotations).where(eq(quotations.id, parseInt(id)));
+      const [quotation] = await db
+        .select()
+        .from(quotations)
+        .where(eq(quotations.id, parseInt(id)));
       if (!quotation) {
-        return c.json({ error: "Quotation not found" }, 404);
+        return res.status(404).json({ error: "Quotation not found" });
       }
 
       // Si el presupuesto es aprobado, crear una factura
@@ -5190,14 +5199,15 @@ const updateData: any = {
       }
 
       // Actualizar el estado del presupuesto
-      await db.update(quotations)
+      await db
+        .update(quotations)
         .set({ status })
         .where(eq(quotations.id, parseInt(id)));
 
-      return c.json({ success: true });
+      return res.json({ success: true });
     } catch (error) {
       console.error("Error updating quotation status:", error);
-      return c.json({ error: "Failed to update quotation status" }, 500);
+      return res.status(500).json({ error: "Failed to update quotation status" });
     }
   });
   // ... existing code ...
