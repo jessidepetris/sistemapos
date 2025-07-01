@@ -5012,8 +5012,8 @@ const updateData: any = {
     }
 
     try {
-      const quotations = await db.select().from(quotations).orderBy(quotations.dateCreated);
-      return res.json(quotations);
+      const quotationList = await db.select().from(quotations).orderBy(quotations.dateCreated);
+      return res.json(quotationList);
     } catch (error) {
       console.error("Error fetching quotations:", error);
       return res.status(500).json({ error: "Failed to fetch quotations" });
