@@ -2944,13 +2944,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         }
       }
+
+      // Si el pedido no está asociado a un cliente existente, 
+      // adjuntamos los datos proporcionados como parte de la nota
+      let notes = finalCustomerData.notes || "";
+      if (!resolvedCustomerId) {
+        const detailParts: string[] = [];
+        if (finalCustomerData.name) detailParts.push(`Nombre: ${finalCustomerData.name}`);
+        if (finalCustomerData.email) detailParts.push(`Email: ${finalCustomerData.email}`);
+        if (finalCustomerData.phone) detailParts.push(`Tel: ${finalCustomerData.phone}`);
+        if (finalCustomerData.address) detailParts.push(`Dirección: ${finalCustomerData.address}`);
+        if (finalCustomerData.city) detailParts.push(`Ciudad: ${finalCustomerData.city}`);
+        if (finalCustomerData.province) detailParts.push(`Provincia: ${finalCustomerData.province}`);
+        if (detailParts.length > 0) {
+          const detailsString = detailParts.join(', ');
+          notes = notes ? `${notes} - ${detailsString}` : detailsString;
+        }
+      }
       
       // Crear la orden
       const order = await storage.createOrder({
         userId: adminUser.id,
         total: total.toString(),
         status: "pending",
-        notes: finalCustomerData.notes || "",
+        notes,
         deliveryDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // entrega al día siguiente
         isWebOrder: true,
         source: "web",
