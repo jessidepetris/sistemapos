@@ -560,6 +560,15 @@ const POSPage = () => {
         status = "pedido";
       }
 
+      if ((documentType === "presupuesto" || documentType === "pedido") && !selectedCustomerId) {
+        toast({
+          title: "Cliente requerido",
+          description: "Debe seleccionar un cliente para guardar el documento",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const saleData = {
         customerId: selectedCustomerId,
         userId: user?.id,
