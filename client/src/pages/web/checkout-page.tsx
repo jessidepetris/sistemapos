@@ -83,6 +83,8 @@ const CheckoutPage = () => {
           email: data.email,
           phone: data.phone,
           address: data.address,
+          city: user?.city || "",
+          province: user?.province || "",
           notes: data.notes || "",
         },
         paymentMethod: data.paymentMethod,

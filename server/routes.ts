@@ -2927,19 +2927,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
           resolvedCustomerId = existing.id;
         }
       }
+
+      let finalCustomerData: any = { ...customerData };
+      if (resolvedCustomerId) {
+        const existing = await storage.getCustomer(resolvedCustomerId);
+        if (existing) {
+          finalCustomerData = {
+            name: existing.name,
+            email: existing.email,
+            phone: existing.phone,
+            address: existing.address,
+            city: existing.city,
+            province: existing.province,
+            notes: customerData?.notes || "",
+            customerId: resolvedCustomerId,
+          };
+        }
+      }
       
       // Crear la orden
       const order = await storage.createOrder({
         userId: adminUser.id,
         total: total.toString(),
         status: "pending",
-        notes: customerData.notes || "",
+        notes: finalCustomerData.notes || "",
         deliveryDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // entrega al día siguiente
         isWebOrder: true,
         source: "web",
         paymentMethod: paymentMethod, // efectivo o transferencia
         customerId: resolvedCustomerId || undefined,
-        customerData: JSON.stringify(customerData) // almacenamos los datos del cliente en formato JSON
+        customerData: JSON.stringify(finalCustomerData) // almacenamos los datos del cliente en formato JSON
       });
       
       // Crear items de la orden
@@ -2966,7 +2983,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         total: order.total,
         status: order.status,
         customerId: order.customerId,
-        customerData,
+        customerData: finalCustomerData,
         paymentMethod,
         items: await storage.getOrderItemsByOrderId(order.id),
         timestamp: order.timestamp
@@ -3008,6 +3025,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           customerData = JSON.parse(order.customerData);
         } catch (e) {
           console.error("Error al parsear datos del cliente:", e);
+        }
+      } else if (order.customerId) {
+        const customer = await storage.getCustomer(order.customerId);
+        if (customer) {
+          customerData = {
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone,
+            address: customer.address,
+            city: customer.city,
+            province: customer.province,
+          };
         }
       }
       
@@ -3171,9 +3200,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userOrders = allOrders.filter(order => {
         if (!order.isWebOrder) return false;
 
-        if (order.customerId && req.user.customerId) {
-          return order.customerId === req.user.customerId;
-        }
 
         if (order.customerData) {
           try {
@@ -3187,6 +3213,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           } catch (e) {
             console.error("Error al parsear datos del cliente:", e);
           }
+        } else if (order.customerId && req.user.customerId) {
+          return order.customerId === req.user.customerId;
+
         }
 
         return false;
@@ -3209,7 +3238,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
 
           let customerInfo: any = {};
-          if (order.customerId) {
+
+          if (order.customerData) {
+            try {
+              customerInfo = JSON.parse(order.customerData);
+            } catch (e) {
+              console.error("Error al parsear datos del cliente:", e);
+            }
+          } else if (order.customerId) {
+
             const customer = await storage.getCustomer(order.customerId);
             if (customer) {
               customerInfo = {
@@ -3220,12 +3257,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 city: customer.city,
                 province: customer.province,
               };
-            }
-          } else if (order.customerData) {
-            try {
-              customerInfo = JSON.parse(order.customerData);
-            } catch (e) {
-              console.error("Error al parsear datos del cliente:", e);
             }
           }
 
