@@ -188,8 +188,8 @@ const POSPage = () => {
     },
     onSuccess: (data) => {
       // Invalidar consultas según el tipo de documento
-      if (data.documentType === "presupuesto") {
-        queryClient.invalidateQueries({ queryKey: ["/api/presupuestos"] });
+        if (data.documentType === "presupuesto") {
+          queryClient.invalidateQueries({ queryKey: ["/api/quotations"] });
       } else if (data.documentType === "pedido") {
         queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       } else {
