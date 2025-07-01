@@ -2869,10 +2869,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Checkout y creación de orden
   app.post("/api/web/orders", async (req, res) => {
     try {
-      const { 
-        cartId, 
-        customerData, 
-        paymentMethod
+      const {
+        cartId,
+        customerData,
+        paymentMethod,
+        customerId
       } = req.body;
       
       // Verificar que existe la sesión
@@ -2911,18 +2912,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Calcular el total
       const total = cartItems.reduce((sum, item) => sum + parseFloat(item.price) * parseFloat(item.quantity), 0);
+
+      let resolvedCustomerId: number | null = null;
+      if (customerId) {
+        const existing = await storage.getCustomer(Number(customerId));
+        if (existing) {
+          resolvedCustomerId = existing.id;
+        }
+      }
+
+      if (!resolvedCustomerId && req.isAuthenticated() && req.user?.customerId) {
+        const existing = await storage.getCustomer(req.user.customerId);
+        if (existing) {
+          resolvedCustomerId = existing.id;
+        }
+      }
+
+      let finalCustomerData: any = { ...customerData };
+      if (resolvedCustomerId) {
+        const existing = await storage.getCustomer(resolvedCustomerId);
+        if (existing) {
+          finalCustomerData = {
+            name: existing.name,
+            email: existing.email,
+            phone: existing.phone,
+            address: existing.address,
+            city: existing.city,
+            province: existing.province,
+            notes: customerData?.notes || "",
+            customerId: resolvedCustomerId,
+          };
+        }
+      }
       
       // Crear la orden
       const order = await storage.createOrder({
         userId: adminUser.id,
         total: total.toString(),
         status: "pending",
-        notes: customerData.notes || "",
+        notes: finalCustomerData.notes || "",
         deliveryDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // entrega al día siguiente
         isWebOrder: true,
         source: "web",
         paymentMethod: paymentMethod, // efectivo o transferencia
-        customerData: JSON.stringify(customerData) // almacenamos los datos del cliente en formato JSON
+        customerId: resolvedCustomerId || undefined,
+        customerData: JSON.stringify(finalCustomerData) // almacenamos los datos del cliente en formato JSON
       });
       
       // Crear items de la orden
@@ -2948,7 +2982,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         id: order.id,
         total: order.total,
         status: order.status,
-        customerData,
+        customerId: order.customerId,
+        customerData: finalCustomerData,
         paymentMethod,
         items: await storage.getOrderItemsByOrderId(order.id),
         timestamp: order.timestamp
@@ -2971,13 +3006,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Obtener los items de la orden
       const items = await storage.getOrderItemsByOrderId(orderId);
       
-      // Extraer datos del cliente desde el campo JSON
+      // Obtener datos del cliente
       let customerData = {};
       if (order.customerData) {
         try {
           customerData = JSON.parse(order.customerData);
         } catch (e) {
           console.error("Error al parsear datos del cliente:", e);
+        }
+      } else if (order.customerId) {
+        const customer = await storage.getCustomer(order.customerId);
+        if (customer) {
+          customerData = {
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone,
+            address: customer.address,
+            city: customer.city,
+            province: customer.province,
+          };
         }
       }
       
@@ -3138,30 +3185,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allOrders = await storage.getAllOrders();
       
       // Filtrar los pedidos web del usuario actual
-      const userOrders = allOrders
-        .filter(order => order.isWebOrder && order.customerData)
-        .map(order => {
-          let customerData = {};
+      const userOrders = allOrders.filter(order => {
+        if (!order.isWebOrder) return false;
+
+        if (order.customerData) {
           try {
-            customerData = JSON.parse(order.customerData || '{}');
+            const data = JSON.parse(order.customerData);
+            if (req.user.customerId && data.customerId) {
+              return data.customerId === req.user.customerId;
+            }
+            if (data.email && data.email === req.user.email) {
+              return true;
+            }
           } catch (e) {
             console.error("Error al parsear datos del cliente:", e);
           }
-          
-          // Si el usuario está autenticado, filtrar solo sus pedidos
-          if (customerData.customerId === req.user.customerId || 
-              customerData.email === req.user.email) {
-            return order;
-          }
-          return null;
-        })
-        .filter(Boolean); // Eliminar nulls
+        } else if (order.customerId && req.user.customerId) {
+          return order.customerId === req.user.customerId;
+        }
+
+        return false;
+      });
       
       // Enriquecer con items de cada pedido
       const enrichedOrders = await Promise.all(
         userOrders.map(async (order) => {
           const items = await storage.getOrderItemsByOrderId(order.id);
-          
+
           // Enriquecer los items con datos del producto
           const enrichedItems = await Promise.all(
             items.map(async (item) => {
@@ -3172,9 +3222,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
               };
             })
           );
-          
+
+          let customerInfo: any = {};
+          if (order.customerData) {
+            try {
+              customerInfo = JSON.parse(order.customerData);
+            } catch (e) {
+              console.error("Error al parsear datos del cliente:", e);
+            }
+          } else if (order.customerId) {
+            const customer = await storage.getCustomer(order.customerId);
+            if (customer) {
+              customerInfo = {
+                name: customer.name,
+                email: customer.email,
+                phone: customer.phone,
+                address: customer.address,
+                city: customer.city,
+                province: customer.province,
+              };
+            }
+          }
+
           return {
             ...order,
+            customerData: JSON.stringify(customerInfo),
             items: enrichedItems
           };
         })
