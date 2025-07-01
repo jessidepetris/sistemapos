@@ -1710,6 +1710,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/notes/:id/items", async (req, res) => {
+    try {
+      const noteId = parseInt(req.params.id);
+      const items = await storage.getNoteItemsByNoteId(noteId);
+      const enriched = await Promise.all(items.map(async item => {
+        const product = await storage.getProduct(item.productId);
+        const replacement = item.replacementProductId ? await storage.getProduct(item.replacementProductId) : null;
+        return { ...item, product, replacementProduct: replacement };
+      }));
+      res.json(enriched);
+    } catch (error) {
+      console.error("Error al obtener items de nota:", error);
+      res.status(500).json({ message: "Error al obtener items", error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/notes/:id/items", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: "No autorizado" });
+      }
+
+      const noteId = parseInt(req.params.id);
+      const { productId, quantity, unit, price, total, action, replacementProductId } = req.body;
+      const item = await storage.createNoteItem({
+        noteId,
+        productId,
+        quantity,
+        unit,
+        price,
+        total,
+        action,
+        replacementProductId,
+      });
+
+      const product = await storage.getProduct(productId);
+      const replacementProduct = replacementProductId ? await storage.getProduct(replacementProductId) : null;
+
+      res.status(201).json({ ...item, product, replacementProduct });
+    } catch (error) {
+      console.error("Error al crear item de nota:", error);
+      res.status(400).json({ message: "Error al crear item", error: (error as Error).message });
+    }
+  });
+
   // Users endpoints
   app.get("/api/users", async (req, res) => {
     try {

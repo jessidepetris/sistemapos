@@ -361,6 +361,30 @@ export const insertAccountTransactionSchema = createInsertSchema(accountTransact
     paymentMethod: z.enum(["cash", "transfer", "credit_card", "debit_card", "check", "qr"]).optional(),
   });
 
+// Items asociadas a notas de crédito/débito
+export const noteItems = pgTable("note_items", {
+  id: serial("id").primaryKey(),
+  noteId: integer("note_id").notNull().references(() => notes.id),
+  productId: integer("product_id").notNull().references(() => products.id),
+  quantity: numeric("quantity", { precision: 10, scale: 2 }).notNull(),
+  unit: text("unit").notNull(),
+  price: numeric("price", { precision: 10, scale: 2 }),
+  total: numeric("total", { precision: 10, scale: 2 }),
+  action: text("action").notNull().default("return"), // 'return' o 'exchange'
+  replacementProductId: integer("replacement_product_id").references(() => products.id),
+});
+
+export const insertNoteItemSchema = createInsertSchema(noteItems).pick({
+  noteId: true,
+  productId: true,
+  quantity: true,
+  unit: true,
+  price: true,
+  total: true,
+  action: true,
+  replacementProductId: true,
+});
+
 // Tabla para los componentes de productos compuestos (combos)
 export const productComponents = pgTable("product_components", {
   id: serial("id").primaryKey(),
@@ -407,6 +431,9 @@ export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
 
 export type Note = typeof notes.$inferSelect;
 export type InsertNote = z.infer<typeof insertNoteSchema>;
+
+export type NoteItem = typeof noteItems.$inferSelect;
+export type InsertNoteItem = z.infer<typeof insertNoteItemSchema>;
 
 export type AccountTransaction = typeof accountTransactions.$inferSelect;
 export type InsertAccountTransaction = z.infer<typeof insertAccountTransactionSchema>;
