@@ -3008,7 +3008,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Obtener datos del cliente
       let customerData = {};
-      if (order.customerData) {
+      if (order.customerId) {
+        const customer = await storage.getCustomer(order.customerId);
+        if (customer) {
+          customerData = {
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone,
+            address: customer.address,
+            city: customer.city,
+            province: customer.province,
+          };
+        }
+      } else if (order.customerData) {
         try {
           customerData = JSON.parse(order.customerData);
         } catch (e) {
@@ -3188,6 +3200,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userOrders = allOrders.filter(order => {
         if (!order.isWebOrder) return false;
 
+
         if (order.customerData) {
           try {
             const data = JSON.parse(order.customerData);
@@ -3202,6 +3215,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         } else if (order.customerId && req.user.customerId) {
           return order.customerId === req.user.customerId;
+
         }
 
         return false;
@@ -3224,6 +3238,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
 
           let customerInfo: any = {};
+
           if (order.customerData) {
             try {
               customerInfo = JSON.parse(order.customerData);
@@ -3231,6 +3246,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.error("Error al parsear datos del cliente:", e);
             }
           } else if (order.customerId) {
+
             const customer = await storage.getCustomer(order.customerId);
             if (customer) {
               customerInfo = {
@@ -5084,8 +5100,8 @@ const updateData: any = {
     }
 
     try {
-      const quotations = await db.select().from(quotations).orderBy(quotations.dateCreated);
-      return res.json(quotations);
+      const quotationList = await db.select().from(quotations).orderBy(quotations.dateCreated);
+      return res.json(quotationList);
     } catch (error) {
       console.error("Error fetching quotations:", error);
       return res.status(500).json({ error: "Failed to fetch quotations" });

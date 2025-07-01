@@ -268,8 +268,10 @@ export default function CustomersPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>N°</TableHead>
                       <TableHead>Nombre</TableHead>
                       <TableHead>Teléfono</TableHead>
+                      <TableHead>Dirección</TableHead>
                       <TableHead>Localidad</TableHead>
                       <TableHead>Provincia</TableHead>
                       <TableHead>Cuenta</TableHead>
@@ -280,15 +282,17 @@ export default function CustomersPage() {
                   <TableBody>
                     {isLoading ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center">
+                        <TableCell colSpan={9} className="text-center">
                           <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
                     ) : filteredCustomers && filteredCustomers.length > 0 ? (
                       filteredCustomers.map((customer: any) => (
                         <TableRow key={customer.id}>
+                          <TableCell className="font-mono">{customer.id}</TableCell>
                           <TableCell className="font-medium">{customer.name}</TableCell>
                           <TableCell>{customer.phone || "-"}</TableCell>
+                          <TableCell>{customer.address || "-"}</TableCell>
                           <TableCell>{customer.city || "-"}</TableCell>
                           <TableCell>{customer.province || "-"}</TableCell>
                           <TableCell>
@@ -311,7 +315,7 @@ export default function CustomersPage() {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-10">
+                        <TableCell colSpan={9} className="text-center py-10">
                           <div className="flex flex-col items-center justify-center text-center">
                             <Users className="h-12 w-12 text-muted-foreground mb-4" />
                             <h3 className="text-lg font-medium mb-2">
