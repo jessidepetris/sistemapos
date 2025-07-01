@@ -5103,7 +5103,7 @@ const updateData: any = {
 
       await db.insert(quotationItems).values(quotationItemsData);
 
-      return res.status(201).json({ success: true, quotation });
+      return res.status(201).json(quotation);
     } catch (error) {
       console.error("Error creating quotation:", error);
       return res.status(500).json({ error: "Failed to create quotation" });
