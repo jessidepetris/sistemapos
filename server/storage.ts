@@ -516,6 +516,7 @@ export class MemStorage implements IStorage {
       purchaseQty: insertProduct.purchaseQty || null,
       barcodes: insertProduct.barcodes || null,
       price: insertProduct.price || "0",
+      wholesalePrice: insertProduct.wholesalePrice || "0",
       cost: insertProduct.cost || null,
       packCost: insertProduct.packCost || null,
       stock: insertProduct.stock || "0",
@@ -533,7 +534,8 @@ export class MemStorage implements IStorage {
       imageUrl: insertProduct.imageUrl || null,
       iva: insertProduct.iva || "21",
       shipping: insertProduct.shipping || "0",
-      profit: insertProduct.profit || "30"
+      profit: insertProduct.profit || "30",
+      wholesaleProfit: insertProduct.wholesaleProfit || "35"
     };
     this.products.set(id, product);
     return product;
