@@ -1,6 +1,6 @@
 import { users, User, InsertUser, Supplier, InsertSupplier, Customer, InsertCustomer, 
   Product, InsertProduct, Account, InsertAccount, Sale, InsertSale, SaleItem, InsertSaleItem,
-  Order, InsertOrder, OrderItem, InsertOrderItem, Note, InsertNote, AccountTransaction, InsertAccountTransaction,
+  Order, InsertOrder, OrderItem, InsertOrderItem, Note, InsertNote, NoteItem, InsertNoteItem, AccountTransaction, InsertAccountTransaction,
   Vehicle, InsertVehicle, DeliveryZone, InsertDeliveryZone, DeliveryRoute, InsertDeliveryRoute,
   Delivery, InsertDelivery, DeliveryEvent, InsertDeliveryEvent, RouteAssignment, InsertRouteAssignment,
   Cart, InsertCart, CartItem, InsertCartItem, WebUser, InsertWebUser,
@@ -100,6 +100,10 @@ export interface IStorage {
   createNote(note: InsertNote): Promise<Note>;
   updateNote(id: number, note: Partial<Note>): Promise<Note>;
   deleteNote(id: number): Promise<void>;
+
+  // Note Items
+  getNoteItemsByNoteId(noteId: number): Promise<NoteItem[]>;
+  createNoteItem(item: InsertNoteItem): Promise<NoteItem>;
   
   // Vehicles
   getVehicle(id: number): Promise<Vehicle | undefined>;
@@ -202,6 +206,7 @@ export class MemStorage implements IStorage {
   private orders: Map<number, Order>;
   private orderItems: Map<number, OrderItem>;
   private notes: Map<number, Note>;
+  private noteItems: Map<number, NoteItem>;
   
   // Logistics related maps
   private vehicles: Map<number, Vehicle>;
@@ -223,6 +228,7 @@ export class MemStorage implements IStorage {
   private orderIdCounter: number;
   private orderItemIdCounter: number;
   private noteIdCounter: number;
+  private noteItemIdCounter: number;
   
   // Logistics ID counters
   private vehicleIdCounter: number;
@@ -285,6 +291,7 @@ export class MemStorage implements IStorage {
     this.orders = new Map();
     this.orderItems = new Map();
     this.notes = new Map();
+    this.noteItems = new Map();
     
     // Inicializar los Maps de logística
     this.vehicles = new Map();
@@ -309,6 +316,7 @@ export class MemStorage implements IStorage {
     this.orderIdCounter = 1;
     this.orderItemIdCounter = 1;
     this.noteIdCounter = 1;
+    this.noteItemIdCounter = 1;
     
     // Inicializar contadores de logística
     this.vehicleIdCounter = 1;
@@ -1054,8 +1062,46 @@ export class MemStorage implements IStorage {
     if (!exists) {
       throw new Error(`Nota con ID ${id} no encontrada`);
     }
-    
+
     this.notes.delete(id);
+  }
+
+  // Note Items
+  async getNoteItemsByNoteId(noteId: number): Promise<NoteItem[]> {
+    return Array.from(this.noteItems.values()).filter(item => item.noteId === noteId);
+  }
+
+  async createNoteItem(insertItem: InsertNoteItem): Promise<NoteItem> {
+    const id = this.noteItemIdCounter++;
+    const item: NoteItem = {
+      ...insertItem,
+      id,
+      price: insertItem.price || null,
+      total: insertItem.total || null,
+      replacementProductId: insertItem.replacementProductId || null,
+      action: insertItem.action || 'return'
+    };
+    this.noteItems.set(id, item);
+
+    try {
+      const product = await this.getProduct(insertItem.productId);
+      if (product) {
+        const newStock = parseFloat(product.stock.toString()) + parseFloat(insertItem.quantity.toString());
+        await this.updateProduct(insertItem.productId, { stock: newStock.toString() });
+      }
+
+      if (insertItem.action === 'exchange' && insertItem.replacementProductId) {
+        const replacement = await this.getProduct(insertItem.replacementProductId);
+        if (replacement) {
+          const newStock = parseFloat(replacement.stock.toString()) - parseFloat(insertItem.quantity.toString());
+          await this.updateProduct(insertItem.replacementProductId, { stock: newStock.toString() });
+        }
+      }
+    } catch (error) {
+      console.error('[NOTE-ITEM] Error ajustando stock:', error);
+    }
+
+    return item;
   }
   
   // Vehicles
