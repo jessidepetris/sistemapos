@@ -30,6 +30,7 @@ const CheckoutPage = () => {
   }
 
   const formSchema = z.object({
+    customerId: z.string().optional(),
     name: z.string().min(3, { message: "El nombre es obligatorio" }),
     email: z.string().email({ message: "Email inválido" }),
     phone: z.string().min(6, { message: "Teléfono inválido" }),
@@ -44,6 +45,7 @@ const CheckoutPage = () => {
 
   // Valores por defecto del formulario
   const defaultValues: Partial<CheckoutFormValues> = {
+    customerId: user?.customerId ? String(user.customerId) : "",
     name: user?.name || "",
     email: user?.email || "",
     phone: user?.phone || "",
@@ -73,6 +75,9 @@ const CheckoutPage = () => {
       // Crear el objeto de la orden
       const orderData = {
         cartId: cart?.id,
+        customerId: data.customerId
+          ? parseInt(data.customerId)
+          : user?.customerId,
         customerData: {
           name: data.name,
           email: data.email,
@@ -144,6 +149,20 @@ const CheckoutPage = () => {
                     <CardTitle>Información de contacto</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="customerId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Número de cliente (opcional)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Ej: 123" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
                     <FormField
                       control={form.control}
                       name="name"
