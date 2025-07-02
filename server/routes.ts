@@ -3685,6 +3685,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Error al generar reporte" });
     }
   });
+
+  app.get("/api/reports/ventas", async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const end = endDate ? new Date(endDate as string) : new Date();
+
+      const allSales = await storage.getAllSales() || [];
+      const products = await storage.getAllProducts() || [];
+      const users = await storage.getAllUsers() || [];
+
+      const filteredSales = allSales.filter(sale => {
+        const saleDate = new Date(sale.timestamp as string);
+        return saleDate >= start && saleDate <= end;
+      });
+
+      let totalFacturado = 0;
+      const productMap = new Map<number, { id: number; name: string; quantity: number }>();
+      const userMap = new Map<number, { id: number; name: string; total: number }>();
+
+      for (const sale of filteredSales) {
+        const saleTotal = parseFloat(sale.total);
+        totalFacturado += saleTotal;
+
+        if (sale.userId) {
+          const existingUser = userMap.get(sale.userId);
+          const userName = users.find(u => u.id === sale.userId)?.name || "Usuario desconocido";
+          if (existingUser) {
+            existingUser.total += saleTotal;
+          } else {
+            userMap.set(sale.userId, { id: sale.userId, name: userName, total: saleTotal });
+          }
+        }
+
+        const saleItems = await storage.getSaleItemsBySaleId(sale.id);
+        for (const item of saleItems) {
+          const quantity = parseFloat(item.quantity);
+          const productId = item.productId;
+          const existingProduct = productMap.get(productId);
+          const productName = products.find(p => p.id === productId)?.name || "Producto desconocido";
+          if (existingProduct) {
+            existingProduct.quantity += quantity;
+          } else {
+            productMap.set(productId, { id: productId, name: productName, quantity });
+          }
+        }
+      }
+
+      const productosMasVendidos = Array.from(productMap.values()).sort((a, b) => b.quantity - a.quantity);
+      const ventasPorUsuario = Array.from(userMap.values()).sort((a, b) => b.total - a.total);
+
+      res.json({
+        totalFacturado: Math.round(totalFacturado * 100) / 100,
+        productosMasVendidos,
+        ventasPorUsuario
+      });
+    } catch (error) {
+      console.error("Error al generar reporte de ventas:", error);
+      res.status(500).json({ error: "Error al generar reporte" });
+    }
+  });
   
   app.get("/api/reports/inventory-status", async (req, res) => {
     try {
