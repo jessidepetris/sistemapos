@@ -23,6 +23,15 @@ import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { authorizeRole } from "../src/middleware/authorizeRole";
 
+async function getProductosConStockBajo() {
+  const productos = await storage.getAllProducts();
+  return productos.filter(p =>
+    p.puntoReposicion !== null &&
+    p.puntoReposicion !== undefined &&
+    parseFloat(p.stock?.toString() || "0") <= parseFloat(p.puntoReposicion!.toString())
+  );
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Sets up /api/register, /api/login, /api/logout, /api/user
   setupAuth(app);
@@ -248,7 +257,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/products", authorizeRole("admin"), async (req, res) => {
+  app.get("/api/products/stock-bajo", async (_req, res) => {
+    try {
+      const productos = await getProductosConStockBajo();
+      res.json(productos);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener productos con stock bajo", error: (error as Error).message });
+    }
+  });
+
+  app.post("/api/products", async (req, res) => {
+
     try {
       const productData = { ...req.body };
 
