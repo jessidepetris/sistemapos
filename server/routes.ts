@@ -5302,20 +5302,38 @@ const updateData: any = {
         createdBy: userId,
       }).returning();
 
+      if (!quotation?.id) throw new Error("No se pudo obtener el ID del presupuesto");
+
       // Agregar los items del presupuesto
       const quotationItemsData = items.map((item: any) => ({
         quotationId: quotation.id,
         productId: item.productId,
-        quantity: item.quantity.toString(),
-        unitPrice: item.unitPrice.toString(),
-        subtotal: item.subtotal.toString(),
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unitPrice),
+        subtotal: Number(item.subtotal),
       }));
+
+      console.log("quotation insertado:", quotation);
+      console.log("quotationItems a insertar:", quotationItemsData);
+
+      quotationItemsData.forEach((item, index) => {
+        if (
+          item.quotationId === undefined ||
+          item.productId === undefined ||
+          item.quantity === undefined ||
+          item.unitPrice === undefined ||
+          item.subtotal === undefined
+        ) {
+          throw new Error(`Datos inválidos para item ${index + 1}`);
+        }
+      });
 
       await db.insert(quotationItems).values(quotationItemsData);
 
       return res.status(201).json(quotation);
     } catch (error) {
-      console.error("Error creating quotation:", error);
+      console.error("Error creating quotation:", error instanceof Error ? error.message : error);
+      console.error("Stack trace:", error instanceof Error ? error.stack : "");
       return res.status(500).json({ error: "Failed to create quotation" });
     }
   });
@@ -5331,6 +5349,7 @@ const updateData: any = {
       return res.json(quotationList);
     } catch (error) {
       console.error("Error fetching quotations:", error);
+      console.error("Stack:", error instanceof Error ? error.stack : "");
       return res.status(500).json({ error: "Failed to fetch quotations" });
     }
   });
