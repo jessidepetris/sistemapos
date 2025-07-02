@@ -20,7 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatCurrency } from "@/lib/utils";
 
-interface BudgetFormDialogProps {
+interface QuotationFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -36,7 +36,7 @@ interface CartItem {
   stockAvailable: number;
 }
 
-export function BudgetFormDialog({ open, onOpenChange }: BudgetFormDialogProps) {
+export function QuotationFormDialog({ open, onOpenChange }: QuotationFormDialogProps) {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -139,7 +139,7 @@ export function BudgetFormDialog({ open, onOpenChange }: BudgetFormDialogProps) 
     }
 
     try {
-      const budgetData = {
+      const quotationData = {
         customerId: selectedCustomerId,
         items: cart.map((item) => ({
           productId: item.productId,
@@ -159,12 +159,12 @@ export function BudgetFormDialog({ open, onOpenChange }: BudgetFormDialogProps) 
       };
 
       await apiRequest("POST", "/api/quotations", {
-        clientId: budgetData.customerId,
+        clientId: quotationData.customerId,
         dateValidUntil: new Date(
-          Date.now() + budgetData.validityDays * 24 * 60 * 60 * 1000
+          Date.now() + quotationData.validityDays * 24 * 60 * 60 * 1000
         ).toISOString(),
-        notes: budgetData.observations,
-        items: budgetData.items.map((i) => ({
+        notes: quotationData.observations,
+        items: quotationData.items.map((i) => ({
           productId: i.productId,
           quantity: i.quantity,
           unitPrice: i.price,

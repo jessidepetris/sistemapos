@@ -10,7 +10,7 @@ import { ProtectedRoute } from "@/lib/protected-route";
 import { RouterProvider } from "@/lib/router-provider";
 import { useEffect } from "react";
 import { QuotationRoutes } from "@/routes";
-import BudgetsPage from "@/pages/budgets";
+import QuotationsPage from "@/pages/quotations";
 
 // Admin Panel Pages
 import Dashboard from "@/pages/dashboard";
@@ -75,7 +75,7 @@ function AppRoutes() {
       <ProtectedRoute path="/users" component={UsersPage} />
       <ProtectedRoute path="/settings" component={SettingsPage} />
       <ProtectedRoute path="/purchases" component={PurchasesPage} />
-      <ProtectedRoute path="/budgets" component={BudgetsPage} />
+      <ProtectedRoute path="/quotations" component={QuotationsPage} />
       
       {/* Web Catalog Routes */}
       <Route path="/web">

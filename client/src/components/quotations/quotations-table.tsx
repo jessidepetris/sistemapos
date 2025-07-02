@@ -21,8 +21,8 @@ import { formatCurrency } from "@/lib/utils";
 import { quotationService } from "@/services/quotationService";
 import { Quotation } from "@/types/quotation";
 
-export function BudgetsTable() {
-  const [budgets, setBudgets] = useState<Quotation[]>([]);
+export function QuotationsTable() {
+  const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -30,14 +30,14 @@ export function BudgetsTable() {
       try {
         const data = await quotationService.getQuotations();
         if (Array.isArray(data)) {
-          setBudgets(data);
+          setQuotations(data);
         } else {
           console.error("Unexpected data format while fetching quotations", data);
-          setBudgets([]);
+          setQuotations([]);
         }
       } catch (err) {
         console.error("Error loading quotations", err);
-        setBudgets([]);
+        setQuotations([]);
       } finally {
         setLoading(false);
       }
@@ -71,7 +71,7 @@ export function BudgetsTable() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {budgets.map((budget) => (
+          {quotations.map((budget) => (
             <TableRow key={budget.id}>
               <TableCell className="font-medium">{budget.id}</TableCell>
               <TableCell>{budget.clientId}</TableCell>
@@ -104,7 +104,7 @@ export function BudgetsTable() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem asChild>
-                      <Link href={`/budgets/${budget.id}`}>
+                      <Link href={`/quotations/${budget.id}`}>
                         <FileText className="mr-2 h-4 w-4" />
                         Ver Detalles
                       </Link>
