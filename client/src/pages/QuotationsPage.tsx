@@ -75,11 +75,12 @@ export default function QuotationsPage() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {quotations.map((quotation) => (
-              <tr key={quotation.id}>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {quotation.clientId}
-                </td>
+            {Array.isArray(quotations) ? (
+              quotations.map((quotation) => (
+                <tr key={quotation.id}>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {quotation.clientId}
+                  </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   {formatDate(quotation.dateCreated)}
                 </td>
@@ -127,7 +128,12 @@ export default function QuotationsPage() {
                   )}
                 </td>
               </tr>
-            ))}
+              ))
+            ) : (
+              <tr>
+                <td colSpan={6}>No hay presupuestos disponibles.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
