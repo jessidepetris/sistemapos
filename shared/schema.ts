@@ -55,6 +55,7 @@ export const customers = pgTable("customers", {
   province: text("province"),
   city: text("city"),
   notes: text("notes"),
+  saldoCuentaCorriente: numeric("saldo_cuenta_corriente", { precision: 10, scale: 2 }).default("0"),
   hasAccount: boolean("has_account").default(false),
   sellerId: integer("seller_id").references(() => users.id),
   invoiceType: text("invoice_type").default("remito"), // 'remito' o 'factura_c'
@@ -355,13 +356,29 @@ export const insertAccountTransactionSchema = createInsertSchema(accountTransact
     relatedNoteId: true,
     description: true,
     userId: true,
-    paymentMethod: true,
-    currency: true,
+  paymentMethod: true,
+  currency: true,
   })
   .extend({
     userId: z.coerce.number().optional(),
     paymentMethod: z.enum(["cash", "transfer", "credit_card", "debit_card", "check", "qr"]).optional(),
   });
+
+// Client payments table
+export const clientPayments = pgTable("client_payments", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => customers.id),
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+  method: text("method"),
+  timestamp: timestamp("timestamp").defaultNow(),
+});
+
+export const insertClientPaymentSchema = createInsertSchema(clientPayments).pick({
+  clientId: true,
+  amount: true,
+  method: true,
+  timestamp: true,
+});
 
 // Items asociadas a notas de crédito/débito
 export const noteItems = pgTable("note_items", {
@@ -1010,3 +1027,6 @@ export type InsertQuotationItem = z.infer<typeof insertQuotationItemSchema>;
 
 export type StockMovement = typeof stockMovements.$inferSelect;
 export type InsertStockMovement = z.infer<typeof insertStockMovementSchema>;
+
+export type ClientPayment = typeof clientPayments.$inferSelect;
+export type InsertClientPayment = z.infer<typeof insertClientPaymentSchema>;
