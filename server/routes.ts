@@ -9,6 +9,7 @@ import { getBankAccounts, createBankAccount, updateBankAccount, deleteBankAccoun
 import { getProductionOrders, createProductionOrder, updateProductionOrder, deleteProductionOrder } from "./api/production-orders";
 import { scrapePrices } from "./scraper";
 import { checkAfipStatus, createAfipInvoice } from "./api/afip";
+import { getStats } from "./services/dashboardService";
 import {
   InsertSale,
   InsertSaleItem,
@@ -25,89 +26,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
 
   // Dashboard endpoints
-  app.get("/api/dashboard/stats", async (req, res) => {
+  app.get("/api/dashboard/stats", async (_req, res, next) => {
     try {
-      // Obtener fecha de hoy (inicio y fin)
-      const today = new Date();
-      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      
-      // Obtener ventas de hoy
-      const todaySales = await storage.getAllSales() || [];
-      const todaySalesFiltered = todaySales.filter((sale: any) => {
-        const saleDate = new Date(sale.timestamp);
-        return saleDate >= startOfToday;
-      });
-      
-      const yesterdaySales = await storage.getAllSales() || [];
-      const yesterdaySalesFiltered = yesterdaySales.filter((sale: any) => {
-        const saleDate = new Date(sale.timestamp);
-        const yesterday = new Date(today);
-        yesterday.setDate(today.getDate() - 1);
-        const startOfYesterday = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
-        const endOfYesterday = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59);
-        return saleDate >= startOfYesterday && saleDate <= endOfYesterday;
-      });
-      
-      // Calcular total de ventas de hoy
-      const todayTotal = todaySalesFiltered.reduce((acc: number, sale: any) => {
-        return acc + parseFloat(sale.total);
-      }, 0);
-      
-      // Calcular total de ventas de ayer
-      const yesterdayTotal = yesterdaySalesFiltered.reduce((acc: number, sale: any) => {
-        return acc + parseFloat(sale.total);
-      }, 0);
-      
-      // Calcular cambio porcentual
-      let percentChange = 0;
-      let trend = "neutral";
-      
-      if (yesterdayTotal > 0) {
-        percentChange = ((todayTotal - yesterdayTotal) / yesterdayTotal) * 100;
-        trend = percentChange > 0 ? "up" : percentChange < 0 ? "down" : "neutral";
-      } else if (todayTotal > 0) {
-        percentChange = 100;
-        trend = "up";
-      }
-      
-      // Obtener productos con stock bajo
-      const products = await storage.getAllProducts() || [];
-      const lowStockProducts = products.filter((product: any) => {
-        // Consideramos stock bajo cuando hay menos de 10 unidades
-        return parseFloat(product.stock) < 10;
-      });
-      
-      // Obtener clientes nuevos
-      const customers = await storage.getAllCustomers() || [];
-      // Temporalmente consideramos a todos como nuevos
-      const newCustomers = customers;
-      
-      const stats = {
-        todaySales: { 
-          total: `$${todayTotal.toFixed(2)}`, 
-          change: `${Math.abs(percentChange).toFixed(1)}%`, 
-          trend 
-        },
-        transactions: { 
-          count: `${todaySalesFiltered.length}`, 
-          change: yesterdaySalesFiltered.length > 0 
-            ? `${Math.abs(((todaySalesFiltered.length - yesterdaySalesFiltered.length) / yesterdaySalesFiltered.length) * 100).toFixed(1)}%` 
-            : "0%", 
-          trend: todaySalesFiltered.length > yesterdaySalesFiltered.length ? "up" : 
-                 todaySalesFiltered.length < yesterdaySalesFiltered.length ? "down" : "neutral" 
-        },
-        lowStock: { 
-          count: `${lowStockProducts.length}` 
-        },
-        newCustomers: { 
-          count: `${newCustomers.length}` 
-        }
-      };
-      
+      const stats = await getStats();
       res.json(stats);
     } catch (error) {
-      console.error("Error al generar estadísticas del dashboard:", error);
-      res.status(500).json({ error: "Error al generar estadísticas" });
+      next(error);
     }
   });
 

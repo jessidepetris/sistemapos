@@ -3,6 +3,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import cookieParser from "cookie-parser";
+import { errorHandler } from "./utils/errorHandler";
 
 const app = express();
 app.use(express.json());
@@ -51,13 +52,7 @@ app.use((req, res, next) => {
   });
 
   // Middleware de manejo de errores
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
-  });
+  app.use(errorHandler);
 
   // Importante: setup de vite o archivos estáticos al final
   if (app.get("env") === "development") {
