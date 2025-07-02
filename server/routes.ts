@@ -20,6 +20,7 @@ import {
 } from "../shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
+import { authorizeRole } from "../src/middleware/authorizeRole";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Sets up /api/register, /api/login, /api/logout, /api/user
@@ -214,7 +215,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Products endpoints
-  app.get("/api/products", async (req, res) => {
+  app.get("/api/products", authorizeRole(["admin", "vendedor"]), async (req, res) => {
     try {
       let products = await storage.getAllProducts();
 
@@ -245,7 +246,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/products", async (req, res) => {
+  app.post("/api/products", authorizeRole("admin"), async (req, res) => {
     try {
       const productData = { ...req.body };
 
@@ -265,7 +266,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/products/:id", async (req, res) => {
+  app.put("/api/products/:id", authorizeRole("admin"), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       let productData = { ...req.body };
@@ -341,7 +342,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/products/:id", async (req, res) => {
+  app.delete("/api/products/:id", authorizeRole("admin"), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       await storage.deleteProduct(id);
@@ -523,7 +524,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Sales endpoints
-  app.get("/api/sales", async (req, res) => {
+  app.get("/api/sales", authorizeRole(["admin", "vendedor"]), async (req, res) => {
     try {
       const sales = await storage.getAllSales();
       res.json(sales);
@@ -532,7 +533,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/sales', async (req, res) => {
+  app.post('/api/sales', authorizeRole(["admin", "vendedor"]), async (req, res) => {
     console.log('\n=== Iniciando proceso de venta ===');
     console.log('Headers:', req.headers);
     console.log('Cookies:', req.cookies);
