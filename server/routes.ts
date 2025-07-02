@@ -465,8 +465,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!client) {
         return res.status(404).json({ message: "Cliente no encontrado" });
       }
-      const payments = await db.select().from(clientPayments).where(eq(clientPayments.clientId, id)).orderBy(clientPayments.timestamp);
-      res.json({ saldoCuentaCorriente: parseFloat(client.saldoCuentaCorriente ?? "0"), pagos: payments });
+      const payments = await db
+        .select()
+        .from(clientPayments)
+        .where(eq(clientPayments.clientId, id))
+        .orderBy(clientPayments.timestamp);
+
+      const allClientSales = await db
+        .select()
+        .from(sales)
+        .where(eq(sales.customerId, id));
+
+      const pendingSales = allClientSales.filter(
+        (s) =>
+          (s.paymentMethod === "cuenta_corriente" || s.paymentMethod === "current_account") &&
+          (s.status === "pending" || s.status === null || s.status === undefined)
+      );
+
+      const saldoPendiente = pendingSales.reduce(
+        (sum, s) => sum + parseFloat(s.total?.toString() || "0"),
+        0
+      );
+
+      res.json({
+        saldoCuentaCorriente: parseFloat(client.saldoCuentaCorriente ?? "0"),
+        pagos: payments,
+        ventasPendientes: pendingSales.map((s) => ({
+          id: s.id,
+          fecha: s.timestamp,
+          total: parseFloat(s.total.toString()),
+          detalle: s.notes,
+        })),
+        saldoPendiente,
+      });
     } catch (error) {
       res.status(500).json({ message: "Error al obtener cuenta corriente" });
     }
@@ -682,6 +713,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Debe especificar al menos un método de pago' });
       }
 
+      const isCuentaCorriente = paymentMethods[0]?.method === 'cuenta_corriente' ||
+        paymentMethods[0]?.method === 'current_account';
+      if (isCuentaCorriente && !customerId) {
+        return res.status(400).json({ message: 'Se requiere cliente para venta en cuenta corriente' });
+      }
+
       // Verificar stock y disponibilidad de productos
       for (const item of items) {
         const product = await storage.getProduct(item.productId);
@@ -710,6 +747,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('Subtotal:', subtotal, 'Descuento:', discount, 'Recargo:', surcharge, 'Total:', total);
 
       // Crear la venta con los nombres correctos de campos
+
       const sale = await storage.createSale({
         customerId,
         userId: userId,
@@ -722,8 +760,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paymentMethod: paymentMethods[0]?.method || "efectivo",
         documentType,
         invoiceNumber,
-        status: "completed"
+        status: isCuentaCorriente ? "pending" : "completed"
       });
+
+      // If sale is on current account, update client's balance
+      if (isCuentaCorriente && customerId) {
+        const [client] = await db.select().from(customers).where(eq(customers.id, customerId));
+        if (client) {
+          const newBalance = parseFloat(client.saldoCuentaCorriente ?? "0") + total;
+          await db
+            .update(customers)
+            .set({ saldoCuentaCorriente: newBalance.toString() })
+            .where(eq(customers.id, customerId));
+        }
+      }
 
       console.log('Venta creada exitosamente:', sale.id);
 
@@ -762,6 +812,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Crear los pagos
       for (const payment of paymentMethods) {
+        if (payment.method === "cuenta_corriente" || payment.method === "current_account") {
+          continue; // No se registra pago inmediato en cuenta corriente
+        }
         console.log(`Procesando pago:`, payment);
         await storage.createPayment({
           saleId: sale.id,
