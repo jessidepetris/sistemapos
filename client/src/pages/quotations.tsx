@@ -3,11 +3,11 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { BudgetsTable } from "@/components/budgets/budgets-table";
-import { BudgetFormDialog } from "@/components/budgets/budget-form-dialog";
+import { QuotationsTable } from "@/components/quotations/quotations-table";
+import { QuotationFormDialog } from "@/components/quotations/quotation-form-dialog";
 import { DashboardLayout } from "@/layouts/dashboard-layout";
 
-export default function BudgetsPage() {
+export default function QuotationsPage() {
   const [location] = useLocation();
   const { user } = useAuth();
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -23,9 +23,9 @@ export default function BudgetsPage() {
         </Button>
       </div>
 
-      <BudgetsTable />
+      <QuotationsTable />
 
-      <BudgetFormDialog
+      <QuotationFormDialog
         open={isFormOpen}
         onOpenChange={setIsFormOpen}
       />
