@@ -982,8 +982,31 @@ export const insertQuotationItemSchema = createInsertSchema(quotationItems).pick
   subtotal: true,
 });
 
+// Stock movements table
+export const stockMovements = pgTable("stock_movements", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id").notNull().references(() => products.id),
+  type: text("type").notNull(), // 'entrada' | 'salida'
+  quantity: numeric("quantity", { precision: 10, scale: 2 }).notNull(),
+  reason: text("reason").notNull(),
+  date: timestamp("date").defaultNow(),
+  userId: integer("user_id").notNull().references(() => users.id),
+});
+
+export const insertStockMovementSchema = createInsertSchema(stockMovements).pick({
+  productId: true,
+  type: true,
+  quantity: true,
+  reason: true,
+  date: true,
+  userId: true,
+});
+
 // Types
 export type Quotation = typeof quotations.$inferSelect;
 export type InsertQuotation = z.infer<typeof insertQuotationSchema>;
 export type QuotationItem = typeof quotationItems.$inferSelect;
 export type InsertQuotationItem = z.infer<typeof insertQuotationItemSchema>;
+
+export type StockMovement = typeof stockMovements.$inferSelect;
+export type InsertStockMovement = z.infer<typeof insertStockMovementSchema>;

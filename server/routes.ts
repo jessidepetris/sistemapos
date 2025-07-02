@@ -5,6 +5,7 @@ import { setupAuth, hashPassword } from "./auth";
 import { z } from "zod";
 import passport from "passport";
 import { Router } from "express";
+import stockRoutes from "../src/routes/stockRoutes";
 import { getBankAccounts, createBankAccount, updateBankAccount, deleteBankAccount } from "./api/bank-accounts";
 import { getProductionOrders, createProductionOrder, updateProductionOrder, deleteProductionOrder } from "./api/production-orders";
 import { scrapePrices } from "./scraper";
@@ -20,6 +21,7 @@ import {
 } from "../shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
+import { authorizeRole } from "../src/middleware/authorizeRole";
 
 async function getProductosConStockBajo() {
   const productos = await storage.getAllProducts();
@@ -33,6 +35,7 @@ async function getProductosConStockBajo() {
 export async function registerRoutes(app: Express): Promise<Server> {
   // Sets up /api/register, /api/login, /api/logout, /api/user
   setupAuth(app);
+  app.use("/api", stockRoutes);
 
   // Dashboard endpoints
   app.get("/api/dashboard/stats", async (_req, res, next) => {
@@ -223,7 +226,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Products endpoints
-  app.get("/api/products", async (req, res) => {
+  app.get("/api/products", authorizeRole(["admin", "vendedor"]), async (req, res) => {
     try {
       let products = await storage.getAllProducts();
 
@@ -264,6 +267,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/products", async (req, res) => {
+
     try {
       const productData = { ...req.body };
 
@@ -283,7 +287,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/products/:id", async (req, res) => {
+  app.put("/api/products/:id", authorizeRole("admin"), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       let productData = { ...req.body };
@@ -359,7 +363,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/products/:id", async (req, res) => {
+  app.delete("/api/products/:id", authorizeRole("admin"), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       await storage.deleteProduct(id);
@@ -541,7 +545,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Sales endpoints
-  app.get("/api/sales", async (req, res) => {
+  app.get("/api/sales", authorizeRole(["admin", "vendedor"]), async (req, res) => {
     try {
       const sales = await storage.getAllSales();
       res.json(sales);
@@ -550,7 +554,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/sales', async (req, res) => {
+  app.post('/api/sales', authorizeRole(["admin", "vendedor"]), async (req, res) => {
     console.log('\n=== Iniciando proceso de venta ===');
     console.log('Headers:', req.headers);
     console.log('Cookies:', req.cookies);
