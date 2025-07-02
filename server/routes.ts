@@ -11,6 +11,10 @@ import { getProductionOrders, createProductionOrder, updateProductionOrder, dele
 import { scrapePrices } from "./scraper";
 import { checkAfipStatus, createAfipInvoice } from "./api/afip";
 import { getStats } from "./services/dashboardService";
+import ExcelJS from "exceljs";
+import fs from "fs";
+import os from "os";
+import path from "path";
 import {
   InsertSale,
   InsertSaleItem,
@@ -4680,6 +4684,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error al generar reporte de productos rentables:", error);
       res.status(500).json({ error: "Error al generar reporte de productos rentables" });
+    }
+  });
+
+  app.get("/api/reports/ventas/exportar", async (req, res) => {
+    try {
+      const desdeParam = req.query.desde as string | undefined;
+      const hastaParam = req.query.hasta as string | undefined;
+
+      const desde = desdeParam ? new Date(desdeParam) : new Date("1970-01-01");
+      const hasta = hastaParam ? new Date(hastaParam) : new Date();
+      hasta.setHours(23, 59, 59, 999);
+
+      const allSales = await storage.getAllSales() || [];
+      const customers = await storage.getAllCustomers() || [];
+
+      const filteredSales = allSales.filter(sale => {
+        const saleDate = new Date(sale.timestamp as string);
+        return saleDate >= desde && saleDate <= hasta;
+      });
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Ventas");
+
+      worksheet.columns = [
+        { header: "ID", key: "id", width: 10 },
+        { header: "Fecha", key: "fecha", width: 15 },
+        { header: "Cliente", key: "cliente", width: 30 },
+        { header: "Total", key: "total", width: 15 }
+      ];
+
+      for (const sale of filteredSales) {
+        const customer = sale.customerId ? customers.find(c => c.id === sale.customerId) : undefined;
+        worksheet.addRow({
+          id: sale.id,
+          fecha: new Date(sale.timestamp as string).toLocaleDateString(),
+          cliente: customer ? customer.name : "Cliente no registrado",
+          total: parseFloat(sale.total).toFixed(2)
+        });
+      }
+
+      const tmpPath = path.join(os.tmpdir(), `ventas_${Date.now()}.xlsx`);
+      await workbook.xlsx.writeFile(tmpPath);
+
+      res.download(tmpPath, "ventas.xlsx", err => {
+        fs.unlink(tmpPath, () => {});
+        if (err) {
+          console.error("Error al descargar archivo de ventas:", err);
+        }
+      });
+    } catch (error) {
+      console.error("Error al exportar ventas:", error);
+      res.status(500).json({ error: "Error al exportar ventas" });
     }
   });
 
