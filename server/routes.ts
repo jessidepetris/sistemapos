@@ -2432,6 +2432,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Error al obtener categorías", error: (error as Error).message });
     }
   });
+
+  // Verificador de precios por código de barras o código interno
+  app.get("/api/web/verificador/:codigo", async (req, res) => {
+    try {
+      const codigo = req.params.codigo;
+      const products = await storage.getAllProducts();
+
+      const product = products.find(p =>
+        (p.barcodes && Array.isArray(p.barcodes) && p.barcodes.includes(codigo)) ||
+        (p.supplierCode === codigo) ||
+        // Compatibilidad con posibles campos 'code'
+        ((p as any).code === codigo)
+      );
+
+      if (!product) {
+        return res.status(404).json({ message: "Producto no encontrado" });
+      }
+
+      res.json({
+        name: product.name,
+        price: product.price,
+        stock: parseFloat(product.stock.toString()),
+        unit: product.baseUnit,
+        isBulk: product.isBulk,
+        isRefrigerated: product.isRefrigerated
+      });
+    } catch (error) {
+      console.error("Error en verificador de producto:", error);
+      res.status(500).json({ message: "Error al buscar producto", error: (error as Error).message });
+    }
+  });
   
   // Carrito de compra
   // Obtener el carrito actual o crear uno nuevo si no existe
