@@ -5,7 +5,8 @@ import { users, User, InsertUser, Supplier, InsertSupplier, Customer, InsertCust
   Delivery, InsertDelivery, DeliveryEvent, InsertDeliveryEvent, RouteAssignment, InsertRouteAssignment,
   Cart, InsertCart, CartItem, InsertCartItem, WebUser, InsertWebUser,
   ProductCategory, InsertProductCategory, ProductCategoryRelation, InsertProductCategoryRelation,
-  BankAccount, InsertBankAccount, ProductionOrder, InsertProductionOrder } from "@shared/schema";
+  BankAccount, InsertBankAccount, ProductionOrder, InsertProductionOrder,
+  StockMovement, InsertStockMovement } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { Purchase, PurchaseItem, InsertPurchase, UpdatePurchase, InsertPurchaseItem } from "../shared/types";
@@ -79,6 +80,10 @@ export interface IStorage {
   getSaleItem(id: number): Promise<SaleItem | undefined>;
   getSaleItemsBySaleId(saleId: number): Promise<SaleItem[]>;
   createSaleItem(item: InsertSaleItem): Promise<SaleItem>;
+
+  // Stock Movements
+  getAllStockMovements(): Promise<StockMovement[]>;
+  createStockMovement(movement: InsertStockMovement): Promise<StockMovement>;
   
   // Orders
   getOrder(id: number): Promise<Order | undefined>;
@@ -207,6 +212,7 @@ export class MemStorage implements IStorage {
   private orderItems: Map<number, OrderItem>;
   private notes: Map<number, Note>;
   private noteItems: Map<number, NoteItem>;
+  private stockMovements: Map<number, StockMovement>;
   
   // Logistics related maps
   private vehicles: Map<number, Vehicle>;
@@ -229,6 +235,7 @@ export class MemStorage implements IStorage {
   private orderItemIdCounter: number;
   private noteIdCounter: number;
   private noteItemIdCounter: number;
+  private stockMovementIdCounter: number;
   
   // Logistics ID counters
   private vehicleIdCounter: number;
@@ -292,6 +299,7 @@ export class MemStorage implements IStorage {
     this.orderItems = new Map();
     this.notes = new Map();
     this.noteItems = new Map();
+    this.stockMovements = new Map();
     
     // Inicializar los Maps de logística
     this.vehicles = new Map();
@@ -317,6 +325,7 @@ export class MemStorage implements IStorage {
     this.orderItemIdCounter = 1;
     this.noteIdCounter = 1;
     this.noteItemIdCounter = 1;
+    this.stockMovementIdCounter = 1;
     
     // Inicializar contadores de logística
     this.vehicleIdCounter = 1;
@@ -853,6 +862,35 @@ export class MemStorage implements IStorage {
     }
     
     return saleItem;
+  }
+
+  // Stock Movements
+  async getAllStockMovements(): Promise<StockMovement[]> {
+    return Array.from(this.stockMovements.values()).sort((a, b) => {
+      const da = a.date ? new Date(a.date).getTime() : 0;
+      const db = b.date ? new Date(b.date).getTime() : 0;
+      return db - da;
+    });
+  }
+
+  async createStockMovement(movement: InsertStockMovement): Promise<StockMovement> {
+    const id = this.stockMovementIdCounter++;
+    const newMovement: StockMovement = {
+      ...movement,
+      id,
+      date: movement.date || new Date(),
+    };
+    this.stockMovements.set(id, newMovement);
+
+    const product = await this.getProduct(movement.productId);
+    if (product) {
+      const qty = parseFloat(movement.quantity.toString());
+      const current = parseFloat(product.stock.toString());
+      const newStock = movement.type === 'entrada' ? current + qty : current - qty;
+      await this.updateProduct(product.id, { stock: newStock.toString() });
+    }
+
+    return newMovement;
   }
   
   // Orders

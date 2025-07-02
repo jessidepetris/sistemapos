@@ -5,6 +5,7 @@ import { setupAuth, hashPassword } from "./auth";
 import { z } from "zod";
 import passport from "passport";
 import { Router } from "express";
+import stockRoutes from "../src/routes/stockRoutes";
 import { getBankAccounts, createBankAccount, updateBankAccount, deleteBankAccount } from "./api/bank-accounts";
 import { getProductionOrders, createProductionOrder, updateProductionOrder, deleteProductionOrder } from "./api/production-orders";
 import { scrapePrices } from "./scraper";
@@ -24,6 +25,7 @@ import { eq } from "drizzle-orm";
 export async function registerRoutes(app: Express): Promise<Server> {
   // Sets up /api/register, /api/login, /api/logout, /api/user
   setupAuth(app);
+  app.use("/api", stockRoutes);
 
   // Dashboard endpoints
   app.get("/api/dashboard/stats", async (_req, res, next) => {
