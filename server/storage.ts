@@ -529,6 +529,7 @@ export class MemStorage implements IStorage {
       packCost: insertProduct.packCost || null,
       stock: insertProduct.stock || "0",
       stockAlert: insertProduct.stockAlert || null,
+      puntoReposicion: insertProduct.puntoReposicion || null,
       webVisible: insertProduct.webVisible ?? true,
       isRefrigerated: insertProduct.isRefrigerated ?? false,
       isComposite: insertProduct.isComposite ?? false,

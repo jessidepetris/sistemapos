@@ -89,6 +89,7 @@ export const products = pgTable("products", {
   stock: numeric("stock", { precision: 10, scale: 2 }).notNull().default("0"),
   reservedStock: numeric("reserved_stock", { precision: 10, scale: 2 }).notNull().default("0"),
   stockAlert: numeric("stock_alert", { precision: 10, scale: 2 }),
+  puntoReposicion: numeric("punto_reposicion", { precision: 10, scale: 2 }),
   supplierId: integer("supplier_id").references(() => suppliers.id),
   // Unidad en la que se compra el producto (ej. caja)
   purchaseUnit: text("purchase_unit"),
@@ -139,6 +140,7 @@ export const insertProductSchema = createInsertSchema(products).pick({
   costCurrency: true,
   stock: true,
   stockAlert: true,
+  puntoReposicion: true,
   supplierId: true,
   purchaseUnit: true,
   purchaseQty: true,
