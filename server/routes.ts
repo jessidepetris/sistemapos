@@ -535,6 +535,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/sales/:id", authorizeRole(["admin", "vendedor"]), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const sale = await storage.getSale(id);
+      if (!sale) {
+        return res.status(404).json({ message: "Venta no encontrada" });
+      }
+
+      const items = await storage.getSaleItemsBySaleId(id);
+
+      let customer = null;
+      if (sale.customerId) {
+        customer = await storage.getCustomer(sale.customerId);
+      }
+
+      const user = await storage.getUser(sale.userId);
+
+      res.json({
+        ...sale,
+        customer,
+        user,
+        items,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener venta", error: (error as Error).message });
+    }
+  });
+
   app.post('/api/sales', authorizeRole(["admin", "vendedor"]), async (req, res) => {
     console.log('\n=== Iniciando proceso de venta ===');
     console.log('Headers:', req.headers);
