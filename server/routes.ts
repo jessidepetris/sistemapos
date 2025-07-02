@@ -702,12 +702,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Permitir ambos nombres, pero usar los correctos para guardar
       const documentType = req.body.documentType || req.body.docType || "remito";
       const invoiceNumber = req.body.invoiceNumber || req.body.docNumber || null;
-      
-      if (!items || !Array.isArray(items) || items.length === 0) {
+      const currency = req.body.currency || "ARS";
+
+
+      // Validar estructura de los items recibidos
+      if (!Array.isArray(items) || items.length === 0) {
         console.log('Error: No hay items en la venta');
         return res.status(400).json({ message: 'La venta debe contener al menos un item' });
       }
-
+      for (const item of items) {
+        if (!item.productId || !item.name || !item.quantity || !item.unit || !item.price || !item.total) {
+          console.log('Item inválido detectado:', item);
+          return res.status(400).json({ message: `Item inválido: ${JSON.stringify(item)}` });
+        }
+      }
+      
       if (!paymentMethods || !Array.isArray(paymentMethods) || paymentMethods.length === 0) {
         console.log('Error: No hay métodos de pago');
         return res.status(400).json({ message: 'Debe especificar al menos un método de pago' });
@@ -717,6 +726,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paymentMethods[0]?.method === 'current_account';
       if (isCuentaCorriente && !customerId) {
         return res.status(400).json({ message: 'Se requiere cliente para venta en cuenta corriente' });
+      }
+
+      // Verificar existencia del cliente si se proporciona customerId
+      if (customerId) {
+        const customer = await storage.getCustomer(customerId);
+        if (!customer) {
+          console.log(`Error: Cliente con ID ${customerId} no encontrado`);
+          return res.status(400).json({ message: `Cliente con ID ${customerId} no encontrado` });
+        }
       }
 
       // Verificar stock y disponibilidad de productos
@@ -744,7 +762,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const surcharge = surchargePercent > 0 ? subtotal * (surchargePercent / 100) : 0;
       // Calcular total
       const total = subtotal - discount + surcharge;
+      const status = isCuentaCorriente ? "pending" : "completed";
       console.log('Subtotal:', subtotal, 'Descuento:', discount, 'Recargo:', surcharge, 'Total:', total);
+      console.log({ customerId, userId, subtotal, total, items, paymentMethods, documentType, currency, status });
 
       // Crear la venta con los nombres correctos de campos
 
@@ -760,7 +780,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paymentMethod: paymentMethods[0]?.method || "efectivo",
         documentType,
         invoiceNumber,
-        status: isCuentaCorriente ? "pending" : "completed"
+        status,
+        currency
       });
 
       // If sale is on current account, update client's balance
@@ -792,6 +813,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           prorratedTotal += itemDiscount;
         }
         const itemTotal = itemSubtotal - itemDiscount;
+        if (!item.productId || !item.unit || item.price == null || itemTotal == null) {
+          throw new Error(`Datos de item inválidos para guardar: ${JSON.stringify(item)}`);
+        }
         await storage.createSaleItem({
           saleId: sale.id,
           productId: item.productId,
@@ -800,7 +824,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           unit: item.unit,
           price: item.price,
           discount: itemDiscount.toFixed(2),
-          total: itemTotal.toFixed(2)
+          total: itemTotal.toFixed(2),
+          currency
         });
         // Actualizar stock
         if (product) {
@@ -825,11 +850,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       console.log('=== Proceso de venta completado ===\n');
-      
+
       res.json(sale);
     } catch (error) {
       console.error('Error en el proceso de venta:', error);
-      res.status(500).json({ message: 'Error al procesar la venta' });
+      res.status(500).json({ message: (error as Error).message || 'Error al procesar la venta' });
     }
   });
 
