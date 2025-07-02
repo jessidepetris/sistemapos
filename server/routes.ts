@@ -14,6 +14,8 @@ import { getStats } from "./services/dashboardService";
 import {
   InsertSale,
   InsertSaleItem,
+  customers,
+  clientPayments,
   quotations,
   quotationItems,
   sales,
@@ -429,6 +431,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(400).json({ message: "Error al eliminar cliente", error: (error as Error).message });
+    }
+  });
+
+  // Current account info for client
+  app.get("/api/clients/:id/cuenta-corriente", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const [client] = await db.select().from(customers).where(eq(customers.id, id));
+      if (!client) {
+        return res.status(404).json({ message: "Cliente no encontrado" });
+      }
+      const payments = await db.select().from(clientPayments).where(eq(clientPayments.clientId, id)).orderBy(clientPayments.timestamp);
+      res.json({ saldoCuentaCorriente: parseFloat(client.saldoCuentaCorriente ?? "0"), pagos: payments });
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener cuenta corriente" });
+    }
+  });
+
+  // Register payment for client
+  app.post("/api/clients/:id/pago", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { amount, method } = req.body;
+      if (!amount) {
+        return res.status(400).json({ message: "Monto requerido" });
+      }
+      const [client] = await db.select().from(customers).where(eq(customers.id, id));
+      if (!client) {
+        return res.status(404).json({ message: "Cliente no encontrado" });
+      }
+      const [payment] = await db.insert(clientPayments).values({
+        clientId: id,
+        amount: amount.toString(),
+        method,
+      }).returning();
+
+      const newBalance = parseFloat(client.saldoCuentaCorriente ?? "0") - parseFloat(amount);
+      await db.update(customers).set({ saldoCuentaCorriente: newBalance.toString() }).where(eq(customers.id, id));
+      res.status(201).json({ pago: payment, nuevoSaldo: newBalance });
+    } catch (error) {
+      res.status(500).json({ message: "Error al registrar pago" });
     }
   });
 
