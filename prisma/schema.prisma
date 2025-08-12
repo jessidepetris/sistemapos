@@ -1,0 +1,299 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Product {
+  id             Int       @id @default(autoincrement())
+  name           String
+  description    String
+  stock          Int
+  minStock       Int
+  costARS        Decimal
+  costUSD        Decimal?
+  priceARS       Decimal
+  unit           String
+  category       String
+  subcategory    String?
+  barcodes       String[]
+  variants       Json?
+  isBulk         Boolean
+  isRefrigerated Boolean
+  requiresLabel  Boolean @default(false)
+  imageUrl       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  saleItems     SaleItem[]
+  priceLogs     PriceChangeLog[]
+}
+
+model PriceChangeLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id])
+  oldCost   Decimal
+  newCost   Decimal
+  oldPrice  Decimal
+  newPrice  Decimal
+  createdAt DateTime @default(now())
+}
+
+model Client {
+  id               Int               @id @default(autoincrement())
+  name             String
+  email            String            @unique
+  password         String
+  sales            Sale[]
+  accountMovements AccountMovement[]
+}
+
+model Sale {
+  id            String         @id @default(uuid()) @db.Uuid
+  customerName  String
+  customerId    Int?
+  customer      Client?        @relation(fields: [customerId], references: [id])
+  type          SaleType
+  items         SaleItem[]
+  subtotal      Decimal
+  discount      Decimal
+  total         Decimal
+  paymentMethod PaymentMethod
+  paidAmount    Decimal
+  change        Decimal
+  createdAt     DateTime       @default(now())
+  accountMovements AccountMovement[]
+  invoice       Invoice?
+}
+
+model SaleItem {
+  id        String  @id @default(uuid()) @db.Uuid
+  saleId    String  @db.Uuid
+  productId Int
+  quantity  Int
+  price     Decimal
+  discount  Decimal
+  sale      Sale    @relation(fields: [saleId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+model User {
+  id       Int    @id @default(autoincrement())
+  email    String @unique
+  name     String?
+  password String?
+}
+
+enum SaleType {
+  REMITO_X
+  FACTURA_C
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  DEBITO
+  TRANSFERENCIA
+  MERCADOPAGO
+  GETNET
+  CUENTA_CORRIENTE
+  MIXTO
+}
+
+model AccountMovement {
+  id          String               @id @default(uuid()) @db.Uuid
+  clientId    Int
+  client      Client               @relation(fields: [clientId], references: [id])
+  type        AccountMovementType
+  amount      Decimal
+  description String
+  saleId      String?              @db.Uuid
+  sale        Sale?                @relation(fields: [saleId], references: [id])
+  createdAt   DateTime             @default(now())
+}
+
+enum AccountMovementType {
+  CARGO
+  PAGO
+}
+
+model Quotation {
+  id        String          @id @default(uuid()) @db.Uuid
+  clientId  Int?
+  client    Client?         @relation(fields: [clientId], references: [id])
+  items     QuotationItem[]
+  total     Decimal
+  notes     String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  status    QuotationStatus
+  delivery  Delivery?
+}
+
+model QuotationItem {
+  id          String     @id @default(uuid()) @db.Uuid
+  quotationId String     @db.Uuid
+  quotation   Quotation  @relation(fields: [quotationId], references: [id])
+  productId   Int
+  product     Product    @relation(fields: [productId], references: [id])
+  quantity    Int
+  price       Decimal
+  discount    Decimal
+}
+
+enum QuotationStatus {
+  PENDIENTE
+  ACEPTADO
+  RECHAZADO
+  CONVERTIDO
+}
+
+model Order {
+  id        String      @id @default(uuid()) @db.Uuid
+  clientId  Int?
+  client    Client?     @relation(fields: [clientId], references: [id])
+  items     OrderItem[]
+  total     Decimal
+  notes     String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  status    OrderStatus
+}
+
+model OrderItem {
+  id        String   @id @default(uuid()) @db.Uuid
+  orderId   String   @db.Uuid
+  order     Order    @relation(fields: [orderId], references: [id])
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Decimal
+  discount  Decimal
+}
+
+enum OrderStatus {
+  PENDIENTE
+  EN_PROCESO
+  EN_CAMINO
+  ENTREGADO
+  CANCELADO
+}
+
+enum DeliveryStatus {
+  PREPARANDO
+  EN_CAMINO
+  ENTREGADO
+}
+
+model Delivery {
+  id           String       @id @default(uuid()) @db.Uuid
+  quotationId  String       @db.Uuid
+  quotation    Quotation    @relation(fields: [quotationId], references: [id])
+  status       DeliveryStatus
+  assignedTo   String?
+  notes        String?
+  updatedAt    DateTime     @updatedAt
+  createdAt    DateTime     @default(now())
+}
+
+model Supplier {
+  id        String           @id @default(uuid()) @db.Uuid
+  name      String
+  cuit      String?
+  email     String?
+  phone     String?
+  purchases Purchase[]
+  payments  SupplierPayment[]
+  createdAt DateTime         @default(now())
+}
+
+model Purchase {
+  id         String           @id @default(uuid()) @db.Uuid
+  supplierId String           @db.Uuid
+  supplier   Supplier         @relation(fields: [supplierId], references: [id])
+  date       DateTime         @default(now())
+  items      PurchaseItem[]
+  total      Decimal
+  paidAmount Decimal          @default(0)
+  notes      String?
+  payments   SupplierPayment[]
+}
+
+model PurchaseItem {
+  id         String  @id @default(uuid()) @db.Uuid
+  purchaseId String  @db.Uuid
+  productId  Int
+  product    Product @relation(fields: [productId], references: [id])
+  quantity   Int
+  unitCost   Decimal
+  subtotal   Decimal
+  purchase   Purchase @relation(fields: [purchaseId], references: [id])
+}
+
+model SupplierPayment {
+  id          String    @id @default(uuid()) @db.Uuid
+  supplierId  String    @db.Uuid
+  purchaseId  String?   @db.Uuid
+  amount      Decimal
+  paymentDate DateTime  @default(now())
+  notes       String?
+  supplier    Supplier  @relation(fields: [supplierId], references: [id])
+  purchase    Purchase? @relation(fields: [purchaseId], references: [id])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String
+  userEmail   String
+  action      String
+  entity      String
+  entityId    String?
+  description String
+  timestamp   DateTime @default(now())
+}
+
+model Backup {
+  id        String   @id @default(uuid()) @db.Uuid
+  filename  String
+  size      Int
+  createdAt DateTime @default(now())
+  userId    String?
+  userEmail String?
+}
+
+model Invoice {
+  id            String   @id @default(uuid()) @db.Uuid
+  saleId        String   @unique @db.Uuid
+  sale          Sale     @relation(fields: [saleId], references: [id])
+  cae           String
+  caeExpiration DateTime
+  pointOfSale   Int
+  number        Int
+  type          String
+  clientName    String
+  clientCuit    String?
+  totalAmount   Decimal
+  pdfUrl        String
+  createdAt     DateTime @default(now())
+}
+
+
+model Promotion {
+  id              String   @id @default(uuid()) @db.Uuid
+  name            String
+  type            String
+  productId       Int?
+  product         Product? @relation(fields: [productId], references: [id])
+  categoryId      String?
+  clientType      String?
+  minQuantity     Int?
+  minTotal        Decimal?
+  discountPercent Decimal?
+  bonusQuantity   Int?
+  validFrom       DateTime
+  validTo         DateTime
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+}
