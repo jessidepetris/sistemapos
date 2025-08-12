@@ -1,0 +1,37 @@
+{
+  "name": "web",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "jest"
+  },
+  "dependencies": {
+    "next": "^14.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "next-auth": "^5.0.0",
+    "axios": "^1.6.7",
+    "tailwindcss": "^3.4.0",
+    "@prisma/client": "^5.0.0",
+    "next-cloudinary": "^6.0.0",
+    "react-table": "^7.8.0",
+    "xlsx": "^0.18.5",
+    "@zxing/browser": "^0.1.0",
+    "qrcode.react": "^3.1.0",
+    "react-hot-toast": "^2.4.1",
+    "recharts": "^2.8.0"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.31",
+    "prisma": "^5.0.0",
+    "typescript": "^5.0.0",
+    "@testing-library/react": "^14.0.0",
+    "@testing-library/jest-dom": "^6.0.0",
+    "jest": "^29.0.0",
+    "@types/jest": "^29.0.0"
+  }
+}

@@ -14,3 +14,33 @@ cookies.txt
 *.tsbuildinfo
 
 .env
+# Archivos binarios
+*.pdf
+*.xlsx
+*.xls
+*.zip
+*.tar
+*.gz
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.mp4
+*.mov
+*.avi
+*.exe
+*.dll
+*.bin
+
+# Carpetas de exportación o temporales
+/exports/
+/reports/
+/backups/
+/tmp/
+/storage/
+/dist/
+/build/
+
+# Permitir archivos estáticos públicos
+!apps/**/public/**
