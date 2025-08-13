@@ -26,7 +26,7 @@ export default async function AuditLogsPage() {
         <tbody>
           {logs.map((log: any) => (
             <tr key={log.id} className="border-t">
-              <td className="px-2 py-1">{new Date(log.timestamp).toLocaleString()}</td>
+              <td className="px-2 py-1">{new Date(log.ts).toLocaleString()}</td>
               <td className="px-2 py-1">{log.userEmail}</td>
               <td className="px-2 py-1">{log.action}</td>
               <td className="px-2 py-1">{log.entity}</td>

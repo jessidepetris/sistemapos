@@ -7,7 +7,7 @@ export class AuditService {
   constructor(private prisma: PrismaService) {}
 
   async log(dto: CreateAuditLogDto) {
-    return this.prisma.auditLog.create({ data: dto });
+    return this.prisma.auditLog.create({ data: dto as any });
   }
 
   findAll(filters: {
@@ -22,13 +22,13 @@ export class AuditService {
     if (filters.actionType) where.actionType = filters.actionType as any;
     if (filters.entity) where.entity = filters.entity;
     if (filters.from || filters.to) {
-      where.timestamp = {};
-      if (filters.from) where.timestamp.gte = filters.from;
-      if (filters.to) where.timestamp.lte = filters.to;
+      where.ts = {};
+      if (filters.from) where.ts.gte = filters.from;
+      if (filters.to) where.ts.lte = filters.to;
     }
     return this.prisma.auditLog.findMany({
       where,
-      orderBy: { timestamp: 'desc' },
+      orderBy: { ts: 'desc' } as any,
     });
   }
 }
