@@ -95,6 +95,7 @@ export default function OrdersPage() {
         <button onClick={submit} className="border px-2 py-1 ml-2">Crear</button>
       </div>
       <ul>
+<<<<<<< HEAD
         {orders.map(o => {
           const pdfUrl = `/api/documents/order/${o.id}/pdf`;
           const origin = typeof window !== 'undefined' ? window.location.origin : '';
@@ -106,6 +107,13 @@ export default function OrdersPage() {
             </li>
           );
         })}
+=======
+        {orders.map(o => (
+          <li key={o.id} className="border-b py-1">
+            {o.id} - {o.status} - ${o.total}
+          </li>
+        ))}
+>>>>>>> origin/master
       </ul>
     </div>
   );
