@@ -6,13 +6,13 @@ jest.mock('next-auth', () => ({
 }));
 
 describe('ProductsPage', () => {
-  it('renders heading', async () => {
-    // mock fetch used in getProducts
+  it('shows product list', async () => {
     global.fetch = jest.fn().mockResolvedValue({
-      json: () => Promise.resolve([]),
+      json: () => Promise.resolve([{ id: 1, name: 'Sample', category: 'Demo', priceARS: 10, stock: 5, isComposite: false }]),
     }) as any;
     const page = await ProductsPage();
     render(page);
     expect(screen.getByText('Products')).toBeInTheDocument();
+    expect(screen.getByText(/Sample/)).toBeInTheDocument();
   });
 });

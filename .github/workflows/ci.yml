@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20]
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pp_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install root deps (if any)
+        run: npm ci || true
+
+      - name: Install API deps
+        run: npm ci
+        working-directory: apps/api
+
+      - name: Install WEB deps
+        run: npm ci
+        working-directory: apps/web
+
+      - name: Prisma generate
+        run: npx prisma generate
+        working-directory: .
+
+      - name: Migrate diff (dry validation)
+        run: npx prisma migrate diff --from-empty --to-schema-datamodel ./prisma/schema.prisma
+        working-directory: .
+
+      - name: Build API
+        run: npm run build
+        working-directory: apps/api
+
+      - name: Build WEB
+        run: npm run build
+        working-directory: apps/web
+
+      - name: Test API
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pp_test?schema=public
+          NODE_ENV: test
+        run: npm run test:ci
+        working-directory: apps/api
+
+      - name: Test WEB
+        run: npm run test:ci
+        working-directory: apps/web
