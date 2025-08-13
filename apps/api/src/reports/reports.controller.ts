@@ -131,4 +131,13 @@ export class ReportsController {
     }
     return res.json(data);
   }
+
+  @Get('settlements/summary')
+  settlementSummary(
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('gateway') gateway: string,
+  ) {
+    return this.reportsService.settlementSummary(from, to, gateway);
+  }
 }

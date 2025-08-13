@@ -10,6 +10,7 @@ export default function Informes() {
         <li><Link href="/informes/cuentas">Cuentas Corrientes</Link></li>
         <li><Link href="/informes/stock">Stock</Link></li>
         <li><Link href="/informes/logistica">Logística</Link></li>
+        <li><Link href="/informes/kardex">Kardex</Link></li>
       </ul>
     </div>
   );

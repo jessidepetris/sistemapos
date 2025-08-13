@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Res, Req } from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { Response } from 'express';
@@ -8,8 +8,11 @@ export class SalesController {
   constructor(private readonly salesService: SalesService) {}
 
   @Post()
-  create(@Body() body: CreateSaleDto) {
-    return this.salesService.create(body);
+  create(@Body() body: CreateSaleDto, @Req() req: any) {
+    return this.salesService.create(body, {
+      id: req.user?.id,
+      email: req.user?.email,
+    });
   }
 
   @Get()

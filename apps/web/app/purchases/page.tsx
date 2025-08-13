@@ -155,8 +155,53 @@ export default function PurchasesPage() {
       </div>
       <ul>
         {purchases.map(p => (
-          <li key={p.id} className="border-b py-1">
-            {`${p.supplier?.name || p.supplierId} - $${p.total} - Pagado: $${p.paidAmount}`}
+          <li key={p.id} className="border-b py-1 space-y-1">
+            <div>{`${p.supplier?.name || p.supplierId} - $${p.total} - Estado: ${p.status}`}</div>
+            {p.status === 'DRAFT' && (
+              <button
+                className="border px-2 py-1 mr-2"
+                onClick={async () => {
+                  await fetch(`/api/purchases/${p.id}/confirm`, { method: 'POST' });
+                  const list = await fetch('/api/purchases').then(r => r.json());
+                  setPurchases(list);
+                }}
+              >
+                Confirmar
+              </button>
+            )}
+            <button
+              className="border px-2 py-1 mr-2"
+              onClick={() => window.open(`/api/purchases/${p.id}/pdf`) }
+            >
+              PDF
+            </button>
+            <button
+              className="border px-2 py-1 mr-2"
+              onClick={async () => {
+                const res = await fetch(`/api/purchases/${p.id}/whatsapp-link`);
+                const data = await res.json();
+                window.open(data.link);
+              }}
+            >
+              WhatsApp
+            </button>
+            <button
+              className="border px-2 py-1"
+              onClick={async () => {
+                const body = {
+                  items: p.items.map((it: any) => ({ productId: it.productId, receivedQty: it.quantity, unitCost: it.unitCost })),
+                };
+                await fetch(`/api/purchases/${p.id}/receive`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(body),
+                });
+                const list = await fetch('/api/purchases').then(r => r.json());
+                setPurchases(list);
+              }}
+            >
+              Recibir todo
+            </button>
           </li>
         ))}
       </ul>

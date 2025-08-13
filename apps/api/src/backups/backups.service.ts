@@ -3,12 +3,17 @@ import { PrismaService } from '../prisma.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import AdmZip from 'adm-zip';
+import { AuditService } from '../audit/audit.service';
+import { AuditActionType } from '@prisma/client';
 
 @Injectable()
 export class BackupsService {
   private backupDir = path.join(process.cwd(), 'backups');
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AuditService,
+  ) {}
 
   async createBackup(userId?: string, userEmail?: string) {
     const zip = new AdmZip();
@@ -42,7 +47,7 @@ export class BackupsService {
     zip.writeZip(filepath);
     const stats = await fs.promises.stat(filepath);
 
-    return this.prisma.backup.create({
+    const record = await this.prisma.backup.create({
       data: {
         filename,
         size: stats.size,
@@ -50,6 +55,17 @@ export class BackupsService {
         userEmail,
       },
     });
+
+    await this.audit.log({
+      userId: userId || 'unknown',
+      userEmail: userEmail || 'unknown',
+      actionType: AuditActionType.BACKUP,
+      entity: 'Backup',
+      entityId: record.id,
+      details: `Backup ${filename} creado`,
+    });
+
+    return record;
   }
 
   listBackups() {
@@ -121,14 +137,12 @@ export class BackupsService {
     if (data.auditLogs)
       await this.prisma.auditLog.createMany({ data: data.auditLogs });
 
-    await this.prisma.auditLog.create({
-      data: {
-        userId: userId || 'unknown',
-        userEmail: userEmail || 'unknown',
-        action: 'RESTORE_BACKUP',
-        entity: 'Backup',
-        description: 'Database restored from backup',
-      },
+    await this.audit.log({
+      userId: userId || 'unknown',
+      userEmail: userEmail || 'unknown',
+      actionType: AuditActionType.RESTAURACION,
+      entity: 'Backup',
+      details: 'Database restored from backup',
     });
 
     return { restored: true };

@@ -27,7 +27,7 @@ export default async function ProductsPage() {
         {products.map((p: any) => (
           <li key={p.id} className="mb-2 flex items-center">
             <span>
-              {p.name} - {p.category} - ${p.priceARS} (stock: {p.stock})
+              {p.name} {p.isComposite && <span className="text-xs bg-gray-200 px-1 rounded">KIT</span>} - {p.category} - ${p.priceARS} (stock: {p.stock})
             </span>
             <PrintLabelButton productId={p.id} />
           </li>

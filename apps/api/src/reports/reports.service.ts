@@ -15,7 +15,7 @@ export class ReportsService {
     }
     const sales = await this.prisma.sale.findMany({
       where,
-      include: { items: true },
+      include: { items: true, payments: true },
     });
 
     const totalSales = sales.reduce((sum, s) => sum + Number(s.total), 0);
@@ -27,8 +27,10 @@ export class ReportsService {
     for (const sale of sales) {
       const clientKey = sale.customerId ? `#${sale.customerId}` : sale.customerName;
       byClient[clientKey] = (byClient[clientKey] || 0) + Number(sale.total);
-      byPaymentMethod[sale.paymentMethod] =
-        (byPaymentMethod[sale.paymentMethod] || 0) + Number(sale.total);
+      for (const pay of sale.payments.filter(p => p.status === 'APPROVED')) {
+        const key = pay.methodLabel || pay.gateway;
+        byPaymentMethod[key] = (byPaymentMethod[key] || 0) + Number(pay.amount);
+      }
       byType[sale.type] = (byType[sale.type] || 0) + Number(sale.total);
       for (const item of sale.items) {
         const prod = byProduct[item.productId] || { quantity: 0, total: 0 };
@@ -103,5 +105,33 @@ export class ReportsService {
       );
     }).length;
     return { deliveries, averageTime, deliveredToday };
+  }
+
+  async settlementSummary(from: string, to: string, gateway?: string) {
+    const res = await this.prisma.paymentSettlement.findMany({
+      where: {
+        ...(gateway ? { gateway: gateway as any } : {}),
+        periodStart: { gte: parseISO(from) },
+        periodEnd: { lte: parseISO(to) },
+      },
+      include: { records: true },
+    });
+    let gross = 0,
+      fees = 0,
+      refunds = 0,
+      chargebacks = 0,
+      net = 0,
+      count = 0;
+    res.forEach((p) =>
+      p.records.forEach((r) => {
+        gross += Number(r.grossAmount);
+        fees += Number(r.feeAmount);
+        net += Number(r.netAmount);
+        refunds += Number(r.refundAmount || 0);
+        if (r.chargeback) chargebacks++;
+        count++;
+      }),
+    );
+    return { gross, fees, refunds, chargebacks, net, count, feePct: gross ? fees / gross : 0 };
   }
 }

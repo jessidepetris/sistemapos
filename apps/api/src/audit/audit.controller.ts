@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query } from '@nestjs/common';
 import { AuditService } from './audit.service';
 import { CreateAuditLogDto } from './dto/create-audit-log.dto';
 
@@ -7,12 +7,24 @@ export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 
   @Get()
-  findAll() {
-    return this.auditService.findAll();
+  findAll(
+    @Query('userEmail') userEmail?: string,
+    @Query('actionType') actionType?: string,
+    @Query('entity') entity?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.auditService.findAll({
+      userEmail,
+      actionType,
+      entity,
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to) : undefined,
+    });
   }
 
   @Post()
   create(@Body() dto: CreateAuditLogDto) {
-    return this.auditService.create(dto);
+    return this.auditService.log(dto);
   }
 }

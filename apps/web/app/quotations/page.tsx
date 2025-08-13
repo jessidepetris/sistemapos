@@ -95,11 +95,17 @@ export default function QuotationsPage() {
         <button onClick={submit} className="border px-2 py-1 ml-2">Crear</button>
       </div>
       <ul>
-        {quotations.map(q => (
-          <li key={q.id} className="border-b py-1">
-            {q.id} - {q.status} - ${q.total}
-          </li>
-        ))}
+        {quotations.map(q => {
+          const pdfUrl = `/api/documents/quotation/${q.id}/pdf`;
+          const origin = typeof window !== 'undefined' ? window.location.origin : '';
+          return (
+            <li key={q.id} className="border-b py-1 space-x-2">
+              {q.id} - {q.status} - ${q.total}
+              <a className="text-blue-600 underline" href={pdfUrl} target="_blank" rel="noopener noreferrer">Ver PDF</a>
+              <a className="text-green-600 underline" href={`https://wa.me/?text=${encodeURIComponent(origin + pdfUrl)}`} target="_blank" rel="noopener noreferrer">WhatsApp</a>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

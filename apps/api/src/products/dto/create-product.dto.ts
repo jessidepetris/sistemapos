@@ -15,7 +15,7 @@ export class CreateProductDto {
   @IsString()
   description: string;
 
-  @IsInt()
+  @IsNumber()
   stock: number;
 
   @IsInt()
@@ -30,6 +30,10 @@ export class CreateProductDto {
 
   @IsNumber()
   priceARS: number;
+
+  @IsOptional()
+  @IsNumber()
+  pricePerKg?: number;
 
   @IsString()
   unit: string;

@@ -1,8 +1,10 @@
+import { AuditActionType } from '@prisma/client';
+
 export class CreateAuditLogDto {
   userId: string;
   userEmail: string;
-  action: string;
+  actionType: AuditActionType;
   entity: string;
   entityId?: string;
-  description: string;
+  details?: string;
 }

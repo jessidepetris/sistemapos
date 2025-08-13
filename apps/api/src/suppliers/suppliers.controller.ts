@@ -20,4 +20,14 @@ export class SuppliersController {
   findOne(@Param('id') id: string) {
     return this.suppliersService.findOne(id);
   }
+
+  @Get('lead-times')
+  leadTimes() {
+    return this.suppliersService.getLeadTimes();
+  }
+
+  @Post('lead-times')
+  saveLeadTime(@Body() body: any) {
+    return this.suppliersService.upsertLeadTime(body);
+  }
 }

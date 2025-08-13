@@ -18,7 +18,7 @@ export class UpdateProductDto {
   description?: string;
 
   @IsOptional()
-  @IsInt()
+  @IsNumber()
   stock?: number;
 
   @IsOptional()
@@ -36,6 +36,10 @@ export class UpdateProductDto {
   @IsOptional()
   @IsNumber()
   priceARS?: number;
+
+  @IsOptional()
+  @IsNumber()
+  pricePerKg?: number;
 
   @IsOptional()
   @IsString()

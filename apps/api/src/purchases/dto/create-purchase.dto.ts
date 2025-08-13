@@ -18,6 +18,14 @@ class PurchaseItemDto {
 
   @IsNumber()
   unitCost: number;
+
+  @IsOptional()
+  @IsInt()
+  packSize?: number;
+
+  @IsOptional()
+  @IsInt()
+  suggestedQty?: number;
 }
 
 export class CreatePurchaseDto {

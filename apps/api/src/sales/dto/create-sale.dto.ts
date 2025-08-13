@@ -1,12 +1,12 @@
 import { Type } from 'class-transformer';
 import { IsArray, IsEnum, IsInt, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
-import { PaymentMethod, SaleType } from '@prisma/client';
+import { PaymentGateway, SaleType, PaymentStatus } from '@prisma/client';
 
 export class CreateSaleItemDto {
   @IsInt()
   productId: number;
 
-  @IsInt()
+  @IsNumber()
   quantity: number;
 
   @IsNumber()
@@ -14,6 +14,10 @@ export class CreateSaleItemDto {
 
   @IsNumber()
   discount: number;
+
+  @IsOptional()
+  @IsString()
+  variantId?: string;
 }
 
 export class CreateSaleDto {
@@ -41,12 +45,24 @@ export class CreateSaleDto {
   @IsNumber()
   total: number;
 
-  @IsEnum(PaymentMethod)
-  paymentMethod: PaymentMethod;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PaymentDto)
+  payments: PaymentDto[];
+}
+
+export class PaymentDto {
+  @IsEnum(PaymentGateway)
+  gateway: PaymentGateway;
+
+  @IsOptional()
+  @IsString()
+  methodLabel?: string;
 
   @IsNumber()
-  paidAmount: number;
+  amount: number;
 
-  @IsNumber()
-  change: number;
+  @IsOptional()
+  @IsEnum(PaymentStatus)
+  status?: PaymentStatus;
 }

@@ -32,4 +32,16 @@ export class SuppliersService {
       },
     });
   }
+
+  getLeadTimes() {
+    return this.prisma.supplierLeadTime.findMany();
+  }
+
+  upsertLeadTime(data: any) {
+    return this.prisma.supplierLeadTime.upsert({
+      where: { id: data.id ?? '' },
+      create: data,
+      update: data,
+    });
+  }
 }

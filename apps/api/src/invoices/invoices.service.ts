@@ -1,111 +1,87 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import PDFDocument from 'pdfkit';
-import * as fs from 'fs';
-import { join } from 'path';
-import Afip from '@afipsdk/afip.js';
+import { DocumentsService } from '../documents/documents.service';
+import { AfipQueueService } from '../afip/afip.queue.service';
+import { AuditService } from '../audit/audit.service';
+import { AuditActionType } from '@prisma/client';
 
 @Injectable()
 export class InvoicesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private docs: DocumentsService,
+    private afipQueue: AfipQueueService,
+    private audit: AuditService,
+  ) {}
 
-  async generate(saleId: string) {
+  async createAfipInvoice(saleId: string) {
+    const existing = await this.prisma.invoice.findUnique({ where: { saleId } });
+    if (existing?.afipCAE) return existing;
     const sale = await this.prisma.sale.findUnique({
       where: { id: saleId },
       include: { items: true, customer: true },
     });
     if (!sale) throw new NotFoundException('Sale not found');
-
-    const pointOfSale = Number(process.env.AFIP_POS || 1);
-    let cae = '00000000000000';
-    let caeExpiration = new Date();
-    let number = 1;
-
-    try {
-      const afip = new Afip({
-        CUIT: Number(process.env.AFIP_CUIT),
-        cert: process.env.AFIP_CERT_PATH,
-        key: process.env.AFIP_KEY_PATH,
-        production: process.env.AFIP_PROD === 'true',
-      });
-      const voucherType = 11; // Factura C
-      const last = await afip.ElectronicBilling.getLastVoucher(pointOfSale, voucherType);
-      number = last + 1;
-      const data = {
-        CantReg: 1,
-        PtoVta: pointOfSale,
-        CbteTipo: voucherType,
-        Concepto: 1,
-        DocTipo: 99,
-        DocNro: 0,
-        CbteDesde: number,
-        CbteHasta: number,
-        CbteFch: Number(new Date().toISOString().slice(0,10).replace(/-/g,'')),
-        ImpTotal: Number(sale.total),
-        ImpTotConc: 0,
-        ImpNeto: Number(sale.total),
-        ImpOpEx: 0,
-        ImpIVA: 0,
-        ImpTrib: 0,
-        MonId: 'PES',
-        MonCotiz: 1,
-      };
-      const res = await afip.ElectronicBilling.createVoucher(data);
-      cae = res.CAE;
-      const fch = res.CAEFchVto; // YYYYMMDD
-      caeExpiration = new Date(`${fch.slice(0,4)}-${fch.slice(4,6)}-${fch.slice(6,8)}`);
-    } catch (e) {
-      caeExpiration = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    }
-
-    const invoice = await this.prisma.invoice.create({
-      data: {
+    await this.audit.log({
+      userId: sale.customerId ? String(sale.customerId) : 'unknown',
+      userEmail: '',
+      actionType: AuditActionType.FACTURACION_INTENT,
+      entity: 'Sale',
+      entityId: saleId,
+      details: 'Intento de facturación AFIP',
+    });
+    const invoice = await this.prisma.invoice.upsert({
+      where: { saleId },
+      create: {
         saleId,
-        cae,
-        caeExpiration,
-        pointOfSale,
-        number,
-        type: 'Factura C',
-        clientName: sale.customerName,
-        clientCuit: null,
-        totalAmount: sale.total,
-        pdfUrl: '',
+        docType: 'FC',
+        ptoVta: Number(process.env.AFIP_PTO_VTA) || 1,
+        pdfUrl: `/documents/invoice/${saleId}/pdf`,
       },
+      update: { pdfUrl: `/documents/invoice/${saleId}/pdf` },
     });
-
-    const pdfUrl = `/invoices/${invoice.id}/pdf`;
-    await this.prisma.invoice.update({ where: { id: invoice.id }, data: { pdfUrl } });
-
-    const pdf = await this.generatePdf(invoice, sale);
-    const dir = join(process.cwd(), 'invoices');
-    await fs.promises.mkdir(dir, { recursive: true });
-    await fs.promises.writeFile(join(dir, `${invoice.id}.pdf`), pdf);
-
-    return { ...invoice, pdfUrl };
+    await this.afipQueue.enqueue(saleId);
+    return invoice;
   }
 
-  async generatePdf(invoice: any, sale: any): Promise<Buffer> {
-    const doc = new PDFDocument();
-    const chunks: Buffer[] = [];
-    doc.on('data', chunk => chunks.push(chunk as Buffer));
-    return new Promise(resolve => {
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.fontSize(16).text('Factura C');
-      doc.text(`Cliente: ${invoice.clientName}`);
-      doc.text(`CAE: ${invoice.cae}`);
-      doc.text(`Vto CAE: ${invoice.caeExpiration.toISOString().slice(0,10)}`);
-      doc.moveDown();
-      sale.items.forEach(item => {
-        doc.text(`Producto ${item.productId} x${item.quantity} - $${item.price}`);
-      });
-      doc.moveDown();
-      doc.text(`Total: $${sale.total}`);
-      doc.end();
-    });
+  retryAfip(saleId: string) {
+    return this.afipQueue.enqueue(saleId);
   }
 
-  async getPdf(id: string): Promise<Buffer> {
-    const file = join(process.cwd(), 'invoices', `${id}.pdf`);
-    return fs.promises.readFile(file);
+  async status(saleId: string) {
+    const inv = await this.prisma.invoice.findUnique({ where: { saleId } });
+    return {
+      hasCAE: Boolean(inv?.afipCAE),
+      afipNumber: inv?.afipNumber,
+      cae: inv?.afipCAE,
+      caeVto: inv?.afipVtoCAE,
+      error: inv?.afipError,
+    };
+  }
+
+  async generateRemito(saleId: string) {
+    const invoice = await this.prisma.invoice.upsert({
+      where: { saleId },
+      create: { saleId, type: 'REMITO_X', pdfUrl: `/documents/remito/${saleId}/pdf` },
+      update: { type: 'REMITO_X', pdfUrl: `/documents/remito/${saleId}/pdf` },
+    });
+    await this.audit.log({
+      userId: String(saleId),
+      userEmail: '',
+      actionType: AuditActionType.REMITO_X_CREATE,
+      entity: 'Invoice',
+      entityId: invoice.id,
+      details: `Remito X para venta ${saleId}`,
+    });
+    return invoice;
+  }
+
+  async getPdf(id: string) {
+    const invoice = await this.prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (invoice.type === 'REMITO_X') {
+      return this.docs.remito(invoice.saleId);
+    }
+    return this.docs.invoice(id);
   }
 }

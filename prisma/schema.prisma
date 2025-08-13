@@ -11,11 +11,12 @@ model Product {
   id             Int       @id @default(autoincrement())
   name           String
   description    String
-  stock          Int
+  stock          Decimal   @default(0)
   minStock       Int
   costARS        Decimal
   costUSD        Decimal?
   priceARS       Decimal
+  pricePerKg     Decimal?
   unit           String
   category       String
   subcategory    String?
@@ -24,11 +25,31 @@ model Product {
   isBulk         Boolean
   isRefrigerated Boolean
   requiresLabel  Boolean @default(false)
+  isComposite    Boolean @default(false)
+  kitBarcode     String?
+  priceMode      PriceMode @default(FIXED)
   imageUrl       String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   saleItems     SaleItem[]
   priceLogs     PriceChangeLog[]
+  kitItems      KitItem[] @relation("KitItemKit")
+  componentsOf  KitItem[] @relation("KitItemComponent")
+  packVariants  PackVariant[]
+}
+
+model KitItem {
+  id          String  @id @default(uuid()) @db.Uuid
+  kitId       Int
+  componentId Int
+  quantity    Decimal
+  kit         Product @relation("KitItemKit", fields: [kitId], references: [id])
+  component   Product @relation("KitItemComponent", fields: [componentId], references: [id])
+}
+
+enum PriceMode {
+  SUM_COMPONENTS
+  FIXED
 }
 
 model PriceChangeLog {
@@ -40,6 +61,114 @@ model PriceChangeLog {
   oldPrice  Decimal
   newPrice  Decimal
   createdAt DateTime @default(now())
+}
+
+enum BarcodeStatus {
+  FREE
+  RESERVED
+  ASSIGNED
+  RETIRED
+}
+
+model InternalBarcode {
+  id         String        @id @default(cuid())
+  ean13      String        @unique
+  status     BarcodeStatus @default(FREE)
+  variantId  String?
+  variant    PackVariant? @relation(fields: [variantId], references: [id])
+  assignedAt DateTime?
+  createdAt  DateTime     @default(now())
+  notes      String?
+}
+
+model PackVariant {
+  id              String   @id @default(cuid())
+  parentProductId Int
+  parentProduct   Product  @relation(fields: [parentProductId], references: [id])
+  name            String
+  contentKg       Decimal
+  barcode         String?
+  fakeScaleBarcode String?
+  fakeScaleScheme  ScaleEncoding?
+  fakeScalePrefix  Int?
+  priceMode       PackPriceMode @default(BY_WEIGHT)
+  fixedPrice      Decimal?
+  stockPacks      Int       @default(0)
+  requiresLabel   Boolean   @default(true)
+  consumeMode     VariantConsumeMode @default(AUTO)
+  avgCostArs      Decimal?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  packagingItems  PackagingOrderItem[]
+  parLevels       PackParLevel[]
+  saleItems       SaleItem[]
+  @@index([barcode])
+  @@index([fakeScaleBarcode])
+  @@unique([barcode], map: "uniq_variant_barcode")
+  @@unique([fakeScaleBarcode], map: "uniq_variant_fake")
+}
+
+enum VariantConsumeMode {
+  AUTO
+  SOLO_PACK
+  SOLO_GRANEL
+}
+
+enum PackPriceMode {
+  BY_WEIGHT
+  FIXED
+}
+
+model ScalePLU {
+  id        String   @id @default(cuid())
+  plu       String   @unique
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id])
+  encoding  ScaleEncoding @default(WEIGHT_EMBEDDED)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum ScaleEncoding {
+  WEIGHT_EMBEDDED
+  PRICE_EMBEDDED
+}
+
+model PackagingOrder {
+  id        String   @id @default(cuid())
+  status    PackagingStatus @default(DRAFT)
+  notes     String?
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items     PackagingOrderItem[]
+}
+
+model PackagingOrderItem {
+  id               String  @id @default(cuid())
+  packagingOrderId String
+  packagingOrder   PackagingOrder @relation(fields: [packagingOrderId], references: [id])
+  variantId        String
+  variant          PackVariant @relation(fields: [variantId], references: [id])
+  qtyToMake        Int
+  wasteKg          Decimal?
+  wastePct         Decimal?
+  wasteReason      String?
+}
+
+model PackParLevel {
+  id           String  @id @default(cuid())
+  variantId    String
+  variant      PackVariant @relation(fields: [variantId], references: [id])
+  targetOnHand Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+enum PackagingStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
 }
 
 model Client {
@@ -61,9 +190,9 @@ model Sale {
   subtotal      Decimal
   discount      Decimal
   total         Decimal
-  paymentMethod PaymentMethod
-  paidAmount    Decimal
-  change        Decimal
+  paid          Decimal       @default(0)
+  balance       Decimal       @default(0)
+  payments      Payment[]
   createdAt     DateTime       @default(now())
   accountMovements AccountMovement[]
   invoice       Invoice?
@@ -73,11 +202,16 @@ model SaleItem {
   id        String  @id @default(uuid()) @db.Uuid
   saleId    String  @db.Uuid
   productId Int
-  quantity  Int
+  variantId String? @db.Uuid
+  quantity  Decimal
   price     Decimal
   discount  Decimal
+  meta      Json?
+  cogsUnitArs  Decimal? @db.Decimal(14, 4)
+  cogsTotalArs Decimal? @db.Decimal(14, 2)
   sale      Sale    @relation(fields: [saleId], references: [id])
   product   Product @relation(fields: [productId], references: [id])
+  variant   PackVariant? @relation(fields: [variantId], references: [id])
 }
 
 model User {
@@ -93,13 +227,118 @@ enum SaleType {
 }
 
 enum PaymentMethod {
-  EFECTIVO
-  DEBITO
-  TRANSFERENCIA
-  MERCADOPAGO
+  CASH
+  TRANSFER
+  CARD
+  MP
   GETNET
-  CUENTA_CORRIENTE
-  MIXTO
+  OTHER
+}
+
+enum PaymentGateway {
+  OFFLINE
+  MP
+  GETNET
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  APPROVED
+  REJECTED
+  CANCELED
+  REFUNDED
+  PARTIAL_REFUNDED
+  EXPIRED
+}
+
+model Payment {
+  id             String         @id @default(cuid())
+  saleId         String?        @db.Uuid
+  sale           Sale?          @relation(fields: [saleId], references: [id])
+  gateway        PaymentGateway
+  methodLabel    String?
+  externalId     String?
+  externalOrderId String?
+  qrOrLink       String?
+  status         PaymentStatus  @default(PENDING)
+  amount         Decimal
+  fee            Decimal?
+  netAmount      Decimal?
+  currency       String         @default("ARS")
+  settledAt      DateTime?
+  chargeback     Boolean        @default(false)
+  refundedAmount Decimal?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  @@index([status, createdAt])
+  @@index([externalId])
+}
+
+enum SettlementGateway {
+  MP
+  GETNET
+}
+
+enum SettlementStatus {
+  PENDING
+  CONFIRMED
+  PARTIAL
+  ERROR
+}
+
+enum MatchStatus {
+  MATCHED
+  UNMATCHED
+  PARTIAL
+  IGNORED
+  FORCED_SPLIT
+  FORCED_MERGE
+}
+
+model PaymentSettlement {
+  id          String             @id @default(cuid())
+  gateway     SettlementGateway
+  periodStart DateTime
+  periodEnd   DateTime
+  status      SettlementStatus   @default(PENDING)
+  records     SettlementRecord[]
+  source      String            @default("API")
+  notes       String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+}
+
+model SettlementRecord {
+  id           String            @id @default(cuid())
+  settlementId String
+  settlement   PaymentSettlement @relation(fields: [settlementId], references: [id])
+  paymentId    String?
+  payment      Payment?          @relation(fields: [paymentId], references: [id])
+  saleId       String?
+  externalId   String?
+  grossAmount  Decimal
+  feeAmount    Decimal
+  netAmount    Decimal
+  chargeback   Boolean           @default(false)
+  refundAmount Decimal?
+  settledAt    DateTime?
+  currency     String            @default("ARS")
+  matchStatus  MatchStatus       @default(UNMATCHED)
+  notes        String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  @@index([externalId])
+  @@index([matchStatus, settledAt])
+}
+
+model ConciliationAction {
+  id        String   @id @default(cuid())
+  recordId  String
+  action    String
+  details   Json?
+  userId    String
+  createdAt DateTime @default(now())
 }
 
 model AccountMovement {
@@ -219,6 +458,11 @@ model Purchase {
   paidAmount Decimal          @default(0)
   notes      String?
   payments   SupplierPayment[]
+  status     PurchaseStatus   @default(DRAFT)
+  externalRef String?
+  expectedDate DateTime?
+  draftBatchId String?
+  receipts   GoodsReceipt[]
 }
 
 model PurchaseItem {
@@ -229,6 +473,8 @@ model PurchaseItem {
   quantity   Int
   unitCost   Decimal
   subtotal   Decimal
+  packSize   Int?
+  suggestedQty Int?
   purchase   Purchase @relation(fields: [purchaseId], references: [id])
 }
 
@@ -243,15 +489,75 @@ model SupplierPayment {
   purchase    Purchase? @relation(fields: [purchaseId], references: [id])
 }
 
+enum PurchaseStatus {
+  DRAFT
+  SENT
+  RECEIVED_PARTIAL
+  RECEIVED_FULL
+  CANCELLED
+}
+
+model GoodsReceipt {
+  id         String      @id @default(uuid()) @db.Uuid
+  purchaseId String      @db.Uuid
+  purchase   Purchase    @relation(fields: [purchaseId], references: [id])
+  receivedAt DateTime    @default(now())
+  userId     String?
+  notes      String?
+  items      GoodsReceiptItem[]
+}
+
+model GoodsReceiptItem {
+  id        String      @id @default(uuid()) @db.Uuid
+  grnId     String      @db.Uuid
+  productId Int
+  product   Product     @relation(fields: [productId], references: [id])
+  receivedQty Int
+  unitCost  Decimal
+  grn       GoodsReceipt @relation(fields: [grnId], references: [id])
+}
+
 model AuditLog {
-  id          String   @id @default(uuid()) @db.Uuid
-  userId      String
-  userEmail   String
-  action      String
-  entity      String
-  entityId    String?
-  description String
-  timestamp   DateTime @default(now())
+  id         String          @id @default(uuid()) @db.Uuid
+  userId     String
+  userEmail  String
+  actionType AuditActionType
+  entity     String
+  entityId   String?
+  timestamp  DateTime        @default(now())
+  details    String?
+}
+
+enum AuditActionType {
+  LOGIN
+  CREACION
+  EDICION
+  ELIMINACION
+  EXPORTACION
+  IMPRESION
+  CAMBIO_ESTADO
+  IMPORTACION
+  BACKUP
+  RESTAURACION
+  FACTURACION_INTENT
+  FACTURACION_OK
+  FACTURACION_ERROR
+  FACTURACION_RETRY
+  REMITO_X_CREATE
+  ETIQUETA
+  CASH_REGISTER_OPEN
+  CASH_CLOSURE_Z
+  CASH_MOVEMENT_ADD
+  CASH_CLOSURE_X
+  INVENTORY_ADJUSTMENT
+  PACKAGING_CONFIRM
+  LABELS_PRINT_AUTO
+  SCALE_FAKE_GENERATE_ONE
+  SCALE_FAKE_GENERATE_BATCH
+  SCALE_FAKE_REPRINT
+  VARIANT_CONSUME_PLAN_CREATED
+  VARIANT_CONSUME_COMMIT
+  VARIANT_CONSUME_ROLLBACK
 }
 
 model Backup {
@@ -263,20 +569,131 @@ model Backup {
   userEmail String?
 }
 
+model ImportLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  filename     String
+  userId       Int?
+  user         User?    @relation(fields: [userId], references: [id])
+  createdAt    DateTime @default(now())
+  totalCreated Int
+  totalUpdated Int
+  totalErrors  Int
+}
+
+model CostLedger {
+  id           String   @id @default(cuid())
+  productId    Int
+  product      Product  @relation(fields: [productId], references: [id])
+  type         CostMoveType
+  refTable     String?
+  refId        String?
+  qty          Decimal   @db.Decimal(14, 3)
+  unitCostArs  Decimal   @db.Decimal(14, 6)
+  totalCostArs Decimal   @db.Decimal(14, 2)
+  currency     String   @default("ARS")
+  fxRate       Decimal? @db.Decimal(14, 6)
+  notes        String?
+  createdAt    DateTime @default(now())
+  @@index([productId, createdAt])
+  @@index([type, createdAt])
+  @@index([refTable, refId])
+}
+
+enum CostMoveType {
+  PURCHASE_RECEIPT
+  SALE_COGS
+  RETURN_SALE
+  RETURN_PURCHASE
+  ADJUSTMENT
+  PACKAGING_CONSUME
+  KIT_SALE_CONSUME
+  MERMA
+  REVALUATION
+}
+
+enum AfipEmissionStatus {
+  PENDING
+  QUEUED
+  EMITTING
+  SUCCESS
+  ERROR
+  RETRYING
+  CANCELED
+}
+
+enum AfipErrorType {
+  NETWORK
+  TIMEOUT
+  VALIDATION
+  AUTH
+  CERT
+  EXCEEDED
+  DALIMIT
+  UNKNOWN
+}
+
+enum AfipDocType {
+  FC
+  C
+  NC
+  ND
+  RC
+  RD
+}
+
 model Invoice {
-  id            String   @id @default(uuid()) @db.Uuid
-  saleId        String   @unique @db.Uuid
-  sale          Sale     @relation(fields: [saleId], references: [id])
-  cae           String
-  caeExpiration DateTime
-  pointOfSale   Int
-  number        Int
-  type          String
-  clientName    String
-  clientCuit    String?
-  totalAmount   Decimal
-  pdfUrl        String
-  createdAt     DateTime @default(now())
+  id        String   @id @default(cuid())
+  saleId    String   @unique
+  sale      Sale     @relation(fields: [saleId], references: [id])
+  docType   AfipDocType
+  cae       String?
+  caeExpiry DateTime?
+  ptoVta    Int
+  cbteNro   Int?
+  pdfUrl    String?
+  status    AfipEmissionStatus @default(PENDING)
+  errorType AfipErrorType?
+  lastError String?
+  attempts  Int      @default(0)
+  taExpiry  DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  logs      AfipLog[]
+}
+
+model AfipLog {
+  id        String   @id @default(cuid())
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
+  level     String
+  step      String
+  message   String?
+  request   Json?
+  response  Json?
+  createdAt DateTime @default(now())
+}
+
+model AfipQueueItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id])
+  status      String   @default("READY")
+  attempts    Int      @default(0)
+  scheduledAt DateTime @default(now())
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  error       String?
+  createdAt   DateTime @default(now())
+  @@index([status, scheduledAt])
+}
+
+model SystemCertificate {
+  id        String   @id @default(cuid())
+  type      String
+  path      String
+  notAfter  DateTime
+  notes     String?
+  createdAt DateTime @default(now())
 }
 
 
@@ -296,4 +713,212 @@ model Promotion {
   validTo         DateTime
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())
+}
+
+model ProductStats {
+  productId     Int      @id
+  avgDailySales Decimal
+  last30Sales   Int
+  last60Sales   Int
+  last90Sales   Int
+  updatedAt     DateTime @updatedAt
+  product       Product  @relation(fields: [productId], references: [id])
+}
+
+model ReorderRule {
+  id         String   @id @default(uuid()) @db.Uuid
+  productId  Int
+  minStock   Int?
+  targetDays Int?
+  supplierId String?
+  active     Boolean  @default(true)
+  product    Product  @relation(fields: [productId], references: [id])
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+}
+
+model SupplierLeadTime {
+  id         String    @id @default(uuid()) @db.Uuid
+  supplierId String    @db.Uuid
+  leadDays   Int
+  updatedAt  DateTime  @updatedAt
+  supplier   Supplier  @relation(fields: [supplierId], references: [id])
+}
+
+model PurchaseSuggestion {
+  id           String   @id @default(uuid()) @db.Uuid
+  batchId      String
+  productId    Int
+  supplierId   String?
+  suggestedQty Int
+  reason       String
+  createdAt    DateTime @default(now())
+  product      Product  @relation(fields: [productId], references: [id])
+  supplier     Supplier? @relation(fields: [supplierId], references: [id])
+}
+
+model SystemSetting {
+  id               Int     @id @default(1)
+  defaultMinStock  Int
+  reorderTargetDays Int
+  serviceLevelPct  Decimal
+  statsHorizonDays Int
+  transitDueSoonDays Int @default(5)
+  scaleCodesEnabled Boolean @default(false)
+  scaleCodesDefaultPrefix Int @default(20)
+  scaleCodesDefaultScheme ScaleEncoding @default(WEIGHT_EMBEDDED)
+  scaleCodesLabelTemplate String @default("38x20")
+  labelsSizeWidthMm Int @default(38)
+  labelsSizeHeightMm Int @default(20)
+  labelsTwoBands Boolean @default(true)
+  labelsGutterMm Int @default(2)
+  labelsFontSizeTitlePt Int @default(9)
+  labelsBarcodeHeightMm Int @default(10)
+  labelsAllowFakeScaleIfMissingBarcode Boolean @default(false)
+  barcodesInternalPrefix2 String @default("23")
+  barcodesNextSequence Int @default(10000000)
+  barcodesAllowFakeScale Boolean @default(true)
+  packagingPrintOnConfirm Boolean @default(true)
+  packagingPrintOnQuickPack Boolean @default(true)
+  packagingMaxWastePct Decimal @default(0.15)
+  packagingRequireWasteReason Boolean @default(false)
+}
+
+model CashRegister {
+  id        String   @id @default(cuid())
+  name      String
+  location  String?
+  isActive  Boolean  @default(true)
+  sessions  CashRegisterSession[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum CashRegisterStatus {
+  OPEN
+  CLOSED
+}
+model CashRegisterSession {
+  id               String   @id @default(cuid())
+  cashRegisterId   String
+  cashRegister     CashRegister @relation(fields: [cashRegisterId], references: [id])
+  openedById       String
+  closedById       String?
+  openedAt      DateTime
+  closedAt      DateTime?
+  openingAmount    Decimal
+  closingAmount    Decimal?
+  systemSalesTotal Decimal?
+  systemExpensesTotal Decimal?
+  byMethodJson     Json?
+  difference       Decimal?
+  countedBy       String?
+  notes           String?
+  status           CashRegisterStatus @default(OPEN)
+  movements        CashMovement[]
+  closures         CashClosure[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+enum CashMovementType {
+  SALE
+  INCOME
+  EXPENSE
+  ADJUSTMENT
+}
+
+enum CashClosureType {
+  X
+  Z
+}
+
+enum CashCountDenomination {
+  AR_10000
+  AR_5000
+  AR_2000
+  AR_1000
+  AR_500
+  AR_200
+  AR_100
+  AR_50
+  AR_20
+  AR_10
+  AR_5
+  AR_2
+  AR_1
+  COIN_50
+  COIN_25
+  COIN_10
+  COIN_5
+  COIN_1
+}
+
+model CashMovement {
+  id            String   @id @default(cuid())
+  sessionId     String
+  session       CashRegisterSession @relation(fields: [sessionId], references: [id])
+  type          CashMovementType
+  paymentMethod PaymentMethod
+  amount        Decimal
+  concept       String
+  relatedSaleId String?
+  relatedPurchaseId String?
+  createdAt     DateTime @default(now())
+}
+
+model CashClosure {
+  id            String           @id @default(cuid())
+  sessionId     String
+  session       CashRegisterSession      @relation(fields: [sessionId], references: [id])
+  type          CashClosureType
+  createdAt     DateTime         @default(now())
+  createdById   String
+  totalsByMethod Json
+  totalSales    Decimal   @default(0)
+  totalIncome   Decimal   @default(0)
+  totalExpense  Decimal   @default(0)
+  totalCashCalc  Decimal   @default(0)
+  countedBreakdown Json?
+  countedCash    Decimal?
+  difference     Decimal?
+  notes         String?
+}
+
+enum PhysicalInventoryStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model PhysicalInventory {
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String
+  status    PhysicalInventoryStatus @default(DRAFT)
+  notes     String?
+  items     PhysicalInventoryItem[]
+}
+
+model PhysicalInventoryItem {
+  id                 String            @id @default(uuid()) @db.Uuid
+  physicalInventoryId String            @db.Uuid
+  productId          Int
+  systemQty          Int
+  countedQty         Int
+  difference         Int
+  physicalInventory  PhysicalInventory @relation(fields: [physicalInventoryId], references: [id])
+  product            Product           @relation(fields: [productId], references: [id])
+}
+
+model StockAdjustment {
+  id               String   @id @default(uuid()) @db.Uuid
+  productId        Int
+  qtyChange        Int
+  reason           String
+  linkedInventoryId String? @db.Uuid
+  userId           String
+  createdAt        DateTime @default(now())
+  product          Product  @relation(fields: [productId], references: [id])
 }

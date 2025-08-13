@@ -18,7 +18,7 @@ export const authOptions: NextAuthOptions = {
           return { id: '1', name: 'Admin', role: 'ADMIN' } as any;
         }
         if (credentials?.username === 'seller' && credentials.password === 'seller') {
-          return { id: '2', name: 'Seller', role: 'VENDEDOR' } as any;
+          return { id: '2', name: 'Seller', role: 'VENDEDOR', canViewSalesSummary: false } as any;
         }
         if (credentials?.username && credentials.password) {
           const client = await prisma.client.findUnique({
@@ -41,13 +41,15 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.role = (user as any).role;
         token.id = (user as any).id;
+        token.canViewSalesSummary = (user as any).canViewSalesSummary;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        (session.user as any).role = token.role;
-        (session.user as any).id = token.id;
+        (session.user as any).role = token.role as any;
+        (session.user as any).id = token.id as any;
+        (session.user as any).canViewSalesSummary = (token as any).canViewSalesSummary;
       }
       return session;
     },
@@ -61,9 +63,9 @@ export const authOptions: NextAuthOptions = {
           body: JSON.stringify({
             userId: (user as any).id,
             userEmail: (user as any).email || '',
-            action: 'INICIAR_SESION',
+            actionType: 'LOGIN',
             entity: 'Auth',
-            description: `Usuario ${(user as any).id} inició sesión`,
+            details: `Usuario ${(user as any).id} inició sesión`,
           }),
         });
       } catch (err) {

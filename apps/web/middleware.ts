@@ -26,6 +26,12 @@ export default withAuth(
         if (req.nextUrl.pathname.startsWith('/informes')) {
           return token?.role === 'ADMIN';
         }
+        if (req.nextUrl.pathname.startsWith('/dashboard-financiero')) {
+          return (
+            token?.role === 'ADMIN' ||
+            (token?.role === 'VENDEDOR' && token?.canViewSalesSummary)
+          );
+        }
         if (
           req.nextUrl.pathname.startsWith('/mi-catalogo') ||
           req.nextUrl.pathname.startsWith('/mi-carrito') ||
@@ -33,17 +39,50 @@ export default withAuth(
         ) {
           return token?.role === 'CLIENTE';
         }
+        if (req.nextUrl.pathname.startsWith('/pagos/conciliacion')) {
+          return (
+            token?.role === 'ADMIN' ||
+            (token?.role === 'VENDEDOR' && token?.canViewSalesSummary)
+          );
+        }
         if (
           req.nextUrl.pathname.startsWith('/products/actualizacion-masiva') ||
           req.nextUrl.pathname.startsWith('/products/seguimiento-precios')
         ) {
           return token?.role === 'ADMIN';
         }
-        if (
-          req.nextUrl.pathname.startsWith('/suppliers') ||
-          req.nextUrl.pathname.startsWith('/purchases')
-        ) {
+       if (
+         req.nextUrl.pathname.startsWith('/suppliers') ||
+         req.nextUrl.pathname.startsWith('/purchases')
+       ) {
+         return token?.role === 'ADMIN' || token?.role === 'VENDEDOR';
+       }
+        if (req.nextUrl.pathname.startsWith('/cajas')) {
           return token?.role === 'ADMIN' || token?.role === 'VENDEDOR';
+        }
+        if (req.nextUrl.pathname.startsWith('/reabastecimiento')) {
+          if (req.nextUrl.pathname.startsWith('/reabastecimiento/reglas')) {
+            return token?.role === 'ADMIN';
+          }
+          return token?.role === 'ADMIN' || token?.role === 'VENDEDOR';
+        }
+        if (req.nextUrl.pathname.startsWith('/proveedores/lead-times')) {
+          return token?.role === 'ADMIN';
+        }
+        if (req.nextUrl.pathname.startsWith('/importar-productos')) {
+          return token?.role === 'ADMIN';
+        }
+        if (req.nextUrl.pathname.startsWith('/pack-variants')) {
+          return token?.role === 'ADMIN';
+        }
+        if (req.nextUrl.pathname.startsWith('/balanza/generador')) {
+          return token?.role === 'ADMIN';
+        }
+        if (req.nextUrl.pathname.startsWith('/barcodes')) {
+          return token?.role === 'ADMIN';
+        }
+        if (req.nextUrl.pathname.startsWith('/inventarios')) {
+          return token?.role === 'ADMIN' || token?.canAdjustStock;
         }
         if (req.nextUrl.pathname.startsWith('/promotions')) {
           return token?.role === 'ADMIN';
@@ -54,7 +93,7 @@ export default withAuth(
         if (req.nextUrl.pathname.startsWith('/configuracion/backups')) {
           return token?.role === 'ADMIN';
         }
-        if (req.nextUrl.pathname.startsWith('/audit-logs')) {
+        if (req.nextUrl.pathname.startsWith('/auditoria')) {
           return token?.role === 'ADMIN';
         }
         if (req.nextUrl.pathname === '/') {
@@ -75,17 +114,27 @@ export const config = {
     '/orders/:path*',
     '/deliveries/:path*',
     '/informes/:path*',
+    '/dashboard-financiero',
     '/mi-catalogo',
     '/mi-carrito',
     '/mis-pedidos',
     '/suppliers/:path*',
     '/purchases/:path*',
+    '/cajas/:path*',
+    '/reabastecimiento/:path*',
+    '/proveedores/lead-times',
     '/products/actualizacion-masiva',
     '/products/seguimiento-precios',
-    '/audit-logs',
+    '/auditoria',
     '/configuracion/backups',
-    '/promotions',
-    '/etiquetas',
-    '/',
-  ],
-};
+    '/pagos/conciliacion',
+      '/promotions',
+      '/etiquetas',
+      '/importar-productos/:path*',
+      '/pack-variants',
+    '/balanza/generador',
+    '/barcodes/:path*',
+    '/inventarios/:path*',
+      '/',
+    ],
+  };
