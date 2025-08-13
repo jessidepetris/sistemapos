@@ -922,3 +922,87 @@ model StockAdjustment {
   createdAt        DateTime @default(now())
   product          Product  @relation(fields: [productId], references: [id])
 }
+
+enum InventoryStatus {
+  DRAFT
+  IN_PROGRESS
+  PENDING_APPROVAL
+  CLOSED
+  CANCELED
+}
+
+enum InventoryScope {
+  FULL
+  CATEGORY
+  SUPPLIER
+  LOCATION
+  CUSTOM
+}
+
+enum InventoryAdjustmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model InventorySession {
+  id           String          @id @default(cuid())
+  name         String
+  status       InventoryStatus @default(DRAFT)
+  scope        InventoryScope
+  storeId      String?
+  categoryId   String?
+  supplierId   String?
+  location     String?
+  startedById  String?
+  approvedById String?
+  startedAt    DateTime?
+  closedAt     DateTime?
+  notes        String?
+  items        InventoryItem[]
+  adjustments  InventoryAdjustment[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([status, startedAt])
+}
+
+model InventoryItem {
+  id            String   @id @default(cuid())
+  sessionId     String
+  productId     Int
+  packVariantId String?
+  barcode       String?
+  expectedQtyKg Decimal @default(0)
+  expectedPacks Int?
+  countedQtyKg  Decimal @default(0)
+  countedPacks  Int?    @default(0)
+  differenceKg  Decimal @default(0)
+  differenceNote String?
+  lastScanAt    DateTime?
+  session       InventorySession @relation(fields: [sessionId], references: [id])
+  product       Product          @relation(fields: [productId], references: [id])
+  packVariant   PackVariant?     @relation(fields: [packVariantId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([sessionId, productId])
+}
+
+model InventoryAdjustment {
+  id            String                     @id @default(cuid())
+  sessionId     String
+  productId     Int
+  packVariantId String?
+  differenceKg  Decimal
+  status        InventoryAdjustmentStatus @default(PENDING)
+  approvedById  String?
+  approvedAt    DateTime?
+  reason        String?
+  session       InventorySession @relation(fields: [sessionId], references: [id])
+  product       Product          @relation(fields: [productId], references: [id])
+  packVariant   PackVariant?     @relation(fields: [packVariantId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
