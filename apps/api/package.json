@@ -9,7 +9,9 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node ../../prisma/seed.ts",
-    "test": "jest"
+    "test": "jest --runInBand",
+    "test:ci": "jest --ci --reporters=default --coverage",
+    "start:test:db": "docker compose -f ../../docker-compose.yml up -d db"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
@@ -40,6 +42,8 @@
     "jest": "^29.0.0",
     "ts-jest": "^29.0.0",
     "@types/jest": "^29.0.0",
-    "@nestjs/testing": "^10.0.0"
+    "@nestjs/testing": "^10.0.0",
+    "supertest": "^6.3.3",
+    "@types/supertest": "^2.0.12"
   }
 }
