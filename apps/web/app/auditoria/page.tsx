@@ -49,7 +49,7 @@ export default function AuditoriaPage() {
   }, []);
 
   const columns = [
-    { Header: 'Fecha', accessor: (row: any) => new Date(row.timestamp).toLocaleString() },
+    { Header: 'Fecha', accessor: (row: any) => new Date(row.ts).toLocaleString() },
     { Header: 'Usuario', accessor: 'userEmail' },
     { Header: 'Acción', accessor: 'actionType' },
     { Header: 'Entidad', accessor: 'entity' },

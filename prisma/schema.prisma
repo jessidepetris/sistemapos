@@ -557,13 +557,28 @@ model GoodsReceiptItem {
 
 model AuditLog {
   id         String          @id @default(uuid()) @db.Uuid
-  userId     String
-  userEmail  String
-  actionType AuditActionType
-  entity     String
+  ts         DateTime        @default(now())
+  userId     String?
+  userEmail  String?
+  action     AuditAction?
+  actionType AuditActionType?
+  entity     String?
   entityId   String?
-  timestamp  DateTime        @default(now())
+  route      String?
+  method     String?
+  statusCode Int?
+  ip         String?
+  userAgent  String?
   details    String?
+  before     Json?
+  after      Json?
+  diff       Json?
+  meta       Json?
+  createdAt  DateTime        @default(now())
+
+  @@index([ts])
+  @@index([entity, entityId])
+  @@index([action])
 }
 
 enum AuditActionType {
@@ -596,6 +611,28 @@ enum AuditActionType {
   VARIANT_CONSUME_PLAN_CREATED
   VARIANT_CONSUME_COMMIT
   VARIANT_CONSUME_ROLLBACK
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  EXPORT
+  CASH_OPEN
+  CASH_CLOSE
+  INVENTORY_START
+  INVENTORY_FINISH
+  INVENTORY_APPROVE
+  PAYMENT_CREATE
+  PAYMENT_APPROVE
+  PAYMENT_REFUND
+  AFIP_ENQUEUE
+  AFIP_EMIT_SUCCESS
+  AFIP_EMIT_ERROR
 }
 
 model Backup {
