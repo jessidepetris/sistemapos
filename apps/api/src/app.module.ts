@@ -39,6 +39,9 @@ import { StockGuardModule } from './stock-guard/stock-guard.module';
 import { SettlementsModule } from './settlements/settlements.module';
 import { BarcodesModule } from './barcodes/barcodes.module';
 import { AfipModule } from './afip/afip.module';
+import { MetricsModule } from './metrics/metrics.module';
+import { HealthModule } from './health/health.module';
+import { LogsModule } from './logs/logs.module';
 
 @Module({
   imports: [
@@ -81,6 +84,9 @@ import { AfipModule } from './afip/afip.module';
     SettlementsModule,
     BarcodesModule,
     AfipModule,
+    MetricsModule,
+    HealthModule,
+    LogsModule,
   ],
   providers: [PrismaService],
 })
