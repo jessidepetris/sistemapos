@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, Query } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
 import { StartSessionDto } from './dto/start-session.dto';
 import { ScanDto } from './dto/scan.dto';
@@ -18,8 +18,11 @@ export class InventoryController {
   }
 
   @Get()
-  list() {
-    return this.service.listSessions();
+  list(
+    @Query('page') page: string = '1',
+    @Query('pageSize') pageSize: string = '100',
+  ) {
+    return this.service.listSessions(Number(page), Number(pageSize));
   }
 
   @Get(':id')

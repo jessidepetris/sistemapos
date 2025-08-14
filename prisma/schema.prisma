@@ -36,6 +36,9 @@ model Product {
   kitItems      KitItem[] @relation("KitItemKit")
   componentsOf  KitItem[] @relation("KitItemComponent")
   packVariants  PackVariant[]
+  @@index([name])
+  @@index([category])
+  @@index([isBulk, stock])
 }
 
 model KitItem {
@@ -196,6 +199,8 @@ model Sale {
   createdAt     DateTime       @default(now())
   accountMovements AccountMovement[]
   invoice       Invoice?
+  @@index([createdAt])
+  @@index([customerId])
 }
 
 model SaleItem {
@@ -212,6 +217,7 @@ model SaleItem {
   sale      Sale    @relation(fields: [saleId], references: [id])
   product   Product @relation(fields: [productId], references: [id])
   variant   PackVariant? @relation(fields: [variantId], references: [id])
+  @@index([saleId])
 }
 
 model User {
@@ -309,8 +315,9 @@ model Payment {
   refundedAmount Decimal?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
-  @@index([status, createdAt])
+  @@index([gateway, status, createdAt])
   @@index([externalId])
+  @@index([saleId])
 }
 
 enum SettlementGateway {
@@ -366,7 +373,8 @@ model SettlementRecord {
   notes        String?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
-  @@index([externalId])
+  @@index([settlementId])
+  @@index([externalId, settledAt])
   @@index([matchStatus, settledAt])
 }
 
@@ -501,6 +509,7 @@ model Purchase {
   expectedDate DateTime?
   draftBatchId String?
   receipts   GoodsReceipt[]
+  @@index([supplierId, status])
 }
 
 model PurchaseItem {
@@ -514,6 +523,8 @@ model PurchaseItem {
   packSize   Int?
   suggestedQty Int?
   purchase   Purchase @relation(fields: [purchaseId], references: [id])
+  @@index([purchaseId])
+  @@index([productId])
 }
 
 model SupplierPayment {
@@ -1062,6 +1073,7 @@ model InventoryItem {
   updatedAt     DateTime @updatedAt
 
   @@index([sessionId, productId])
+  @@index([sessionId])
 }
 
 model InventoryAdjustment {

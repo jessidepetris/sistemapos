@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { CacheService } from '../cache/cache.service';
 import { startOfDay, endOfDay, parseISO, subDays, differenceInCalendarDays } from 'date-fns';
 
 @Injectable()
 export class KpisService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private cache: CacheService) {}
 
   private buildDateRange(from?: string, to?: string) {
     const where: any = {};
@@ -18,7 +19,13 @@ export class KpisService {
 
   async sales(granularity = 'daily', from?: string, to?: string) {
     const where = this.buildDateRange(from, to);
-    const sales = await this.prisma.sale.findMany({ where });
+    const cacheKey = `kpis:sales:${granularity}:${from || ''}:${to || ''}`;
+    const cached = await this.cache.get<any>(cacheKey);
+    if (cached) return cached;
+    const sales = await this.prisma.sale.findMany({
+      where,
+      select: { createdAt: true, total: true },
+    });
     const series: Record<string, number> = {};
     for (const sale of sales) {
       let key: string;
@@ -42,16 +49,25 @@ export class KpisService {
     const prevTo = from ? subDays(parseISO(from), 1) : subDays(new Date(), 1);
     const prevSales = await this.prisma.sale.findMany({
       where: this.buildDateRange(prevFrom.toISOString(), prevTo.toISOString()),
+      select: { total: true },
     });
     const prevTotal = prevSales.reduce((sum, s) => sum + Number(s.total), 0);
-    return { series, total, delta: total - prevTotal };
+    const result = { series, total, delta: total - prevTotal };
+    await this.cache.set(cacheKey, result, 300);
+    return result;
   }
 
   async margin(granularity = 'daily', from?: string, to?: string) {
     const where = this.buildDateRange(from, to);
     const items = await this.prisma.saleItem.findMany({
       where: { sale: where },
-      include: { product: true, sale: true },
+      select: {
+        quantity: true,
+        price: true,
+        discount: true,
+        product: { select: { costARS: true } },
+        sale: { select: { createdAt: true } },
+      },
     });
     const series: Record<string, number> = {};
     for (const item of items) {
@@ -75,7 +91,7 @@ export class KpisService {
 
   async ticketAvg(from?: string, to?: string) {
     const where = this.buildDateRange(from, to);
-    const sales = await this.prisma.sale.findMany({ where });
+    const sales = await this.prisma.sale.findMany({ where, select: { total: true } });
     const total = sales.reduce((sum, s) => sum + Number(s.total), 0);
     return { average: sales.length ? total / sales.length : 0 };
   }
@@ -84,7 +100,13 @@ export class KpisService {
     const where = this.buildDateRange(from, to);
     const items = await this.prisma.saleItem.findMany({
       where: { sale: where },
-      include: { product: true },
+      select: {
+        productId: true,
+        quantity: true,
+        price: true,
+        discount: true,
+        product: { select: { name: true, costARS: true } },
+      },
     });
     const map = new Map<string, { name: string; total: number }>();
     for (const item of items) {
@@ -107,7 +129,10 @@ export class KpisService {
 
   async topClients(metric: string, limit: number, from?: string, to?: string) {
     const where = this.buildDateRange(from, to);
-    const sales = await this.prisma.sale.findMany({ where });
+    const sales = await this.prisma.sale.findMany({
+      where,
+      select: { customerId: true, customerName: true, subtotal: true, discount: true, total: true },
+    });
     const map = new Map<string, { name: string; total: number }>();
     for (const sale of sales) {
       const key = sale.customerId || sale.customerName;
