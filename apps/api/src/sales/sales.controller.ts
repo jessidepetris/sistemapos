@@ -9,10 +9,15 @@ export class SalesController {
 
   @Post()
   create(@Body() body: CreateSaleDto, @Req() req: any) {
-    return this.salesService.create(body, {
-      id: req.user?.id,
-      email: req.user?.email,
-    });
+    const key = req.headers['x-idempotency-key'] as string | undefined;
+    return this.salesService.create(
+      body,
+      {
+        id: req.user?.id,
+        email: req.user?.email,
+      },
+      key,
+    );
   }
 
   @Get()

@@ -7,6 +7,7 @@ import { PromotionsService } from '../promotions/promotions.service';
 import { AuditService } from '../audit/audit.service';
 import { PaymentsService } from '../payments/payments.service';
 import { StockGuardService } from '../stock-guard/stock-guard.service';
+import { IdempotencyService } from '../idempotency/idempotency.service';
 
 @Injectable()
 export class SalesService {
@@ -16,10 +17,19 @@ export class SalesService {
     private audit: AuditService,
     private payments: PaymentsService,
     private stockGuard: StockGuardService,
+    private idempotency: IdempotencyService,
   ) {}
 
-  async create(data: CreateSaleDto, user?: { id?: string; email?: string }) {
-    return this.prisma.$transaction(async prisma => {
+  async create(
+    data: CreateSaleDto,
+    user?: { id?: string; email?: string },
+    idempotencyKey?: string,
+  ) {
+    if (idempotencyKey) {
+      const existing = await this.idempotency.get(idempotencyKey, 'POST:/sales', data);
+      if (existing) return existing;
+    }
+    const result = await this.prisma.$transaction(async prisma => {
       if (user?.id) {
         const session = await prisma.cashSession.findFirst({
           where: { openedById: user.id, status: 'ABIERTA' },
@@ -190,6 +200,10 @@ export class SalesService {
       });
       return prisma.sale.findUnique({ where: { id: sale.id }, include: { items: true, payments: true } });
     });
+    if (idempotencyKey) {
+      await this.idempotency.save(idempotencyKey, 'POST:/sales', data, result);
+    }
+    return result;
   }
 
   findAll(params: { from?: Date; to?: Date; customerId?: number; type?: SaleType }) {
