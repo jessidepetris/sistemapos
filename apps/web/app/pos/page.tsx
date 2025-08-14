@@ -2,13 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-
-interface Product {
-  id: number;
-  name: string;
-  priceARS: number;
-  barcodes: string[];
-}
+import { useCatalog } from '../../hooks/useCatalog';
+import { queueSale } from '../../lib/offline-sales';
+import type { Product } from '../../lib/db';
 
 interface CartItem {
   productId: number;
@@ -32,7 +28,7 @@ interface Promotion {
 }
 
 export default function POSPage() {
-  const [products, setProducts] = useState<Product[]>([]);
+  const products = useCatalog();
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<CartItem[]>([]);
   const [customerName, setCustomerName] = useState('Consumidor Final');
@@ -61,7 +57,6 @@ export default function POSPage() {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
 
   useEffect(() => {
-    fetch('/api/products').then(r => r.json()).then(setProducts);
     fetch('/api/promotions/active').then(r => r.json()).then(setPromotions);
   }, []);
 
@@ -205,20 +200,32 @@ export default function POSPage() {
       total,
       payments,
     };
-    const res = await fetch('/api/sales', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const data = await res.json();
-    setSaleId(data.id);
-    setLastTotal(total);
-    setLastType(saleType);
-    data.payments?.forEach((p: any) => {
-      if (p.qrOrLink) window.open(p.qrOrLink, '_blank');
-    });
-    if (autoPrint) {
-      window.open(`/api/tickets/${data.id}/print`, '_blank');
+    try {
+      const res = await fetch('/api/sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error('network');
+      const data = await res.json();
+      setSaleId(data.id);
+      setLastTotal(total);
+      setLastType(saleType);
+      data.payments?.forEach((p: any) => {
+        if (p.qrOrLink) window.open(p.qrOrLink, '_blank');
+      });
+      if (autoPrint) {
+        window.open(`/api/tickets/${data.id}/print`, '_blank');
+      }
+      setItems([]);
+      setPayments([{ methodLabel: 'EFECTIVO', gateway: 'OFFLINE', amount: 0 }]);
+      setInvoice(null);
+    } catch (e) {
+      await queueSale(body);
+      toast.success('Venta guardada offline');
+      setItems([]);
+      setPayments([{ methodLabel: 'EFECTIVO', gateway: 'OFFLINE', amount: 0 }]);
     }
-    setItems([]);
-    setPayments([{ methodLabel: 'EFECTIVO', gateway: 'OFFLINE', amount: 0 }]);
-    setInvoice(null);
   }
 
   async function generateInvoice() {

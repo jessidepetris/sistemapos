@@ -1093,3 +1093,12 @@ model InventoryAdjustment {
   updatedAt     DateTime @updatedAt
 }
 
+model IdempotencyKey {
+  key       String   @id
+  endpoint  String
+  bodyHash  String
+  response  Json
+  createdAt DateTime @default(now())
+  ttl       Int?
+}
+
