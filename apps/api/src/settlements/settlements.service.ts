@@ -138,14 +138,28 @@ export class SettlementsService {
     await this.run(SettlementGateway.GETNET, from.toISOString(), to.toISOString());
   }
 
-  async list(gateway?: SettlementGateway, status?: SettlementStatus) {
+  async list(
+    gateway?: SettlementGateway,
+    status?: SettlementStatus,
+    page = 1,
+    pageSize = 100,
+  ) {
     return this.prisma.paymentSettlement.findMany({
       where: {
         ...(gateway ? { gateway } : {}),
         ...(status ? { status } : {}),
       },
       orderBy: { periodStart: 'desc' },
-      include: { _count: { select: { records: true } } },
+      select: {
+        id: true,
+        gateway: true,
+        periodStart: true,
+        periodEnd: true,
+        status: true,
+        _count: { select: { records: true } },
+      },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     });
   }
 

@@ -12,9 +12,20 @@ export class ProductsService {
     return this.prisma.product.create({ data });
   }
 
-  async findAll() {
+  async findAll(page = 1, pageSize = 100) {
     const products = await this.prisma.product.findMany({
-      include: { kitItems: { include: { component: true } } },
+      select: {
+        id: true,
+        name: true,
+        priceARS: true,
+        stock: true,
+        isComposite: true,
+        priceMode: true,
+        kitItems: { include: { component: { select: { id: true, priceARS: true, stock: true } } } },
+      },
+      orderBy: { name: 'asc' },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     });
     return products.map(p => this.decorateComposite(p));
   }
@@ -55,7 +66,16 @@ export class ProductsService {
     }
     const product = await this.prisma.product.findFirst({
       where: { OR: [{ barcodes: { has: code } }, { kitBarcode: code }] },
-      include: { kitItems: { include: { component: true } } },
+      select: {
+        id: true,
+        name: true,
+        priceARS: true,
+        imageUrl: true,
+        variants: true,
+        subcategory: true,
+        isComposite: true,
+        kitItems: { include: { component: true } },
+      },
     });
     return product ? this.decorateComposite(product) : null;
   }

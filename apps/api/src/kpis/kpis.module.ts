@@ -1,11 +1,11 @@
-import { Module, CacheModule } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { KpisService } from './kpis.service';
 import { KpisController } from './kpis.controller';
 import { PrismaService } from '../prisma.service';
+import { CacheService } from '../cache/cache.service';
 
 @Module({
-  imports: [CacheModule.register({ ttl: 300 })],
   controllers: [KpisController],
-  providers: [KpisService, PrismaService],
+  providers: [KpisService, PrismaService, CacheService],
 })
 export class KpisModule {}

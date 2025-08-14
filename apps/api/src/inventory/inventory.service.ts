@@ -9,7 +9,9 @@ export class InventoryService {
   constructor(private prisma: PrismaService) {}
 
   async startSession(userId: string, dto: StartSessionDto) {
-    const products = await this.prisma.product.findMany();
+    const products = await this.prisma.product.findMany({
+      select: { id: true, stock: true },
+    });
     const itemsData = products.map((p) => ({
       productId: p.id,
       expectedQtyKg: p.stock,
@@ -75,8 +77,20 @@ export class InventoryService {
     });
   }
 
-  listSessions() {
-    return this.prisma.inventorySession.findMany({ include: { items: true } });
+  listSessions(page = 1, pageSize = 100) {
+    return this.prisma.inventorySession.findMany({
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        startedAt: true,
+        closedAt: true,
+        _count: { select: { items: true } },
+      },
+      orderBy: { startedAt: 'desc' },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    });
   }
 
   getSession(id: string) {

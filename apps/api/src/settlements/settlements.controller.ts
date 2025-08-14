@@ -23,8 +23,15 @@ export class SettlementsController {
   list(
     @Query('gateway') gateway?: SettlementGateway,
     @Query('status') status?: SettlementStatus,
+    @Query('page') page: string = '1',
+    @Query('pageSize') pageSize: string = '100',
   ) {
-    return this.service.list(gateway, status);
+    return this.service.list(
+      gateway,
+      status,
+      Number(page),
+      Number(pageSize),
+    );
   }
 
   @Get('summary/range')
