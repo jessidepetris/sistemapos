@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma.service';
 import { ImportProductDto } from './dto/import-product.dto';
 import { AuditService } from '../audit/audit.service';
 import { AuditActionType } from '@prisma/client';
+import type { Express } from 'express';
 
 @Injectable()
 export class ImportsService {
@@ -204,7 +205,7 @@ export class ImportsService {
       await this.prisma.importLog.create({
         data: {
           filename,
-          userId,
+          userId: userId ? String(userId) : undefined,
           totalCreated: created,
           totalUpdated: updated,
           totalErrors: failed,

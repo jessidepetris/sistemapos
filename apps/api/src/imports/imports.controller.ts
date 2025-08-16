@@ -12,6 +12,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ImportsService } from './imports.service';
 import { ImportProductDto } from './dto/import-product.dto';
+import type { Express } from 'express';
 
 @Controller()
 export class ImportsController {
