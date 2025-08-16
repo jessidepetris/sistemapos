@@ -5,6 +5,7 @@ import * as path from 'path';
 import AdmZip from 'adm-zip';
 import { AuditService } from '../audit/audit.service';
 import { AuditActionType } from '@prisma/client';
+import type { Express } from 'express';
 
 @Injectable()
 export class BackupsService {

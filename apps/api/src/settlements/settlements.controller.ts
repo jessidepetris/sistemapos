@@ -14,6 +14,7 @@ import { Response } from 'express';
 import * as ExcelJS from 'exceljs';
 import { SettlementGateway, SettlementStatus } from '@prisma/client';
 import { FileInterceptor } from '@nestjs/platform-express';
+import type { Express } from 'express';
 
 @Controller('settlements')
 export class SettlementsController {

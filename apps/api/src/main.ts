@@ -23,7 +23,7 @@ async function bootstrap() {
     level: process.env.API_LOG_LEVEL || 'info',
     transport: process.env.NODE_ENV !== 'production' ? { target: 'pino-pretty' } : undefined,
   });
-  app.useLogger(logger);
+  app.useLogger(['log', 'error', 'warn', 'debug', 'verbose']);
 
   app.use(
     pinoHttp({

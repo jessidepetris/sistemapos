@@ -13,9 +13,9 @@ export class DocumentsService {
     });
     if (!invoice || !invoice.sale) return null;
     return this.salePdf('Factura C', invoice.sale, {
-      number: invoice.afipNumber,
-      cae: invoice.afipCAE,
-      caeVto: invoice.afipVtoCAE,
+      number: invoice.cbteNro,
+      cae: invoice.cae,
+      caeVto: invoice.caeExpiry,
     });
   }
 

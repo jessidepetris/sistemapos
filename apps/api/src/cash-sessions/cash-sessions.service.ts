@@ -253,7 +253,7 @@ export class CashSessionsService {
   }
 
   findOne(id: string) {
-    return this.prisma.cashSession.findUnique({
+    return this.prisma.cashRegisterSession.findUnique({
       where: { id },
       include: { movements: true, cashRegister: true },
     });
@@ -261,7 +261,7 @@ export class CashSessionsService {
 
   findAll(params: any, user?: { id?: string }) {
     const { from, to, status, cashRegisterId, openedBy } = params;
-    return this.prisma.cashSession.findMany({
+    return this.prisma.cashRegisterSession.findMany({
       where: {
         cashRegisterId,
         status,
@@ -274,8 +274,8 @@ export class CashSessionsService {
 
   async currentForUser(userId: string) {
     if (!userId) return { sessionId: null };
-    const session = await this.prisma.cashSession.findFirst({
-      where: { openedById: userId, status: CashSessionStatus.ABIERTA },
+    const session = await this.prisma.cashRegisterSession.findFirst({
+      where: { openedById: userId, status: CashRegisterStatus.OPEN },
       include: { cashRegister: true },
     });
     if (!session) return { sessionId: null };
@@ -298,7 +298,7 @@ export class CashSessionsService {
       salesByMethod[method] = (salesByMethod[method] || 0) + Number(p.amount);
     }
     const expenses = await this.prisma.cashMovement.findMany({
-      where: { cashSessionId: session.id, type: CashMovementType.EXPENSE },
+      where: { sessionId: session.id, type: CashMovementType.EXPENSE },
     });
     const expensesByMethod: Record<PaymentMethod, number> = {
       CASH: 0,
@@ -333,9 +333,9 @@ export class CashSessionsService {
 
   async lastClosedForUser(userId: string) {
     if (!userId) return { sessionId: null };
-    const session = await this.prisma.cashSession.findFirst({
-      where: { openedById: userId, status: CashSessionStatus.CERRADA },
-      orderBy: { closingDate: 'desc' },
+    const session = await this.prisma.cashRegisterSession.findFirst({
+      where: { openedById: userId, status: CashRegisterStatus.CLOSED },
+      orderBy: { closedAt: 'desc' },
       include: { cashRegister: true },
     });
     if (!session) return { sessionId: null };
@@ -358,7 +358,7 @@ export class CashSessionsService {
   }
 
   async previewClose(sessionId: string, closingAmount: number) {
-    const session = await this.prisma.cashSession.findUnique({
+    const session = await this.prisma.cashRegisterSession.findUnique({
       where: { id: sessionId },
     });
     if (!session) throw new NotFoundException();
@@ -381,7 +381,7 @@ export class CashSessionsService {
       salesByMethod[method] = (salesByMethod[method] || 0) + Number(p.amount);
     }
     const expenses = await this.prisma.cashMovement.findMany({
-      where: { cashSessionId: sessionId, type: CashMovementType.EXPENSE },
+      where: { sessionId: sessionId, type: CashMovementType.EXPENSE },
     });
     const expensesByMethod: Record<PaymentMethod, number> = {
       CASH: 0,
@@ -405,13 +405,13 @@ export class CashSessionsService {
 
   async addSaleMovement(saleId: string, amount: number, user: { id?: string }) {
     if (!user?.id) return;
-    const session = await this.prisma.cashSession.findFirst({
-      where: { openedById: user.id, status: CashSessionStatus.ABIERTA },
+    const session = await this.prisma.cashRegisterSession.findFirst({
+      where: { openedById: user.id, status: CashRegisterStatus.OPEN },
     });
     if (!session) throw new ConflictException('Caja no abierta');
     return this.prisma.cashMovement.create({
       data: {
-        cashSessionId: session.id,
+        sessionId: session.id,
         type: CashMovementType.SALE,
         paymentMethod: PaymentMethod.CASH,
         amount,

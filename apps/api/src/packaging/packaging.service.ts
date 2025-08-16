@@ -4,7 +4,11 @@ import { CreatePackagingDto } from './dto/create-packaging.dto';
 import { LabelsService } from '../labels/labels.service';
 import { ScaleFakeService } from '../scale-fake/scale-fake.service';
 import { AuditService } from '../audit/audit.service';
-import { AuditActionType, ScaleEncoding } from '@prisma/client';
+import {
+  AuditActionType,
+  ScaleEncoding,
+  PackagingStatus,
+} from '@prisma/client';
 import { QuickPackDto } from './dto/quick-pack.dto';
 
 @Injectable()
@@ -36,8 +40,11 @@ export class PackagingService {
   }
 
   findAll(status?: string) {
+    const where = status
+      ? { status: PackagingStatus[status as keyof typeof PackagingStatus] }
+      : undefined;
     return this.prisma.packagingOrder.findMany({
-      where: status ? { status } : undefined,
+      where,
       include: { items: { include: { variant: true } } },
     });
   }
@@ -59,10 +66,14 @@ export class PackagingService {
     const settings = await this.prisma.systemSetting.findFirst();
     for (const item of order.items) {
       const required = Number(item.variant.contentKg) * item.qtyToMake;
-      const baseWaste = item.wastePct ? required * item.wastePct : 0;
+      const baseWaste = item.wastePct ? required * Number(item.wastePct) : 0;
       const extraWaste = item.wasteKg ? Number(item.wasteKg) : 0;
       const totalWaste = baseWaste + extraWaste;
-      if (item.wastePct && settings && item.wastePct > Number(settings.packagingMaxWastePct)) {
+      if (
+        item.wastePct &&
+        settings &&
+        Number(item.wastePct) > Number(settings.packagingMaxWastePct)
+      ) {
         throw new BadRequestException('Merma excede máximo');
       }
       if (settings?.packagingRequireWasteReason && totalWaste > 0 && !item.wasteReason) {
@@ -77,7 +88,7 @@ export class PackagingService {
       for (const item of order.items) {
         const product = item.variant.parentProduct;
         const required = Number(item.variant.contentKg) * item.qtyToMake;
-        const baseWaste = item.wastePct ? required * item.wastePct : 0;
+        const baseWaste = item.wastePct ? required * Number(item.wastePct) : 0;
         const extraWaste = item.wasteKg ? Number(item.wasteKg) : 0;
         const totalWaste = baseWaste + extraWaste;
         const totalConsume = required + totalWaste;
@@ -166,10 +177,14 @@ export class PackagingService {
     if (variant.parentProduct.id !== dto.productId) throw new BadRequestException('Mismatch');
     const settings = await this.prisma.systemSetting.findFirst();
     const required = Number(variant.contentKg) * dto.qty;
-    const baseWaste = dto.wastePct ? required * dto.wastePct : 0;
+    const baseWaste = dto.wastePct ? required * Number(dto.wastePct) : 0;
     const extraWaste = dto.wasteKg ? dto.wasteKg : 0;
     const totalWaste = baseWaste + extraWaste;
-    if (dto.wastePct && settings && dto.wastePct > Number(settings.packagingMaxWastePct)) {
+    if (
+      dto.wastePct &&
+      settings &&
+      Number(dto.wastePct) > Number(settings.packagingMaxWastePct)
+    ) {
       throw new BadRequestException('Merma excede máximo');
     }
     if (settings?.packagingRequireWasteReason && totalWaste > 0 && !dto.wasteReason) {
@@ -240,7 +255,7 @@ export class PackagingService {
         await this.audit.log({ userId, userEmail: '', actionType: AuditActionType.LABELS_PRINT_AUTO, entity: 'PackVariant', entityId: dto.variantId });
       }
     }
-    await this.audit.log({ userId, userEmail: '', actionType: AuditActionType.PACKAGING_QUICK_CONFIRM, entity: 'PackVariant', entityId: dto.variantId });
+    await this.audit.log({ userId, userEmail: '', actionType: AuditActionType.PACKAGING_CONFIRM, entity: 'PackVariant', entityId: dto.variantId });
     return { labelsPdf: pdf?.toString('base64') };
   }
 }

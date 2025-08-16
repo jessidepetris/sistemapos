@@ -61,7 +61,7 @@ export class CashRegisterController {
   @Permissions('canCashMovement')
   movement(@Body() body: any, @Req() req: any) {
     return this.movements.create({
-      cashSessionId: body.sessionId,
+      sessionId: body.sessionId,
       type: body.type as CashMovementType,
       paymentMethod: body.method as PaymentMethod,
       amount: Number(body.amount),

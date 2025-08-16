@@ -11,6 +11,7 @@ import {
 import { BackupsService } from './backups.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
+import type { Express } from 'express';
 
 @Controller('backups')
 export class BackupsController {

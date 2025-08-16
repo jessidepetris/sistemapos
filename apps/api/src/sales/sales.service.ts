@@ -1,7 +1,14 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
-import { PaymentGateway, PaymentStatus, AuditActionType } from '@prisma/client';
+import {
+  PaymentGateway,
+  PaymentStatus,
+  AuditActionType,
+  PaymentMethod,
+  CashMovementType,
+  CashRegisterStatus,
+} from '@prisma/client';
 import PDFDocument from 'pdfkit';
 import { PromotionsService } from '../promotions/promotions.service';
 import { AuditService } from '../audit/audit.service';
@@ -31,8 +38,8 @@ export class SalesService {
     }
     const result = await this.prisma.$transaction(async prisma => {
       if (user?.id) {
-        const session = await prisma.cashSession.findFirst({
-          where: { openedById: user.id, status: 'ABIERTA' },
+        const session = await prisma.cashRegisterSession.findFirst({
+          where: { openedById: user.id, status: CashRegisterStatus.OPEN },
         });
         if (!session) {
           throw new ConflictException('Debe abrir caja');
@@ -91,15 +98,15 @@ export class SalesService {
           });
           payments.push(payment);
           if (user?.id && p.methodLabel === 'EFECTIVO') {
-            const session = await prisma.cashSession.findFirst({
-              where: { openedById: user.id, status: 'ABIERTA' },
+            const session = await prisma.cashRegisterSession.findFirst({
+              where: { openedById: user.id, status: CashRegisterStatus.OPEN },
             });
             if (session) {
               await prisma.cashMovement.create({
                 data: {
-                  cashSessionId: session.id,
-                  type: 'SALE',
-                  paymentMethod: 'EFECTIVO',
+                  sessionId: session.id,
+                  type: CashMovementType.SALE,
+                  paymentMethod: PaymentMethod.CASH,
                   amount: p.amount,
                   concept: `Venta ${sale.id}`,
                   relatedSaleId: sale.id,
@@ -125,7 +132,7 @@ export class SalesService {
         }
       }
       const paid = payments
-        .filter(p => p.status === 'APPROVED')
+        .filter(p => p.status === PaymentStatus.APPROVED)
         .reduce((sum, p) => sum + Number(p.amount), 0);
       await prisma.sale.update({
         where: { id: sale.id },
@@ -140,15 +147,22 @@ export class SalesService {
             include: { parentProduct: true },
           });
           const contentKg = Number(variant!.contentKg);
-          const packCost = variant!.avgCostArs ?? Number(variant!.parentProduct.pricePerKg || 0) * contentKg;
+          const packCost = variant!.avgCostArs
+            ? Number(variant!.avgCostArs)
+            : Number(variant!.parentProduct.pricePerKg || 0) * contentKg;
           const bulkCost = Number(variant!.parentProduct.costARS);
           let totalCost = 0;
-          if (item.meta.plan === 'PACK_ONLY') {
-            totalCost = packCost * item.meta.packUnits;
-          } else if (item.meta.plan === 'BULK_ONLY') {
-            totalCost = bulkCost * item.meta.bulkKg;
+          const meta = (item.meta ?? {}) as {
+            plan?: string;
+            packUnits?: number;
+            bulkKg?: number;
+          };
+          if (meta.plan === 'PACK_ONLY') {
+            totalCost = packCost * (meta.packUnits ?? 0);
+          } else if (meta.plan === 'BULK_ONLY') {
+            totalCost = bulkCost * (meta.bulkKg ?? 0);
           } else {
-            totalCost = packCost * item.meta.packUnits + bulkCost * item.meta.bulkKg;
+            totalCost = packCost * (meta.packUnits ?? 0) + bulkCost * (meta.bulkKg ?? 0);
           }
           await prisma.saleItem.update({
             where: { id: item.id },

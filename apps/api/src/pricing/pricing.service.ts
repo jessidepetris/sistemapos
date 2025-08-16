@@ -3,6 +3,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import * as ExcelJS from 'exceljs';
 import * as cheerio from 'cheerio';
+import type { Express } from 'express';
 
 interface Suggestion {
   productId: number;

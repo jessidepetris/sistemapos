@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PricingService } from './pricing.service';
+import type { Express } from 'express';
 
 @Controller()
 export class PricingController {
