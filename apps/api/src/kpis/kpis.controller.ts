@@ -1,4 +1,5 @@
-import { Controller, Get, Query, UseInterceptors, CacheInterceptor } from '@nestjs/common';
+import { Controller, Get, Query, UseInterceptors } from '@nestjs/common';
+import { CacheInterceptor } from '@nestjs/cache-manager';
 import { KpisService } from './kpis.service';
 
 @Controller('kpis')
