@@ -1,0 +1,11 @@
+.git
+**/.git
+node_modules
+**/node_modules
+dist
+**/dist
+coverage
+.backups
+backups
+.tmp
+.DS_Store
