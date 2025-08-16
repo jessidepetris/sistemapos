@@ -36,6 +36,20 @@ model Product {
   kitItems      KitItem[] @relation("KitItemKit")
   componentsOf  KitItem[] @relation("KitItemComponent")
   packVariants  PackVariant[]
+  scalePLUS           ScalePLU[]
+  quotationItems      QuotationItem[]
+  orderItems          OrderItem[]
+  purchaseItems       PurchaseItem[]
+  goodsReceiptItems   GoodsReceiptItem[]
+  costLedgers         CostLedger[]
+  promotions          Promotion[]
+  stats               ProductStats?
+  reorderRules        ReorderRule[]
+  purchaseSuggestions PurchaseSuggestion[]
+  physicalInventoryItems PhysicalInventoryItem[]
+  stockAdjustments    StockAdjustment[]
+  inventoryItems      InventoryItem[]
+  inventoryAdjustments InventoryAdjustment[]
   @@index([name])
   @@index([category])
   @@index([isBulk, stock])
@@ -105,6 +119,9 @@ model PackVariant {
   packagingItems  PackagingOrderItem[]
   parLevels       PackParLevel[]
   saleItems       SaleItem[]
+  internalBarcodes InternalBarcode[]
+  inventoryItems       InventoryItem[]
+  inventoryAdjustments InventoryAdjustment[]
   @@index([barcode])
   @@index([fakeScaleBarcode])
   @@unique([barcode], map: "uniq_variant_barcode")
@@ -181,6 +198,8 @@ model Client {
   password         String
   sales            Sale[]
   accountMovements AccountMovement[]
+  quotations Quotation[]
+  orders     Order[]
 }
 
 model Sale {
@@ -226,6 +245,7 @@ model User {
   name     String?
   password String?
   roles    UserRole[]
+  importLogs ImportLog[]
 }
 
 model Permission {
@@ -315,6 +335,7 @@ model Payment {
   refundedAmount Decimal?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
+  settlementRecords SettlementRecord[]
   @@index([gateway, status, createdAt])
   @@index([externalId])
   @@index([saleId])
@@ -474,7 +495,7 @@ enum DeliveryStatus {
 
 model Delivery {
   id           String       @id @default(uuid()) @db.Uuid
-  quotationId  String       @db.Uuid
+  quotationId  String       @db.Uuid @unique
   quotation    Quotation    @relation(fields: [quotationId], references: [id])
   status       DeliveryStatus
   assignedTo   String?
@@ -492,6 +513,9 @@ model Supplier {
   purchases Purchase[]
   payments  SupplierPayment[]
   createdAt DateTime         @default(now())
+  reorderRules        ReorderRule[]
+  leadTimes           SupplierLeadTime[]
+  purchaseSuggestions PurchaseSuggestion[]
 }
 
 model Purchase {
@@ -658,7 +682,7 @@ model Backup {
 model ImportLog {
   id           String   @id @default(uuid()) @db.Uuid
   filename     String
-  userId       Int?
+  userId       String?
   user         User?    @relation(fields: [userId], references: [id])
   createdAt    DateTime @default(now())
   totalCreated Int
@@ -745,6 +769,7 @@ model Invoice {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   logs      AfipLog[]
+  afipQueueItems AfipQueueItem[]
 }
 
 model AfipLog {
