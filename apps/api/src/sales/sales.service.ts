@@ -8,6 +8,7 @@ import {
   PaymentMethod,
   CashMovementType,
   CashRegisterStatus,
+  SaleType,
 } from '@prisma/client';
 import PDFDocument from 'pdfkit';
 import { PromotionsService } from '../promotions/promotions.service';

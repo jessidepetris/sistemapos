@@ -152,7 +152,7 @@ export class PackagingService {
           });
         }
         if (!ean) continue;
-        const description = `${it.variant.parentProduct.name} ${it.variant.name}`.slice(0, 36);
+        const description = `${it.variant.parentProduct?.name ?? ''} ${it.variant.name}`.slice(0, 36);
         labelItems.push({ description, ean13: ean, copies: it.qtyToMake });
       }
       if (labelItems.length) {
@@ -243,7 +243,7 @@ export class PackagingService {
       }
       if (ean) {
         pdf = await this.labels.renderMinLabelPDF([
-          { description: `${variant.parentProduct.name} ${variant.name}`.slice(0, 36), ean13: ean, copies: dto.qty },
+          { description: `${variant.parentProduct?.name ?? ''} ${variant.name}`.slice(0, 36), ean13: ean, copies: dto.qty },
         ], {
           widthMm: settings?.labelsSizeWidthMm,
           heightMm: settings?.labelsSizeHeightMm,

@@ -22,7 +22,7 @@ export class AlertsService {
 
     const products = await this.prisma.product.findMany();
     products
-      .filter(p => p.stock <= p.minStock)
+      .filter(p => Number(p.stock) <= Number(p.minStock ?? 0))
       .forEach(p => {
         alerts.push({
           type: 'stock_bajo',
