@@ -33,7 +33,7 @@ export class InvoicesService {
     const invoice = await this.prisma.invoice.upsert({
       where: { saleId },
       create: {
-        saleId,
+        sale: { connect: { id: saleId } },
         docType: 'FC',
         ptoVta: Number(process.env.AFIP_PTO_VTA) || 1,
         pdfUrl: `/documents/invoice/${saleId}/pdf`,
@@ -63,7 +63,7 @@ export class InvoicesService {
     const invoice = await this.prisma.invoice.upsert({
       where: { saleId },
       create: {
-        saleId,
+        sale: { connect: { id: saleId } },
         docType: AfipDocType.RC,
         pdfUrl: `/documents/remito/${saleId}/pdf`,
       },

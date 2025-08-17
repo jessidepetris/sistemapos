@@ -75,17 +75,27 @@ export class StockGuardService {
         }});
       }
       if (plan.packUnits) {
-        const variant = await this.prisma.packVariant.findUnique({ where: { id: variantId } });
-        const cost = variant?.avgCostArs ?? (variant ? Number(variant.parentProduct.pricePerKg || 0) * Number(variant.contentKg) : 0);
-        await prisma.costLedger.create({ data: {
-          productId: variant!.parentProductId,
-          type: 'SALE_COGS',
-          refTable: 'Sale',
-          refId: saleId,
-          qty: -plan.packUnits * Number(variant!.contentKg),
-          unitCostArs: cost / Number(variant!.contentKg),
-          totalCostArs: -plan.packUnits * cost,
-        }});
+        const variant = await this.prisma.packVariant.findUnique({
+          where: { id: variantId },
+          include: { parentProduct: true },
+        });
+        const base =
+          Number(variant?.parentProduct?.pricePerKg ?? 0) *
+          Number(variant?.contentKg ?? 0);
+        const cost = Number(variant?.avgCostArs ?? base);
+        const unitCost = cost / Math.max(1, Number(variant?.contentKg ?? 1));
+        const totalCost = -Number(plan.packUnits ?? 0) * cost;
+        await prisma.costLedger.create({
+          data: {
+            productId: variant!.parentProductId,
+            type: 'SALE_COGS',
+            refTable: 'Sale',
+            refId: saleId,
+            qty: -Number(plan.packUnits ?? 0) * Number(variant!.contentKg),
+            unitCostArs: unitCost,
+            totalCostArs: totalCost,
+          },
+        });
       }
     });
     await this.audit.log({

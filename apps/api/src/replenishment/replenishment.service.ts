@@ -36,8 +36,10 @@ export class ReplenishmentService {
       const avgDaily = stat?.avgDailySales ? Number(stat.avgDailySales) : 0;
       const tgtDays = rule?.targetDays ?? targetDays;
       const targetStock = avgDaily * tgtDays;
-      if (p.stock <= Math.max(minStock, targetStock)) {
-        const suggestedQty = Math.ceil(Math.max(targetStock, minStock) - p.stock);
+      if (Number(p.stock) <= Math.max(Number(minStock), Number(targetStock))) {
+        const suggestedQty = Math.ceil(
+          Math.max(Number(targetStock), Number(minStock)) - Number(p.stock),
+        );
         if (suggestedQty > 0) {
           suggestions.push(
             this.prisma.purchaseSuggestion.create({

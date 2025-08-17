@@ -45,11 +45,12 @@ export class PackVariantsService {
     const buffers: Buffer[] = [];
     doc.on('data', b => buffers.push(b));
     const done = new Promise<Buffer>(resolve => doc.on('end', () => resolve(Buffer.concat(buffers))));
-    const fullName = `${variant.parentProduct.name} ${variant.name}`;
+    const fullName = `${variant.parentProduct?.name ?? ''} ${variant.name}`;
     doc.fontSize(8).text(fullName, 2, 2, { width: labelWidth - 4 });
-    const price = variant.priceMode === 'FIXED' && variant.fixedPrice
-      ? variant.fixedPrice
-      : (variant.parentProduct.pricePerKg || 0) * Number(variant.contentKg);
+    const price =
+      variant.priceMode === 'FIXED' && variant.fixedPrice
+        ? Number(variant.fixedPrice)
+        : Number(variant.parentProduct?.pricePerKg ?? 0) * Number(variant.contentKg);
     doc.fontSize(12).text(`$${Number(price).toFixed(2)}`, 2, 10);
     if (variant.barcode) {
       const barcode = await bwipjs.toBuffer({ bcid: 'ean13', text: variant.barcode, scale: 2, height: 10 });

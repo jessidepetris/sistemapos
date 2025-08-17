@@ -116,7 +116,9 @@ export class SettlementsService {
             externalId: p.externalId,
             grossAmount: p.amount,
             feeAmount: p.fee ?? 0,
-            netAmount: p.netAmount ?? p.amount - (p.fee ?? 0),
+            netAmount: Number(
+              p.netAmount ?? (Number(p.amount) - Number(p.fee ?? 0)),
+            ),
             chargeback: p.chargeback,
             refundAmount: p.refundedAmount,
             settledAt: p.settledAt,

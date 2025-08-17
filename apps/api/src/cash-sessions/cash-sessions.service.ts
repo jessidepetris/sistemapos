@@ -103,7 +103,7 @@ export class CashSessionsService {
     let countedBreakdown: any = null;
     if (counts && counts.length > 0) {
       countedCash = counts.reduce(
-        (sum, c) => sum + c.denom * c.qty,
+        (sum, c) => sum + Number(c.denomination) * Number(c.quantity),
         0,
       );
       countedBreakdown = counts;
@@ -350,7 +350,7 @@ export class CashSessionsService {
         id: session.cashRegisterId,
         name: session.cashRegister.name,
       },
-      closingDate: session.closingDate,
+      closingDate: session.closedAt,
       difference: session.difference,
       closingAmount: session.closingAmount,
       theoreticalCashAtClose,

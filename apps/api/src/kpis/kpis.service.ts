@@ -81,8 +81,8 @@ export class KpisService {
       } else {
         key = date.toISOString().slice(0, 10);
       }
-      const price = Number(item.price) * item.quantity - Number(item.discount);
-      const m = price - Number(item.product.costARS) * item.quantity;
+      const price = Number(item.price) * Number(item.quantity) - Number(item.discount ?? 0);
+      const m = price - Number(item.product.costARS) * Number(item.quantity);
       series[key] = (series[key] || 0) + m;
     }
     const total = Object.values(series).reduce((a, b) => a + b, 0);
@@ -110,15 +110,14 @@ export class KpisService {
     });
     const map = new Map<string, { name: string; total: number }>();
     for (const item of items) {
-      const key = item.productId;
+      const key = String(item.productId ?? item.product?.id ?? 'unknown');
       const current = map.get(key) || { name: item.product.name, total: 0 };
+      const price =
+        Number(item.price) * Number(item.quantity) - Number(item.discount ?? 0);
       const value =
         metric === 'margin'
-          ?
-              Number(item.price) * item.quantity -
-              Number(item.product.costARS) * item.quantity -
-              Number(item.discount)
-          : Number(item.price) * item.quantity - Number(item.discount);
+          ? price - Number(item.product.costARS) * Number(item.quantity)
+          : price;
       current.total += value;
       map.set(key, current);
     }

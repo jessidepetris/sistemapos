@@ -15,7 +15,8 @@ export class TicketsService {
     const itemsHtml = sale.items
       .map((item) => {
         const unit = Number(item.price);
-        const lineTotal = unit * item.quantity - Number(item.discount);
+        const lineTotal =
+          Number(unit) * Number(item.quantity) - Number(item.discount ?? 0);
         const discountLine = Number(item.discount) > 0
           ? `<tr><td colspan="4" class="discount">Desc: -$${Number(item.discount).toFixed(2)}</td></tr>`
           : '';

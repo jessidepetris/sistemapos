@@ -34,8 +34,9 @@ export class ReportsService {
       byType[sale.type] = (byType[sale.type] || 0) + Number(sale.total);
       for (const item of sale.items) {
         const prod = byProduct[item.productId] || { quantity: 0, total: 0 };
-        prod.quantity += item.quantity;
-        prod.total += Number(item.price) * item.quantity - Number(item.discount);
+        prod.quantity += Number(item.quantity);
+        prod.total +=
+          Number(item.price) * Number(item.quantity) - Number(item.discount ?? 0);
         byProduct[item.productId] = prod;
       }
     }
@@ -78,13 +79,15 @@ export class ReportsService {
 
   async stockReport() {
     const products = await this.prisma.product.findMany({ include: { saleItems: true } });
-    const lowStock = products.filter((p) => p.stock < p.minStock);
+    const lowStock = products.filter(
+      (p) => Number(p.stock) < Number(p.minStock ?? 0),
+    );
     const noMovement = products.filter((p) => p.saleItems.length === 0);
-    const stockValue = products.reduce(
-      (sum, p) => sum + Number(p.costARS) * p.stock,
+    const totalCost = products.reduce(
+      (sum, p) => sum + Number(p.costARS) * Number(p.stock),
       0,
     );
-    return { lowStock, noMovement, stockValue };
+    return { lowStock, noMovement, totalCost };
   }
 
   async deliveriesReport(status?: string) {
