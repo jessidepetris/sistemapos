@@ -105,13 +105,13 @@ export class KpisService {
         quantity: true,
         price: true,
         discount: true,
-        product: { select: { name: true, costARS: true } },
+        product: { select: { id: true, name: true, costARS: true } },
       },
     });
     const map = new Map<string, { name: string; total: number }>();
     for (const item of items) {
       const key = String(item.productId ?? item.product?.id ?? 'unknown');
-      const current = map.get(key) || { name: item.product.name, total: 0 };
+      const current = map.get(key) || { name: item.product?.name ?? 'N/D', total: 0 };
       const price =
         Number(item.price) * Number(item.quantity) - Number(item.discount ?? 0);
       const value =

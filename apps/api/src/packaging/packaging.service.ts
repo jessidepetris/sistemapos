@@ -45,21 +45,57 @@ export class PackagingService {
       : undefined;
     return this.prisma.packagingOrder.findMany({
       where,
-      include: { items: { include: { variant: true } } },
+      include: {
+        items: {
+          include: {
+            variant: {
+              include: {
+                parentProduct: {
+                  select: { name: true, pricePerKg: true, stock: true, costARS: true },
+                },
+              },
+            },
+          },
+        },
+      },
     });
   }
 
   findOne(id: string) {
     return this.prisma.packagingOrder.findUnique({
       where: { id },
-      include: { items: { include: { variant: true } } },
+      include: {
+        items: {
+          include: {
+            variant: {
+              include: {
+                parentProduct: {
+                  select: { name: true, pricePerKg: true, stock: true, costARS: true },
+                },
+              },
+            },
+          },
+        },
+      },
     });
   }
 
   async confirm(id: string) {
     const order = await this.prisma.packagingOrder.findUnique({
       where: { id },
-      include: { items: { include: { variant: { include: { parentProduct: true } } } } },
+      include: {
+        items: {
+          include: {
+            variant: {
+              include: {
+                parentProduct: {
+                  select: { name: true, pricePerKg: true, stock: true, costARS: true },
+                },
+              },
+            },
+          },
+        },
+      },
     });
     if (!order) throw new NotFoundException();
     if (order.status !== 'DRAFT') throw new BadRequestException('Ya confirmado');
@@ -172,7 +208,14 @@ export class PackagingService {
   }
 
   async quickPack(dto: QuickPackDto, userId: string) {
-    const variant = await this.prisma.packVariant.findUnique({ include: { parentProduct: true }, where: { id: dto.variantId } });
+    const variant = await this.prisma.packVariant.findUnique({
+      include: {
+        parentProduct: {
+          select: { name: true, pricePerKg: true, stock: true, costARS: true },
+        },
+      },
+      where: { id: dto.variantId },
+    });
     if (!variant) throw new NotFoundException('Variant not found');
     if (variant.parentProduct.id !== dto.productId) throw new BadRequestException('Mismatch');
     const settings = await this.prisma.systemSetting.findFirst();
