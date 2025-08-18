@@ -59,13 +59,14 @@ export class InvoicesService {
     };
   }
 
-  async generateRemito(saleId: string) {
+  async generateRemito(saleId: string, ptoVta?: number) {
     const invoice = await this.prisma.invoice.upsert({
       where: { saleId },
       create: {
         sale: { connect: { id: saleId } },
         docType: AfipDocType.RC,
         pdfUrl: `/documents/remito/${saleId}/pdf`,
+        ptoVta: ptoVta ?? 0,
       },
       update: { docType: AfipDocType.RC, pdfUrl: `/documents/remito/${saleId}/pdf` },
     });

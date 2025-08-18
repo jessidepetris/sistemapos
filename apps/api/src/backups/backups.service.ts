@@ -6,6 +6,7 @@ import AdmZip from 'adm-zip';
 import { AuditService } from '../audit/audit.service';
 import { AuditActionType } from '@prisma/client';
 import type { Express } from 'express';
+import 'multer';
 
 @Injectable()
 export class BackupsService {

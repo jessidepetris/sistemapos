@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma.service';
 import * as ExcelJS from 'exceljs';
 import * as cheerio from 'cheerio';
 import type { Express } from 'express';
+import 'multer';
 
 interface Suggestion {
   productId: number;

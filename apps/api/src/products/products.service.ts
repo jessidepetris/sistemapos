@@ -117,7 +117,7 @@ export class ProductsService {
       );
     }
     const stocks = product.kitItems.map((ki: any) =>
-      Math.floor(ki.component.stock / Number(ki.quantity)),
+      Math.floor(Number(ki.component.stock) / Number(ki.quantity)),
     );
     product.stock = stocks.length ? Math.min(...stocks) : 0;
     return product;

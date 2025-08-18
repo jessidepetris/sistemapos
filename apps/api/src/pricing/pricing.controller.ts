@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post, UploadedFile, UseInterceptors } from '@nes
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PricingService } from './pricing.service';
 import type { Express } from 'express';
+import 'multer';
 
 @Controller()
 export class PricingController {

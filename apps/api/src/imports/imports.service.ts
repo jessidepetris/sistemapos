@@ -5,6 +5,7 @@ import { ImportProductDto } from './dto/import-product.dto';
 import { AuditService } from '../audit/audit.service';
 import { AuditActionType } from '@prisma/client';
 import type { Express } from 'express';
+import 'multer';
 
 @Injectable()
 export class ImportsService {
