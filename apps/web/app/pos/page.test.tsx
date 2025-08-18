@@ -2,14 +2,14 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import POSPage from './page';
 
-jest.mock('react-hot-toast', () => ({
+vi.mock('react-hot-toast', () => ({
   __esModule: true,
-  default: { error: jest.fn() },
+  default: { error: vi.fn() },
 }));
 
 describe('POSPage', () => {
   it('renders and adds item calculating total', async () => {
-    global.fetch = jest
+    global.fetch = vi
       .fn()
       .mockResolvedValueOnce({ json: () => Promise.resolve([{ id: 1 }]) })
       .mockResolvedValueOnce({

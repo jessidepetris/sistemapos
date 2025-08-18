@@ -1,13 +1,13 @@
 import { render, screen } from '@testing-library/react';
 import ProductsPage from './page';
 
-jest.mock('next-auth', () => ({
+vi.mock('next-auth', () => ({
   getServerSession: () => Promise.resolve({ user: { role: 'ADMIN' } }),
 }));
 
 describe('ProductsPage', () => {
   it('shows product list', async () => {
-    global.fetch = jest.fn().mockResolvedValue({
+    global.fetch = vi.fn().mockResolvedValue({
       json: () => Promise.resolve([{ id: 1, name: 'Sample', category: 'Demo', priceARS: 10, stock: 5, isComposite: false }]),
     }) as any;
     const page = await ProductsPage();
@@ -16,3 +16,4 @@ describe('ProductsPage', () => {
     expect(screen.getByText(/Sample/)).toBeInTheDocument();
   });
 });
+

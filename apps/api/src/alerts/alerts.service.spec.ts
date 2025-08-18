@@ -14,15 +14,11 @@ describe('AlertsService', () => {
     prisma = module.get<PrismaService>(PrismaService);
     // mock prisma methods
     // @ts-ignore
-    prisma.product = { findMany: jest.fn().mockResolvedValue([]) };
-    // @ts-ignore
-    prisma.client = { findMany: jest.fn().mockResolvedValue([]) };
-    // @ts-ignore
-    prisma.priceChangeLog = { findMany: jest.fn().mockResolvedValue([]) };
-    // @ts-ignore
-    prisma.order = { findMany: jest.fn().mockResolvedValue([]) };
-    // @ts-ignore
-    prisma.purchase = { findMany: jest.fn().mockResolvedValue([]) };
+    prisma.product = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.client = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.priceChangeLog = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.order = { findMany: vi.fn().mockResolvedValue([]) } as any;
+    prisma.purchase = { findMany: vi.fn().mockResolvedValue([]) } as any;
   });
 
   it('returns alerts', async () => {

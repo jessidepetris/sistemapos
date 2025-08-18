@@ -3,7 +3,7 @@ import QuotationsPage from './page';
 
 describe('QuotationsPage', () => {
   it('renders heading', () => {
-    global.fetch = jest.fn().mockResolvedValue({ json: () => Promise.resolve([]) }) as any;
+    global.fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve([]) }) as any;
     render(<QuotationsPage />);
     expect(screen.getByText('Presupuestos')).toBeInTheDocument();
   });

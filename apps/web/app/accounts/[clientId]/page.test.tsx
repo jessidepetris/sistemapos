@@ -3,7 +3,7 @@ import AccountPage from './page';
 
 describe('AccountPage', () => {
   it('renders heading', () => {
-    global.fetch = jest.fn().mockResolvedValue({
+    global.fetch = vi.fn().mockResolvedValue({
       json: () => Promise.resolve({ movements: [], balance: 0 }),
     }) as any;
     render(<AccountPage params={{ clientId: '1' }} />);

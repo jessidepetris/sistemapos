@@ -6,7 +6,7 @@ describe('PermissionsGuard', () => {
   const reflector = new Reflector();
   const prisma = {
     user: {
-      findUnique: jest.fn(),
+      findUnique: vi.fn(),
     },
   } as any;
   const guard = new PermissionsGuard(reflector, prisma);
@@ -17,7 +17,7 @@ describe('PermissionsGuard', () => {
   };
 
   it('allows when user has permission', async () => {
-    reflector.get = jest.fn().mockReturnValue(['canCloseCash']);
+    reflector.get = vi.fn().mockReturnValue(['canCloseCash']);
     prisma.user.findUnique.mockResolvedValue({
       roles: [
         {
@@ -31,7 +31,7 @@ describe('PermissionsGuard', () => {
   });
 
   it('throws when missing permission', async () => {
-    reflector.get = jest.fn().mockReturnValue(['canCloseCash']);
+    reflector.get = vi.fn().mockReturnValue(['canCloseCash']);
     prisma.user.findUnique.mockResolvedValue({ roles: [] });
     await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
       ForbiddenException,
