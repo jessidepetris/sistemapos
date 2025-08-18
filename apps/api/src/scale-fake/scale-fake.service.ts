@@ -6,7 +6,7 @@ import { ScaleEncoding } from '@prisma/client';
 import { promises as fs } from 'fs';
 import path from 'path';
 import AdmZip from 'adm-zip';
-import { format } from '@fast-csv/format';
+import Papa from 'papaparse';
 
 function mmToPt(mm: number): number {
   return (mm * 72) / 25.4;
@@ -155,12 +155,8 @@ export class ScaleFakeService {
       results.push({ variantId: it.variantId, ean13: gen.ean13 });
     }
     if (opts.zip) {
-      const csvStream = format({ headers: true });
-      const chunks: Buffer[] = [];
-      csvStream.on('data', (c) => chunks.push(c));
-      csvStream.write(csvRows);
-      csvStream.end();
-      const csvBuf = Buffer.concat(chunks);
+      const csv = Papa.unparse(csvRows, { header: true });
+      const csvBuf = Buffer.from(csv);
       zip.addFile('summary.csv', csvBuf);
       const dir = path.join(process.cwd(), 'labels');
       await fs.mkdir(dir, { recursive: true });
