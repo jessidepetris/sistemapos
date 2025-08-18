@@ -12,7 +12,7 @@
     "baseUrl": "./",
     "incremental": true,
     "strict": false,
-    "types": ["node", "reflect-metadata"]
+    "types": ["node", "reflect-metadata", "vitest/globals"]
   },
   "include": ["src/**/*"],
   "exclude": [

@@ -14,7 +14,7 @@ describe('ProductsService', () => {
     prisma = module.get<PrismaService>(PrismaService);
     // mock prisma.product.create
     // @ts-ignore
-    prisma.product = { create: jest.fn() };
+    prisma.product = { create: vi.fn() } as any;
   });
 
   it('creates a product', async () => {

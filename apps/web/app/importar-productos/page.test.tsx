@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import ImportarProductosPage from './page';
 
-jest.mock('next-auth/react', () => ({
+vi.mock('next-auth/react', () => ({
   useSession: () => ({ data: { user: { role: 'ADMIN' } } }),
 }));
 

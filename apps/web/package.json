@@ -6,8 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "jest",
-    "test:ci": "jest --ci --reporters=default --coverage"
+    "test": "vitest",
+    "test:ci": "vitest run --coverage"
   },
   "dependencies": {
     "next": "^14.0.0",
@@ -35,9 +35,7 @@
     "@testing-library/react": "^14.0.0",
     "@testing-library/jest-dom": "^6.0.0",
     "@testing-library/user-event": "^14.0.0",
-    "jest": "^29.7.0",
-    "@types/jest": "^29.0.0",
-    "@types/node": "^20.0.0",
-    "ts-jest": "^29.4.1"
+    "vitest": "^1.6.0",
+    "@types/node": "^20.0.0"
   }
 }
