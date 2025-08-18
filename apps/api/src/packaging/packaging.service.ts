@@ -51,7 +51,7 @@ export class PackagingService {
             variant: {
               include: {
                 parentProduct: {
-                  select: { name: true, pricePerKg: true, stock: true, costARS: true },
+                  select: { id: true, name: true, stock: true, costARS: true, pricePerKg: true },
                 },
               },
             },
@@ -70,7 +70,7 @@ export class PackagingService {
             variant: {
               include: {
                 parentProduct: {
-                  select: { name: true, pricePerKg: true, stock: true, costARS: true },
+                  select: { id: true, name: true, stock: true, costARS: true, pricePerKg: true },
                 },
               },
             },
@@ -89,7 +89,7 @@ export class PackagingService {
             variant: {
               include: {
                 parentProduct: {
-                  select: { name: true, pricePerKg: true, stock: true, costARS: true },
+                  select: { id: true, name: true, stock: true, costARS: true, pricePerKg: true },
                 },
               },
             },
@@ -211,7 +211,7 @@ export class PackagingService {
     const variant = await this.prisma.packVariant.findUnique({
       include: {
         parentProduct: {
-          select: { name: true, pricePerKg: true, stock: true, costARS: true },
+          select: { id: true, name: true, stock: true, costARS: true, pricePerKg: true },
         },
       },
       where: { id: dto.variantId },

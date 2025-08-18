@@ -20,7 +20,7 @@ export class PricingService {
 
   async bulkPriceUpdate(file: Express.Multer.File) {
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(file.buffer);
+    await workbook.xlsx.load(file.buffer as unknown as Buffer);
     const sheet = workbook.worksheets[0];
 
     const headerRow = sheet.getRow(1).values as Array<string>;
