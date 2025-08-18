@@ -12,7 +12,9 @@
     "baseUrl": "./",
     "incremental": true,
     "strict": false,
-    "types": ["node", "reflect-metadata", "vitest/globals"]
+    "types": ["node", "reflect-metadata", "vitest/globals"],
+    "moduleResolution": "bundler",
+    "skipLibCheck": true
   },
   "include": ["src/**/*"],
   "exclude": [
