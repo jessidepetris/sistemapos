@@ -34,7 +34,7 @@
     "date-fns": "^2.30.0",
     "cheerio": "^1.0.0-rc.12",
     "adm-zip": "^0.5.9",
-    "bwip-js": "^3.0.2",
+    "bwip-js": "^2.0.9",
     "xlsx": "^0.18.5",
     "@nestjs/schedule": "5.0.0",
     "cron": "^2.4.3",

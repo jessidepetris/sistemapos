@@ -1,0 +1,44 @@
+declare module '@prisma/client' {
+  export const Prisma: any;
+  export class PrismaClient {}
+  export const PrismaClientKnownRequestError: any;
+  export const PrismaClientValidationError: any;
+  export type PrismaClientKnownRequestError = any;
+  export type PrismaClientValidationError = any;
+  export const Decimal: any;
+  export const $Enums: any;
+  export type $Enums = any;
+  export const PriceMode: any; export type PriceMode = any;
+  export const BarcodeStatus: any; export type BarcodeStatus = any;
+  export const VariantConsumeMode: any; export type VariantConsumeMode = any;
+  export const PackPriceMode: any; export type PackPriceMode = any;
+  export const ScaleEncoding: any; export type ScaleEncoding = any;
+  export const PackagingStatus: any; export type PackagingStatus = any;
+  export const SaleType: any; export type SaleType = any;
+  export const PaymentMethod: any; export type PaymentMethod = any;
+  export const PaymentGateway: any; export type PaymentGateway = any;
+  export const PaymentStatus: any; export type PaymentStatus = any;
+  export const SettlementGateway: any; export type SettlementGateway = any;
+  export const SettlementStatus: any; export type SettlementStatus = any;
+  export const MatchStatus: any; export type MatchStatus = any;
+  export const AccountMovementType: any; export type AccountMovementType = any;
+  export const QuotationStatus: any; export type QuotationStatus = any;
+  export const OrderStatus: any; export type OrderStatus = any;
+  export const DeliveryStatus: any; export type DeliveryStatus = any;
+  export const PurchaseStatus: any; export type PurchaseStatus = any;
+  export const AuditActionType: any; export type AuditActionType = any;
+  export const AuditAction: any; export type AuditAction = any;
+  export const CostMoveType: any; export type CostMoveType = any;
+  export const AfipEmissionStatus: any; export type AfipEmissionStatus = any;
+  export const AfipErrorType: any; export type AfipErrorType = any;
+  export const AfipDocType: any; export type AfipDocType = any;
+  export const CashRegisterStatus: any; export type CashRegisterStatus = any;
+  export const CashMovementType: any; export type CashMovementType = any;
+  export const CashClosureType: any; export type CashClosureType = any;
+  export const CashCountDenomination: any; export type CashCountDenomination = any;
+  export const PhysicalInventoryStatus: any; export type PhysicalInventoryStatus = any;
+  export const InventoryStatus: any; export type InventoryStatus = any;
+  export const InventoryScope: any; export type InventoryScope = any;
+  export const InventoryAdjustmentStatus: any; export type InventoryAdjustmentStatus = any;
+  export const SettlementRecord: any; export type SettlementRecord = any;
+}

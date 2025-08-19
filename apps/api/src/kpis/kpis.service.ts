@@ -108,18 +108,18 @@ export class KpisService {
         product: { select: { id: true, name: true, costARS: true } },
       },
     });
-    const map = new Map<string, { name: string; total: number }>();
+    const map: Map<string, { name: string; total: number }> = new Map();
     for (const item of items) {
-      const key: string = String(item.productId ?? item.product?.id ?? 'unknown');
-      const current = map.get(key) || { name: item.product?.name ?? 'N/D', total: 0 };
-      const price =
+      const key = String(item.productId ?? item.product?.id ?? '');
+      const current = map.get(key) ?? { name: item.product.name, total: 0 };
+      map.set(key, current);
+      const total =
         Number(item.price) * Number(item.quantity) - Number(item.discount ?? 0);
       const value =
         metric === 'margin'
-          ? price - Number(item.product.costARS) * Number(item.quantity)
-          : price;
+          ? total - Number(item.product.costARS) * Number(item.quantity)
+          : total;
       current.total += value;
-      map.set(key, current);
     }
     return Array.from(map.values())
       .sort((a, b) => b.total - a.total)
@@ -132,14 +132,18 @@ export class KpisService {
       where,
       select: { customerId: true, customerName: true, subtotal: true, discount: true, total: true },
     });
-    const map = new Map<string, { name: string; total: number }>();
+    const map: Map<string, { name: string; total: number }> = new Map();
     for (const sale of sales) {
-      const key = sale.customerId || sale.customerName;
+      const key = String(sale.customerId ?? sale.customerName ?? '');
       const name = sale.customerName;
       const total = Number(sale.total);
       map.set(key, {
         name,
-        total: (map.get(key)?.total || 0) + (metric === 'margin' ? Number(sale.subtotal) - Number(sale.discount) : total),
+        total:
+          (map.get(key)?.total || 0) +
+          (metric === 'margin'
+            ? Number(sale.subtotal) - Number(sale.discount ?? 0)
+            : total),
       });
     }
     return Array.from(map.values())
